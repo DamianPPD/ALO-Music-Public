@@ -1,4 +1,4 @@
-# ALO Music — Audio Library Organizer
+# <img src="docs/alo.ico" width="48" alt="ALO Music icon"> ALO Music — Audio Library Organizer
 
 **ALO Music** to desktopowa aplikacja dla Windows do bezpiecznego porządkowania dużych bibliotek muzycznych. Skanuje lokalne foldery, analizuje pliki audio i metadane, pomaga rozpoznawać utwory online, porównuje potencjalne duplikaty i tworzy uporządkowane pliki wynikowe — bez ingerowania w oryginały.
 
