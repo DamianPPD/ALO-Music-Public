@@ -4,6 +4,11 @@
 
 **Aktualna wersja: 0.4.11** · Windows · interfejs PL / EN · projekt aktywnie rozwijany
 
+[![Pobierz instalator](https://img.shields.io/badge/Pobierz-Instalator%20v0.4.11-2ea44f?style=for-the-badge&logo=windows)](https://github.com/DamianPPD/ALO-Music-Public/releases/download/v0.4.11/ALO-Music-v0.4.11-Setup.exe)
+[![Pobierz Portable](https://img.shields.io/badge/Pobierz-Wersj%C4%99%20Portable-0969da?style=for-the-badge&logo=windows)](https://github.com/DamianPPD/ALO-Music-Public/releases/download/v0.4.11/ALO-Music-v0.4.11-Windows-Portable.zip)
+
+**[Zobacz pełne wydanie ALO Music v0.4.11](https://github.com/DamianPPD/ALO-Music-Public/releases/tag/v0.4.11)**
+
 > **Najważniejsza zasada ALO:** pliki źródłowe pozostają nietknięte. Program pracuje na indeksie biblioteki i tworzy osobne kopie wynikowe.
 
 ## Pobieranie
