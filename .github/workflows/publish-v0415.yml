@@ -1,0 +1,70 @@
+name: Publish ALO Music v0.4.15
+
+on:
+  push:
+    branches:
+      - release/v0.4.15-public
+    paths:
+      - .github/workflows/publish-v0415.yml
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      ARTIFACT_URL: "https://sdmntprnortheu.oaiusercontent.com/files/00000000-ce28-81f4-9e3d-f220606483cc/raw?se=2026-09-14T16%3A50%3A31Z&sp=r&sv=2026-02-06&sr=b&scid=4bdde257-9879-589a-a983-ad8123700c02&skoid=061609b8-1cdb-4a5b-9e68-c7ab9a523a8f&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-09-13T23%3A17%3A54Z&ske=2026-09-14T23%3A17%3A54Z&sks=b&skv=2026-02-06&sig=yI09ZWO41xR5/PQ8YLtHVOq%2BBrBaGCh4Nz5Ts/3kwqQ%3D"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout public release branch
+        uses: actions/checkout@v4
+
+      - name: Download verified private build artifact
+        run: |
+          curl -L --fail --retry 3 "$ARTIFACT_URL" -o release-artifact.zip
+          mkdir release-files
+          unzip -q release-artifact.zip -d release-files
+          ls -lh release-files
+
+      - name: Verify SHA-256
+        working-directory: release-files
+        run: sha256sum -c SHA256SUMS.txt
+
+      - name: Publish GitHub Release
+        run: |
+          cat > release-notes.md <<'EOF'
+          ## ALO Music v0.4.15
+
+          Aktualizacja interfejsu i stabilności ALO Music dla Windows.
+
+          ### Najważniejsze zmiany
+          - uproszczony ekran Start bez zduplikowanych przycisków,
+          - praktyczne statystyki biblioteki: okładki, rozpoznane online, brakujące pliki, podejrzane dane, rozmiar biblioteki i wolne miejsce,
+          - numer wersji na ekranie uruchamiania,
+          - grubszy i wygodniejszy pasek postępu odtwarzacza,
+          - klikalne kafelki Startu i informacja o ostatnim skanowaniu,
+          - wyróżnienie aktualnie odtwarzanego utworu,
+          - poprawki rozpoznawania online i stabilności Biblioteki,
+          - poprawiony odsłuch A/B oraz rozpoznawanie pojedynczego utworu.
+
+          ### Pobieranie
+          - `ALO-Music-v0.4.15-Setup.exe` — instalator Windows,
+          - `ALO-Music-v0.4.15-Windows-Portable.zip` — wersja przenośna,
+          - `SHA256SUMS.txt` — sumy kontrolne SHA-256.
+
+          ### Bezpieczeństwo
+          Kod źródłowy programu nie jest publikowany w tym repozytorium. Publiczne wydanie zawiera wyłącznie gotowe pliki Windows i dokumentację.
+
+          Niektóre programy antywirusowe lub Microsoft SmartScreen mogą ostrzegać przy pierwszym uruchomieniu, ponieważ aplikacja jest niezależnie dystrybuowana i nie ma podpisu komercyjnym certyfikatem code-signing. Integralność plików można sprawdzić przy pomocy `SHA256SUMS.txt`.
+          EOF
+
+          gh release create v0.4.15 \
+            release-files/ALO-Music-v0.4.15-Setup.exe \
+            release-files/ALO-Music-v0.4.15-Windows-Portable.zip \
+            release-files/SHA256SUMS.txt \
+            --repo DamianPPD/ALO-Music-Public \
+            --target "${GITHUB_SHA}" \
+            --title "ALO Music v0.4.15" \
+            --notes-file release-notes.md \
+            --latest
