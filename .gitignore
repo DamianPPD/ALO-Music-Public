@@ -1,0 +1,85 @@
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging / build output
+build/
+dist/
+release/
+*.egg-info/
+*.egg
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs / temporary files
+*.log
+*.log.*
+*.tmp
+*.temp
+~$*
+.cache/
+*.cache
+
+# ALO runtime data and generated libraries
+.alo/
+GOTOWE/
+NIE_WYBRANE/
+DO_SPRAWDZENIA/
+MOJE_FOLDERY_MP3/
+raporty/
+*.alo-backup.zip
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.mp3
+*.flac
+*.m4a
+*.wav
+*.ogg
+*.opus
+tools/chromaprint/
+
+# Local credentials / environment files
+.env
+.env.*
+!.env.example
+.envrc
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+secrets*.json
+
+# Private working documents
+docs/superpowers/
+**/CONTINUATION_STATUS*
+**/research-notes*
+**/work-notes*
+docs/release-checklist-*.md
+ui_reference/

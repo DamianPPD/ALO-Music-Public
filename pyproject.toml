@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "audio-library-organizer"
+version = "0.4.23"
+description = "Safe desktop organizer for large audio libraries"
+license = {text = "GPL-3.0-or-later"}
+requires-python = ">=3.11"
+dependencies = ["mutagen>=1.47", "requests>=2.32"]
+
+[project.optional-dependencies]
+gui = ["PySide6>=6.8"]
+analysis = ["librosa>=0.11", "soundfile>=0.13", "numpy>=2.0", "Pillow>=11"]
+test = ["pytest>=8"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
+[tool.setuptools.package-data]
+"audio_library_organizer" = ["assets/*.png", "assets/*.ico", "assets/*.svg", "assets/icons/a1/*.svg"]

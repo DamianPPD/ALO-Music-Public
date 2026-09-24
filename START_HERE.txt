@@ -1,0 +1,116 @@
+ALO Music / Audio Library Organizer v0.4.23 • 2026
+==================================================
+
+START
+-----
+1. Rozpakuj cały folder programu.
+2. Uruchom run_audio_library_organizer.bat.
+3. Nie usuwaj .venv przy instalowaniu kolejnych pełnych aktualizacji.
+4. Przy pierwszym uruchomieniu wybierz język Polski / English.
+5. Następnie ustaw Bibliotekę główną.
+
+BIBLIOTEKI
+-----------
+- Biblioteka główna: stała, podstawowa baza ALO.
+- Dodatkowa biblioteka: osobna, zapisana baza z własnym folderem docelowym.
+- Foldery źródłowe dodajesz osobno; historia skanów jest zapisywana informacyjnie.
+- Kliknięcie całej pozycji biblioteki przełącza aktywną bazę.
+- Niepotrzebną dodatkową bibliotekę można usunąć z ALO bez kasowania muzyki z dysku.
+- Aktywna biblioteka jest zielono wyróżniona w panelu Biblioteki; na Start jej nazwa jest głównym tytułem.
+
+ALO Music tworzy m.in.:
+  GOTOWE
+  NIE_WYBRANE
+  DO_SPRAWDZENIA
+  MOJE_FOLDERY_MP3
+  raporty
+
+
+
+BLOKADA ROZPOZNAWANIA ONLINE
+-----------------------------
+- W edytorze metadanych użyj przycisku „🔒 Zablokowane / 🔓 Zablokuj online”, jeśli utwór ma pozostać nietknięty przez AcoustID/MusicBrainz/Apple/Discogs.
+- Zablokowany utwór nadal można ręcznie edytować.
+- Ikona 🔒 w Bibliotece pokazuje, że utwór zostanie pominięty przy zbiorczym rozpoznawaniu online.
+
+RESET DO CZYSTEGO STANU
+------------------------
+- W panelu Biblioteki użyj „Resetuj ALO do czystego stanu”.
+- Reset usuwa bazy/indexy, zapisane biblioteki i ustawienia ALO.
+- Reset NIE usuwa plików MP3 ani folderów muzycznych.
+- Po resecie uruchom program ponownie; pojawi się wybór języka i konfiguracja od początku.
+- Pełna synchronizacja usuwa z indeksu rekordy plików, których nie ma już na dysku.
+
+ORYGINAŁY
+---------
+- nie są zmieniane,
+- nie są kasowane,
+- nowe nazwy/tagi/okładki trafiają wyłącznie do kopii.
+
+PRACA
+-----
+1. Skanuj foldery.
+2. Rozpoznaj utwory online.
+3. Sprawdź w Bibliotece.
+4. Utwórz pliki wynikowe.
+
++ Dodaj utwory do biblioteki jest osobną akcją pomocniczą dla aktualnej biblioteki.
+- Dodaj utwory do biblioteki: cyjan.
+- Rozpoznaj utwory online: bursztyn; podczas działania Anuluj, po przerwaniu Wznów.
+- Ustawienia: Polski/English, ciemny interfejs, normalizacja nazw i backup ALO.
+- Rok: dokładnie 4 cyfry.
+- Gatunek: podpowiedzi + wiele wartości; pierwszy jest główny.
+
+
+ODTWARZANIE I STATUSY
+-----------------------------
+- Jeden klik w Bibliotece tylko zaznacza. Dwuklik uruchamia utwór.
+- Zmiana zaznaczenia nie zatrzymuje aktualnie grającej muzyki.
+- Aktualnie grający utwór ma podświetlony cały wiersz; odtwarzanie nie zmienia kolejności sortowania Biblioteki.
+- Menu prawego przycisku: Odtwórz jako następny.
+- Jedyny stan wymagający kontroli to DO SPRAWDZENIA: bursztynowy zwykły, czerwony pilny.
+- W edytorze status pliku jest pokazany w kompaktowym kolorowym panelu; poprawny URL można otworzyć w przeglądarce.
+
+DUPLIKATY
+---------
+Program wykrywa potencjalnie podobne nagrania, ale Ty decydujesz o każdym pliku:
+  ★ ZACHOWAJ
+  × NIE WYBIERAM
+  ✎ EDYTUJ
+ALO nie rekomenduje żadnego wariantu — pokazuje dane, a wybór należy do Ciebie.
+W Duplikatach decyzja jest wyróżniona tylko w kolumnie Decyzja: ZACHOWAJ na zielono, NIE WYBIERAM na szaro.
+Tabela porównuje m.in. długość, BPM, format, bitrate, Hz i rozmiar; różnice są wyróżnione.
+Dwuklik w wiersz uruchamia odsłuch. Licznik Duplikaty (N) pokazuje liczbę grup do porównania.
+
+
+RODZINY WERSJI
+---------------
+- Original Mix, Radio Edit, Extended Mix, Club Mix i nazwane remiksy mogą być pokazane razem jako rodzina wersji.
+- Rodzina jest informacyjna i nie oznacza automatycznie duplikatu.
+- Wyraźnie różne wersje o innej długości pozostają osobnymi utworami.
+
+BIBLIOTEKA DOCELOWA I HISTORIA SKANÓW
+--------------------------------------
+- Biblioteka oznacza folder, gdzie ALO zapisuje lub będzie zapisywać pliki wynikowe.
+- Aktywna biblioteka jest zielona; ścieżkę można otworzyć linkiem w Eksploratorze.
+- Skanowane źródła są pokazane w przewijanej historii: folder, ostatni skan i liczba plików.
+- Historia źródeł sama nie uruchamia skanowania po restarcie.
+
+NAZWA DOMYŚLNA
+---------------
+Artist - Title (Version) (Year) [BPMbpm].mp3
+
+KONTAKT
+-------
+Powered by Damian
+https://github.com/DamianPPD/ALO-Music-Public/issues
+
+Więcej informacji: README.md i WINDOWS.md
+
+
+PORZĄDKI v0.4.6
+----------------
+- Ustawienia nie pokazują rosnącej listy „Muzyka do skanowania 1/2/3…”.
+- Historia skanów jest przewijana i może być wyczyszczona bez usuwania muzyki.
+- Track Number i Disc Number są czyszczone w plikach wynikowych.
+- Start nie pokazuje średniego BPM ani dodatkowego paska „Etapy pracy”.
