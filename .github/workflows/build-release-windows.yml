@@ -1,0 +1,138 @@
+name: Build Windows release 0.4.23
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact public source commit for ALO Music 0.4.23
+        required: true
+        type: string
+        default: '7ae25935b99f639ab6eb214cbb48bb817fc6536d'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      RELEASE_SOURCE_SHA: ${{ inputs.source_sha }}
+    steps:
+      - name: Validate release source
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_SOURCE_SHA -cne '7ae25935b99f639ab6eb214cbb48bb817fc6536d') {
+            throw 'The source_sha must be the approved ALO Music 0.4.23 source commit.'
+          }
+
+      - name: Checkout exact release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: x64
+
+      - name: Verify checkout and Python
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -cne $env:RELEASE_SOURCE_SHA) {
+            throw "Wrong source commit: $actual"
+          }
+          $versionFile = Get-Content 'src/audio_library_organizer/__init__.py' -Raw
+          if ($versionFile -notmatch "__version__\s*=\s*'0\.4\.23'") {
+            throw 'Source version is not 0.4.23.'
+          }
+          python --version
+          Write-Host "Building source commit $actual"
+
+      - name: Install and verify Inno Setup 6
+        shell: pwsh
+        run: |
+          choco install innosetup --version=6.7.1 -y --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'Chocolatey failed to install Inno Setup 6.' }
+          $candidates = @(
+            "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          )
+          $compiler = $candidates | Where-Object { Test-Path $_ -PathType Leaf } | Select-Object -First 1
+          if (-not $compiler) { throw 'ISCC.exe was not found in a path supported by the release script.' }
+          $major = (Get-Item $compiler).VersionInfo.ProductMajorPart
+          if ($major -ne 6) { throw "Expected Inno Setup 6, found major version $major." }
+          Write-Host "Inno Setup 6: $compiler"
+
+      - name: Build, smoke-test, and package Windows release
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          & powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_release_windows.ps1
+          if ($LASTEXITCODE -ne 0) { throw "Windows release build failed with exit code $LASTEXITCODE." }
+          Write-Host 'PyInstaller build and EXE smoke test passed.'
+
+      - name: Verify release artifacts and SHA256
+        shell: pwsh
+        run: |
+          $releaseDir = 'release/v0.4.23'
+          $portable = 'ALO-Music-v0.4.23-Windows-Portable.zip'
+          $installer = 'ALO-Music-v0.4.23-Setup.exe'
+          $expected = @($portable, $installer, 'SHA256SUMS.txt')
+          foreach ($name in $expected) {
+            $path = Join-Path $releaseDir $name
+            if (-not (Test-Path $path -PathType Leaf)) { throw "Missing artifact: $name" }
+            if ((Get-Item $path).Length -eq 0) { throw "Empty artifact: $name" }
+          }
+          $actual = @(Get-ChildItem $releaseDir -File | ForEach-Object Name)
+          if (@(Compare-Object $expected $actual).Count -ne 0) {
+            throw "Unexpected release directory contents: $($actual -join ', ')"
+          }
+
+          $sums = @(Get-Content (Join-Path $releaseDir 'SHA256SUMS.txt') | Where-Object { $_.Trim() })
+          if ($sums.Count -ne 2) { throw 'SHA256SUMS.txt must contain exactly two hashes.' }
+          foreach ($name in @($portable, $installer)) {
+            $pattern = '^([0-9a-fA-F]{64})  ' + [regex]::Escape($name) + '$'
+            $matching = @($sums | Where-Object { $_ -match $pattern })
+            if ($matching.Count -ne 1) { throw "Missing or invalid SHA256 entry for $name" }
+            $recorded = [regex]::Match($matching[0], $pattern).Groups[1].Value.ToLowerInvariant()
+            $calculated = (Get-FileHash (Join-Path $releaseDir $name) -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($recorded -cne $calculated) { throw "SHA256 mismatch for $name" }
+            Write-Host "$calculated  $name"
+          }
+
+          Add-Type -AssemblyName System.IO.Compression
+          $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path (Join-Path $releaseDir $portable)).Path)
+          try {
+            $zipFiles = @($zip.Entries | Where-Object { $_.Name })
+            $exeEntries = @($zipFiles | Where-Object { $_.FullName -match '(^|[/\\])ALO-Music\.exe$' })
+            $distFiles = @(Get-ChildItem 'dist/ALO-Music' -Recurse -File)
+            if ($exeEntries.Count -ne 1 -or $zipFiles.Count -ne $distFiles.Count) {
+              throw "Portable ZIP is incomplete: $($zipFiles.Count) files, expected $($distFiles.Count)."
+            }
+            $private = @($zipFiles | Where-Object {
+              $_.FullName -match '(^|[/\\])(\.venv|__pycache__|ui_reference|research-notes|CONTINUATION_STATUS)([/\\]|$)' -or
+              $_.FullName -match '(^|[/\\])docs[/\\]superpowers([/\\]|$)'
+            })
+            if ($private.Count -ne 0) { throw 'Private or generated files were included in Portable ZIP.' }
+          }
+          finally { $zip.Dispose() }
+
+          $sumHash = (Get-FileHash (Join-Path $releaseDir 'SHA256SUMS.txt') -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "$sumHash  SHA256SUMS.txt"
+          Write-Host "Verified exact source: $env:RELEASE_SOURCE_SHA"
+
+      - name: Upload final Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ALO-Music-v0.4.23-Windows
+          if-no-files-found: error
+          path: |
+            release/v0.4.23/ALO-Music-v0.4.23-Windows-Portable.zip
+            release/v0.4.23/ALO-Music-v0.4.23-Setup.exe
+            release/v0.4.23/SHA256SUMS.txt
