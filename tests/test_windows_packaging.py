@@ -1,6 +1,41 @@
 from pathlib import Path
+import runpy
+import sys
+from types import ModuleType, SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_pyinstaller_spec_packages_every_runtime_asset_recursively(monkeypatch):
+    """A missing A1 SVG crashes the frozen UI when it renders an icon."""
+    hooks = ModuleType('PyInstaller.utils.hooks')
+    hooks.collect_all = lambda _package: ([], [], [])
+    monkeypatch.setitem(sys.modules, 'PyInstaller', ModuleType('PyInstaller'))
+    monkeypatch.setitem(sys.modules, 'PyInstaller.utils', ModuleType('PyInstaller.utils'))
+    monkeypatch.setitem(sys.modules, 'PyInstaller.utils.hooks', hooks)
+
+    spec = runpy.run_path(str(ROOT / 'audio_library_organizer.spec'), init_globals={
+        'SPECPATH': str(ROOT),
+        'Analysis': lambda *_args, **kwargs: SimpleNamespace(
+            pure=[], scripts=[], binaries=[], datas=kwargs['datas'],
+        ),
+        'PYZ': lambda *_args: None,
+        'EXE': lambda *_args, **_kwargs: None,
+        'COLLECT': lambda *_args, **_kwargs: None,
+    })
+
+    source_root = ROOT / 'src' / 'audio_library_organizer' / 'assets'
+    expected = {
+        (Path('audio_library_organizer') / 'assets' / path.relative_to(source_root)).as_posix()
+        for path in source_root.rglob('*') if path.is_file()
+    }
+    bundled = {
+        (Path(destination.replace('\\', '/')) / Path(source).name).as_posix()
+        for source, destination in spec['datas']
+        if Path(source).is_relative_to(source_root)
+    }
+    assert 'audio_library_organizer/assets/icons/a1/info.svg' in expected
+    assert bundled == expected
 
 
 def test_windows_bootstrap_and_launcher_are_present():

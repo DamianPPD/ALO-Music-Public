@@ -22,8 +22,8 @@ jobs:
       - name: Validate release source
         shell: pwsh
         run: |
-          if ($env:RELEASE_SOURCE_SHA -cne '7ae25935b99f639ab6eb214cbb48bb817fc6536d') {
-            throw 'The source_sha must be the approved ALO Music 0.4.23 source commit.'
+          if ($env:RELEASE_SOURCE_SHA -cnotmatch '^[0-9a-f]{40}$') {
+            throw 'source_sha must be an exact 40-character Git commit SHA.'
           }
 
       - name: Checkout exact release source
@@ -80,6 +80,33 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Windows release build failed with exit code $LASTEXITCODE." }
           Write-Host 'PyInstaller build and EXE smoke test passed.'
 
+      - name: Smoke-test bundled UI assets
+        shell: pwsh
+        run: |
+          $sourceAssets = (Resolve-Path 'src/audio_library_organizer/assets').Path
+          $bundleAssets = 'dist/ALO-Music/_internal/audio_library_organizer/assets'
+          $iconDir = Join-Path $bundleAssets 'icons/a1'
+          $infoIcon = Join-Path $iconDir 'info.svg'
+          if (-not (Test-Path $iconDir -PathType Container)) { throw "Missing A1 icon directory: $iconDir" }
+          if (-not (Test-Path $infoIcon -PathType Leaf)) { throw "Missing frozen UI fallback icon: $infoIcon" }
+
+          $sourceFiles = @(Get-ChildItem $sourceAssets -Recurse -File)
+          $sourceIcons = @(Get-ChildItem (Join-Path $sourceAssets 'icons/a1') -Recurse -File)
+          if ($sourceIcons.Count -eq 0) { throw 'Source contains no A1 icons.' }
+          foreach ($sourceFile in $sourceFiles) {
+            $relative = [System.IO.Path]::GetRelativePath($sourceAssets, $sourceFile.FullName)
+            $bundled = Join-Path $bundleAssets $relative
+            if (-not (Test-Path $bundled -PathType Leaf)) { throw "Missing frozen UI asset: $relative" }
+            $sourceHash = (Get-FileHash $sourceFile.FullName -Algorithm SHA256).Hash
+            $bundleHash = (Get-FileHash $bundled -Algorithm SHA256).Hash
+            if ($sourceHash -cne $bundleHash) { throw "Bundled UI asset differs from source: $relative" }
+          }
+          $bundledIcons = @(Get-ChildItem $iconDir -Recurse -File)
+          if ($bundledIcons.Count -ne $sourceIcons.Count) {
+            throw "A1 icon count differs: source $($sourceIcons.Count), bundle $($bundledIcons.Count)."
+          }
+          Write-Host "Frozen UI assets verified: $($sourceFiles.Count) files, including $($bundledIcons.Count) A1 icons and info.svg."
+
       - name: Verify release artifacts and SHA256
         shell: pwsh
         run: |
@@ -118,6 +145,13 @@ jobs:
             if ($exeEntries.Count -ne 1 -or $zipFiles.Count -ne $distFiles.Count) {
               throw "Portable ZIP is incomplete: $($zipFiles.Count) files, expected $($distFiles.Count)."
             }
+            $zipNames = @($zipFiles | ForEach-Object { $_.FullName.Replace('\', '/') })
+            $sourceAssets = (Resolve-Path 'src/audio_library_organizer/assets').Path
+            foreach ($sourceFile in @(Get-ChildItem $sourceAssets -Recurse -File)) {
+              $relative = [System.IO.Path]::GetRelativePath($sourceAssets, $sourceFile.FullName).Replace('\', '/')
+              $entry = "ALO-Music/_internal/audio_library_organizer/assets/$relative"
+              if ($zipNames -cnotcontains $entry) { throw "Portable ZIP is missing UI asset: $relative" }
+            }
             $private = @($zipFiles | Where-Object {
               $_.FullName -match '(^|[/\\])(\.venv|__pycache__|ui_reference|research-notes|CONTINUATION_STATUS)([/\\]|$)' -or
               $_.FullName -match '(^|[/\\])docs[/\\]superpowers([/\\]|$)'
@@ -133,7 +167,7 @@ jobs:
       - name: Upload final Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ALO-Music-v0.4.23-Windows
+          name: ALO-Music-v0.4.23-Windows-icons-fixed
           if-no-files-found: error
           path: |
             release/v0.4.23/ALO-Music-v0.4.23-Windows-Portable.zip

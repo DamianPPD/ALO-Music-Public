@@ -17,7 +17,10 @@ for package in ('librosa', 'soundfile'):
 
 assets = project_root / 'src' / 'audio_library_organizer' / 'assets'
 if assets.exists():
-    datas += [(str(path), r'audio_library_organizer\assets') for path in assets.iterdir() if path.is_file()]
+    datas += [
+        (str(path), str(Path('audio_library_organizer') / 'assets' / path.relative_to(assets).parent))
+        for path in assets.rglob('*') if path.is_file()
+    ]
 
 chromaprint = project_root / 'tools' / 'chromaprint'
 if chromaprint.exists():
