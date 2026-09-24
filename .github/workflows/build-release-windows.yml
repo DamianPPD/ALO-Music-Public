@@ -64,9 +64,12 @@ jobs:
           )
           $compiler = $candidates | Where-Object { Test-Path $_ -PathType Leaf } | Select-Object -First 1
           if (-not $compiler) { throw 'ISCC.exe was not found in a path supported by the release script.' }
-          $major = (Get-Item $compiler).VersionInfo.ProductMajorPart
-          if ($major -ne 6) { throw "Expected Inno Setup 6, found major version $major." }
-          Write-Host "Inno Setup 6: $compiler"
+          $installed = @(choco list innosetup --exact --limit-output)
+          $matching = @($installed | Where-Object { $_ -match '^innosetup\|6\.' })
+          if ($LASTEXITCODE -ne 0 -or $matching.Count -ne 1) {
+            throw "Expected a Chocolatey-managed Inno Setup 6 installation: $($installed -join ', ')"
+          }
+          Write-Host "Inno Setup $($installed[0]): $compiler"
 
       - name: Build, smoke-test, and package Windows release
         shell: pwsh
