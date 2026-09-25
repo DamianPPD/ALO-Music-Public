@@ -46,7 +46,7 @@ from audio_library_organizer.ui.confidence import ConfidenceWidget
 from audio_library_organizer.ui.player import CompactPlayerBar
 from audio_library_organizer.ui.widgets import ClickableCoverLabel, SelectableElidedLineEdit, show_cover_preview
 from audio_library_organizer.ui.genre_input import GenreChipInput
-from audio_library_organizer.ui.i18n import ui_text
+from audio_library_organizer.ui.i18n import ui_text, language_for, apply_static_language, localized_no_cover_name
 
 
 class MissingCompleteGraphic(QWidget):
@@ -237,7 +237,7 @@ class EditorCloseGuardDialog(QDialog):
             marker = QLabel()
             marker.setPixmap(editor_icon('warning', color, 16).pixmap(16, 16))
             marker.setFixedSize(18, 18)
-            label = QLabel(text)
+            label = QLabel(ui_text(self, text))
             label.setObjectName('CloseGuardIssueText')
             label.setProperty('severity', severity)
             label.setWordWrap(True)
@@ -273,6 +273,7 @@ class EditorCloseGuardDialog(QDialog):
             self.close_button.clicked.connect(lambda: self._finish('close'))
             actions.addWidget(self.close_button)
         root.addLayout(actions)
+        apply_static_language(self, language_for(self))
 
     def _finish(self, decision: str) -> None:
         self.decision = decision
@@ -978,7 +979,7 @@ class MetadataEditorDialog(QDialog):
         ordered = [name for name in self.SOURCE_ORDER if name in candidates]
         ordered += [name for name in candidates if name not in ordered]
         if not ordered:
-            empty = QAction('Brak alternatywnych danych', menu)
+            empty = QAction(ui_text(self, 'Brak alternatywnych danych'), menu)
             empty.setEnabled(False)
             menu.addAction(empty)
         else:
@@ -989,7 +990,7 @@ class MetadataEditorDialog(QDialog):
                     text = text[:69] + '…'
                 action = QWidgetAction(menu)
                 color = self.SOURCE_COLORS.get(source, '#9aa8b2')
-                option = SourceMenuOption(self.SOURCE_LABELS.get(source, source.upper()), text, color, menu)
+                option = SourceMenuOption(ui_text(self, self.SOURCE_LABELS.get(source, source.upper())), text, color, menu)
                 select_source = lambda f=field_name, s=source, m=menu: (
                     self._select_source_value(f, s), m.close()
                 )
@@ -1012,7 +1013,7 @@ class MetadataEditorDialog(QDialog):
         button = self._source_buttons.get(field_name)
         widget = self._field_widgets.get(field_name)
         if button is not None:
-            button.setText(self.SOURCE_LABELS.get(source, source.upper() if source else 'ŹRÓDŁO'))
+            button.setText(ui_text(self, self.SOURCE_LABELS.get(source, source.upper() if source else 'ŹRÓDŁO')))
             source_color = self.SOURCE_COLORS.get(source, '#aeb8c2')
             button.setIcon(_color_dot_icon(source_color))
             button.setIconSize(QSize(10, 10))
@@ -1092,10 +1093,10 @@ class MetadataEditorDialog(QDialog):
     def _update_online_lock_button(self) -> None:
         locked = self.online_lock.isChecked()
         self.online_lock.setText('')
-        self.online_lock.setToolTip(
+        self.online_lock.setToolTip(ui_text(self,
             'Dane chronione przed ponownym rozpoznaniem online'
             if locked else 'Rozpoznawanie online odblokowane'
-        )
+        ))
         _set_editor_button_icon(
             self.online_lock,
             'lock' if locked else 'unlock',
@@ -1112,7 +1113,7 @@ class MetadataEditorDialog(QDialog):
         self._online_scan_busy = bool(busy)
         if not hasattr(self, 'scan_online_button'):
             return
-        self.scan_online_button.setText('Rozpoznawanie…' if busy else 'Rozpoznaj online')
+        self.scan_online_button.setText(ui_text(self, 'Rozpoznawanie…' if busy else 'Rozpoznaj online'))
         _set_editor_button_icon(self.scan_online_button, 'search', '#91a4b0' if busy else '#dce8ef', 18)
         self.scan_online_button.setEnabled(not busy and not self.online_lock.isChecked())
         self.previous_file_button.setEnabled(not busy and self.navigation_index > 0)
@@ -1315,7 +1316,7 @@ class MetadataEditorDialog(QDialog):
                 icon_name, icon_color, kind = 'alert_circle', '#ff665e', 'critical'
             else:
                 icon_name, icon_color, kind = 'alert_circle', '#ffc85b', 'warning'
-            widget.setText(label)
+            widget.setText(ui_text(self, label))
             icon.setText('')
             icon.setPixmap(editor_icon(icon_name, icon_color, 18).pixmap(18, 18))
             for element in (widget, icon, row):
@@ -1370,7 +1371,7 @@ class MetadataEditorDialog(QDialog):
             total = int(round(self.track.duration_seconds))
             duration = f'{total // 60:02d}:{total % 60:02d}'
         bitrate = f'{self.track.bitrate_kbps} kb/s' if self.track.bitrate_kbps else '—'
-        self.recognition_values['source'].setText(source_display)
+        self.recognition_values['source'].setText(ui_text(self, source_display))
         source_color = self.SOURCE_COLORS.get(source, '#d5e2e8')
         self.recognition_values['source'].setProperty('sourceColor', source_color)
         self.recognition_values['source'].setStyleSheet(
@@ -1455,7 +1456,7 @@ class MetadataEditorDialog(QDialog):
             source_dot.setProperty('sourceColor', source_color)
             source_dot.setPixmap(_color_dot_icon(source_color, 12).pixmap(12, 12))
             source_dot.setFixedSize(12, 12)
-            source_name = QLabel(display_names.get(source, source))
+            source_name = QLabel(ui_text(self, display_names.get(source, source)))
             source_name.setObjectName('SourceNameText')
             source_name.setStyleSheet(f'background:transparent;color:{source_color};font-weight:700;')
             source_layout.addWidget(source_dot)
@@ -1464,10 +1465,10 @@ class MetadataEditorDialog(QDialog):
             for column, field_name in ((1, 'title'), (2, 'artist'), (3, 'year'), (4, 'genre')):
                 value = self._source_values.get(field_name, {}).get(source)
                 self.source_table.setItem(row, column, QTableWidgetItem(self._display_source_value(field_name, value) if value not in (None, '') else '—'))
-            use_button = QPushButton('Użyj danych')
+            use_button = QPushButton(ui_text(self, 'Użyj danych'))
             use_button.setObjectName('UseSourceDataButton')
             use_button.setFixedSize(82, 18)
-            use_button.setToolTip(f'Zastosuj dostępne dane ze źródła: {display_names.get(source, source)}')
+            use_button.setToolTip(ui_text(self, f'Zastosuj dostępne dane ze źródła: {display_names.get(source, source)}'))
             use_button.clicked.connect(lambda _checked=False, s=source: self._apply_source_bundle(s))
             cell = QWidget()
             cell.setObjectName('UseSourceDataCell')
@@ -1812,7 +1813,7 @@ class MetadataEditorDialog(QDialog):
         self._cover_candidate_states['source'] = 'ready' if not source_pix.isNull() else 'unavailable'
         self._cover_notes['source'] = 'Okładka osadzona w pliku źródłowym.'
 
-        placeholder = QPixmap(str(asset_path('no_cover.png')))
+        placeholder = QPixmap(str(asset_path(localized_no_cover_name(self))))
         self._cover_candidate_pixmaps['placeholder'] = placeholder
         self._cover_candidate_states['placeholder'] = 'ready'
         self._cover_notes['placeholder'] = 'Brak potwierdzonej okładki — grafika zastępcza ALO Music.'
@@ -1885,7 +1886,7 @@ class MetadataEditorDialog(QDialog):
             entries.append(('manual', 'WŁASNA'))
         entries.append(('placeholder', 'BRAK OKŁADKI'))
         total_count = len(entries) + len(external_entries) - len(visible_external)
-        self.cover_proposal_count.setText(f'Propozycje ({total_count})')
+        self.cover_proposal_count.setText(ui_text(self, f'Propozycje ({total_count})'))
         self.show_more_covers_button.setVisible(len(external_entries) > len(visible_external))
 
         count = len(entries)
@@ -1896,7 +1897,7 @@ class MetadataEditorDialog(QDialog):
             card = QFrame()
             card.setObjectName('CoverProposalCard')
             card.setProperty('selected', key == getattr(self, '_selected_cover_key', ''))
-            card.setToolTip(title)
+            card.setToolTip(ui_text(self, title))
             card.setMinimumSize(preview_size + 6, preview_size + 6)
             lay = QVBoxLayout(card)
             lay.setContentsMargins(3, 3, 3, 3)
@@ -1905,7 +1906,7 @@ class MetadataEditorDialog(QDialog):
             preview.setObjectName('CoverProposalPreview')
             preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
             preview.setFixedSize(preview_size, preview_size)
-            preview.setToolTip(title)
+            preview.setToolTip(ui_text(self, title))
             preview.clicked.connect(lambda k=key: self._select_cover_choice(k))
             lay.addWidget(preview, 0, Qt.AlignmentFlag.AlignCenter)
             selected_badge = QLabel('', card)
@@ -1933,7 +1934,7 @@ class MetadataEditorDialog(QDialog):
         if pix.isNull():
             label.setPixmap(QPixmap())
             state = self._cover_candidate_states.get(key, 'unavailable')
-            label.setText('…' if state == 'loading' else 'Brak' if state == 'error' else '—')
+            label.setText('…' if state == 'loading' else ui_text(self, 'Brak') if state == 'error' else '—')
         else:
             label.setText('')
             edge = max(24, min(label.width(), label.height()) - 2)
@@ -2007,11 +2008,11 @@ class MetadataEditorDialog(QDialog):
             self.cover_main_preview.setPixmap(QPixmap())
             state = self._cover_candidate_states.get(key, 'unavailable')
             if state == 'loading':
-                self.cover_main_preview.setText('Ładowanie…')
+                self.cover_main_preview.setText(ui_text(self, 'Ładowanie…'))
             elif state == 'error':
-                self.cover_main_preview.setText('Nie udało się pobrać okładki')
+                self.cover_main_preview.setText(ui_text(self, 'Nie udało się pobrać okładki'))
             else:
-                self.cover_main_preview.setText('Brak okładki')
+                self.cover_main_preview.setText(ui_text(self, 'Brak okładki'))
         else:
             self.cover_main_preview.setText('')
             edge = max(40, min(self.cover_main_preview.width(), self.cover_main_preview.height()) - 8)

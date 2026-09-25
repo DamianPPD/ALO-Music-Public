@@ -26,7 +26,7 @@ from audio_library_organizer.ui.widgets import ClickableCoverLabel, show_cover_p
 from audio_library_organizer.ui.confidence import ConfidenceWidget
 from audio_library_organizer.ui.assets import asset_path
 from audio_library_organizer.ui.genre_input import build_genre_suggestions
-from audio_library_organizer.ui.i18n import ui_text
+from audio_library_organizer.ui.i18n import ui_text, localized_no_cover_name
 from audio_library_organizer.ui.icons import alo_icon
 
 
@@ -427,9 +427,9 @@ class LibraryPage(QWidget):
         header = self.table.horizontalHeader()
         sort_column = header.sortIndicatorSection()
         if 0 <= sort_column < len(self.HEADERS):
-            sort_name = self.HEADERS[sort_column]
+            sort_name = ui_text(self, self.HEADERS[sort_column])
         else:
-            sort_name = self.HEADERS[0]
+            sort_name = ui_text(self, self.HEADERS[0])
         arrow = '↑' if header.sortIndicatorOrder() == Qt.SortOrder.AscendingOrder else '↓'
 
         filters: list[str] = []
@@ -445,7 +445,7 @@ class LibraryPage(QWidget):
             bpm_to = self.bpm_max.text().strip() or '—'
             filters.append(f'BPM {bpm_from}–{bpm_to}')
         filter_text = ' · '.join(filters) if filters else 'brak'
-        self.view_state_label.setText(f'Sortowanie: {sort_name} {arrow}   •   Filtry: {filter_text}')
+        self.view_state_label.setText(ui_text(self, f'Sortowanie: {sort_name} {arrow}   •   Filtry: {filter_text}'))
 
     def _reset_view(self):
         blockers = [
@@ -487,7 +487,7 @@ class LibraryPage(QWidget):
             quality = ' · '.join(x for x in [track.codec or '', f'{track.bitrate_kbps} kb/s' if track.bitrate_kbps else ''] if x)
             presentation = library_status_presentation(track)
             is_playing = self._track_is_playing(track)
-            status_text = library_status_text(track)
+            status_text = ui_text(self, library_status_text(track))
             locked_online = is_online_locked(track)
             values = [
                 status_text, track.artist or '', track.title or '', track.year or '', track.genre or '',
@@ -518,14 +518,14 @@ class LibraryPage(QWidget):
                 playing_background = QBrush(PLAYING_BACKGROUND)
                 for item in items:
                     item.setBackground(playing_background)
-                tooltip = f'{status_text} • TERAZ GRA'
+                tooltip = f'{status_text} • {ui_text(self, "TERAZ GRA")}'
                 if is_online_locked(track):
-                    tooltip += ' • Zablokowany przed ponownym rozpoznaniem online'
+                    tooltip += ' • ' + ui_text(self, 'Zablokowany przed ponownym rozpoznaniem online')
                 items[0].setToolTip(tooltip)
             elif is_online_locked(track):
-                items[0].setToolTip(f'{status_text} • Zablokowany przed ponownym rozpoznaniem online')
+                items[0].setToolTip(f'{status_text} • {ui_text(self, "Zablokowany przed ponownym rozpoznaniem online")}')
             elif 'duplicate_primary' in track.locked_fields:
-                items[0].setToolTip(f'{status_text} • Ten plik został przez Ciebie wybrany w zakładce Duplikaty.')
+                items[0].setToolTip(f'{status_text} • {ui_text(self, "Ten plik został przez Ciebie wybrany w zakładce Duplikaty.")}')
             self.model.appendRow(items)
 
         preserve_existing_order = bool(order_map)
@@ -589,19 +589,19 @@ class LibraryPage(QWidget):
         self.detail_labels['path'].setText(str(t.path))
         self.detail_labels['duration'].setText('—' if t.duration_seconds is None else f'{int(t.duration_seconds)//60}:{int(t.duration_seconds)%60:02d}')
         self.detail_labels['size'].setText('—' if not t.size_bytes else f'{t.size_bytes / (1024 * 1024):.2f} MB')
-        self.detail_labels['quality'].setText(f'{t.codec or "?"} · {t.bitrate_kbps or "?"} kb/s · {t.sample_rate_hz or "?"} Hz · {t.channels or "?"} kanały')
+        self.detail_labels['quality'].setText(f'{t.codec or "?"} · {t.bitrate_kbps or "?"} kb/s · {t.sample_rate_hz or "?"} Hz · {t.channels or "?"} {ui_text(self, "kanały")}')
         low_confidence = bool(t.confidence is not None and t.confidence < 0.65)
         self.match_box.setProperty('lowConfidence', low_confidence)
         self.match_box.style().unpolish(self.match_box); self.match_box.style().polish(self.match_box); self.match_box.update()
         info = identification_summary(t)
         self.confidence_widget.set_value(t.confidence)
-        self.detail_labels['sources'].setText(info['sources']); self.detail_labels['reasons'].setText(info['reasons'])
+        self.detail_labels['sources'].setText(ui_text(self, info['sources'])); self.detail_labels['reasons'].setText(ui_text(self, info['reasons']))
         self.detail_labels['discogs'].setText(f'<a href="{t.discogs_url}">{t.discogs_url}</a>' if t.discogs_url else '—')
         self.detail_labels['comment'].setText((t.comment or '—').replace('\n', '<br>'))
         hash_text = '—' if not t.sha256 else f'{t.sha256[:12]}…{t.sha256[-12:]}'
         self.detail_labels['hash'].setText(hash_text); self.detail_labels['hash'].setToolTip(t.sha256 or '')
         history = self._history_provider(t) if self._history_provider else []
-        self.history_label.setText('\n'.join(f'• {entry}' for entry in history) if history else 'Brak ręcznych zmian.')
+        self.history_label.setText('\n'.join(f'• {ui_text(self, entry)}' for entry in history) if history else ui_text(self, 'Brak ręcznych zmian.'))
 
         try:
             family_key = str(Path(t.path).resolve()).casefold()
@@ -613,26 +613,26 @@ class LibraryPage(QWidget):
             lines = []
             for member in family:
                 duration = '—' if member.duration_seconds is None else f'{int(member.duration_seconds)//60}:{int(member.duration_seconds)%60:02d}'
-                marker = 'Teraz: ' if member is t else '       '
+                marker = ui_text(self, 'Teraz: ') if member is t else '       '
                 lines.append(f'{marker}{member.title or member.filename}  —  {duration}')
-            self.version_family_label.setText(f'Rodzina wersji: {len(family)} utwory\n' + '\n'.join(lines))
+            self.version_family_label.setText(ui_text(self, f'Rodzina wersji: {len(family)} utwory') + '\n' + '\n'.join(lines))
         else:
             self.version_family_label.setText('')
 
         completeness = metadata_completeness(t)
-        self.confirmed_label.setText('\n'.join(completeness['confirmed_core']) or '—')
+        self.confirmed_label.setText('\n'.join(ui_text(self, value) for value in completeness['confirmed_core']) or '—')
         missing = list(completeness['missing_core'])
         self.review_box.setProperty('hasMissing', bool(missing))
         self.review_box.style().unpolish(self.review_box); self.review_box.style().polish(self.review_box)
         self.missing_heading.setVisible(bool(missing)); self.missing_label.setVisible(bool(missing)); self.complete_label.setVisible(not missing)
         if missing:
-            self.missing_label.setText('\n'.join(missing)); self.complete_label.setText('')
+            self.missing_label.setText('\n'.join(ui_text(self, value) for value in missing)); self.complete_label.setText('')
         else:
-            self.complete_label.setText('Dane główne kompletne — nie musisz niczego uzupełniać.')
+            self.complete_label.setText(ui_text(self, 'Dane główne kompletne — nie musisz niczego uzupełniać.'))
 
         status = effective_status(t)
         self.approve.setEnabled(status not in {'duplicate', 'not_selected'})
-        self.approve.setText('GOTOWE' if status == 'ready' else 'ZATWIERDŹ JAKO GOTOWE')
+        self.approve.setText(ui_text(self, 'GOTOWE' if status == 'ready' else 'ZATWIERDŹ JAKO GOTOWE'))
         self._load_cover(t)
         if status == 'review' and not self.detail.isVisible():
             self.details_btn.setChecked(True); self._toggle_details(True)
@@ -649,7 +649,7 @@ class LibraryPage(QWidget):
         self._cover_request_serial += 1; serial = self._cover_request_serial
         choice = (track.cover_choice or 'auto').casefold()
         if choice == 'placeholder':
-            self._set_cover_pixmap(QPixmap(str(asset_path('no_cover.png'))), 'Brak potwierdzonej okładki — grafika zastępcza ALO Music.')
+            self._set_cover_pixmap(QPixmap(str(asset_path(localized_no_cover_name(self)))), 'Brak potwierdzonej okładki — grafika zastępcza ALO Music.')
             return
         if track.manual_cover_path and Path(track.manual_cover_path).is_file() and choice in {'auto', 'manual'}:
             self._set_cover_pixmap(QPixmap(track.manual_cover_path), 'Okładka wybrana ręcznie.')
@@ -657,8 +657,8 @@ class LibraryPage(QWidget):
         if choice != 'source':
             external_url = self._external_cover_url(track)
             if external_url:
-                self._cover_pixmap = QPixmap(); self.cover.setPixmap(QPixmap()); self.cover.setText('Ładowanie…')
-                self.cover_caption.setText('Pobieranie podglądu zewnętrznej okładki…')
+                self._cover_pixmap = QPixmap(); self.cover.setPixmap(QPixmap()); self.cover.setText(ui_text(self, 'Ładowanie…'))
+                self.cover_caption.setText(ui_text(self, 'Pobieranie podglądu zewnętrznej okładki…'))
                 self._load_remote_cover(track, external_url, serial); return
         self._show_source_cover_fallback(track, 'Okładka źródłowa / zapasowa.')
 
@@ -682,22 +682,22 @@ class LibraryPage(QWidget):
         pix = QPixmap(); embedded = extract_embedded_cover(track.path)
         if embedded:
             pix.loadFromData(embedded[0]); self._set_cover_pixmap(pix, note); return
-        self._set_cover_pixmap(QPixmap(str(asset_path('no_cover.png'))), 'Brak potwierdzonej okładki — grafika zastępcza ALO Music.')
+        self._set_cover_pixmap(QPixmap(str(asset_path(localized_no_cover_name(self)))), 'Brak potwierdzonej okładki — grafika zastępcza ALO Music.')
 
     def _set_cover_pixmap(self, pix: QPixmap, note: str):
         self._cover_pixmap = pix; self._cover_note = note
         if pix.isNull():
-            self.cover.setPixmap(QPixmap()); self.cover.setText('Brak okładki')
+            self.cover.setPixmap(QPixmap()); self.cover.setText(ui_text(self, 'Brak okładki'))
         else:
             self.cover.setText(''); self.cover.setPixmap(pix.scaled(196, 196, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-        self.cover_caption.setText(note or 'Kliknij okładkę, aby powiększyć')
+        self.cover_caption.setText(ui_text(self, note or 'Kliknij okładkę, aby powiększyć'))
 
     def _show_cover_preview(self):
-        show_cover_preview(self, self._cover_pixmap, title='Powiększona okładka', note=self._cover_note)
+        show_cover_preview(self, self._cover_pixmap, title=ui_text(self, 'Powiększona okładka'), note=ui_text(self, self._cover_note))
 
     def _toggle_details(self, checked: bool):
         self.detail.setVisible(checked)
-        self.details_btn.setText('Ukryj szczegóły' if checked else 'Szczegóły utworu')
+        self.details_btn.setText(ui_text(self, 'Ukryj szczegóły' if checked else 'Szczegóły utworu'))
         if checked:
             self.split.setSizes([820, 740])
 
@@ -812,7 +812,7 @@ class LibraryPage(QWidget):
             self.review_box.style().unpolish(self.review_box); self.review_box.style().polish(self.review_box)
             QMessageBox.warning(
                 self, ui_text(self, 'Brak wymaganych danych'),
-                ui_text(self, 'Nie można oznaczyć jako GOTOWE — uzupełnij wymagane pola: ') + ', '.join(missing),
+                ui_text(self, 'Nie można oznaczyć jako GOTOWE — uzupełnij wymagane pola: ') + ', '.join(ui_text(self, field) for field in missing),
             )
             return
         self.approve_requested.emit(track)

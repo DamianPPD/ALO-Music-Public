@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QApplication, QFrame, QGridLayout, QHBoxLayout, QL
 
 from audio_library_organizer.domain.settings import AppSettings
 from audio_library_organizer.ui.icons import alo_icon
+from audio_library_organizer.ui.i18n import ui_text, language_for
 from audio_library_organizer.ui.widgets import StatCard
 
 
@@ -126,7 +127,7 @@ class QuickAccessCard(QFrame):
         self.path = Path(path)
         self.path_label.set_path(self.path)
         available = self.path.is_dir()
-        self.availability.setText('Dostępna' if available else 'Niedostępna')
+        self.availability.setText(ui_text(self, 'Dostępna' if available else 'Niedostępna'))
         self.availability.setProperty('available', available)
         self.availability.style().unpolish(self.availability)
         self.availability.style().polish(self.availability)
@@ -314,13 +315,13 @@ class DashboardPage(QWidget):
     def _load_last_scan(self) -> None:
         raw = QSettings().value(self._library_storage_key(), '')
         if not raw:
-            self.last_scan_label.setText('Ostatnie skanowanie: brak danych')
+            self.last_scan_label.setText(ui_text(self, 'Ostatnie skanowanie: brak danych'))
             self.last_scan_label.setToolTip('')
             return
         try:
             when = datetime.fromisoformat(str(raw))
         except ValueError:
-            self.last_scan_label.setText('Ostatnie skanowanie: brak danych')
+            self.last_scan_label.setText(ui_text(self, 'Ostatnie skanowanie: brak danych'))
             self.last_scan_label.setToolTip('')
             return
         self._show_last_scan_time(when)
@@ -328,12 +329,12 @@ class DashboardPage(QWidget):
     def _show_last_scan_time(self, when: datetime) -> None:
         today = datetime.now().date()
         if when.date() == today:
-            moment = f'dzisiaj, {when:%H:%M}'
+            moment = f'{"today" if language_for(self) == "en" else "dzisiaj"}, {when:%H:%M}'
         elif when.date() == today - timedelta(days=1):
-            moment = f'wczoraj, {when:%H:%M}'
+            moment = f'{"yesterday" if language_for(self) == "en" else "wczoraj"}, {when:%H:%M}'
         else:
             moment = when.strftime('%d.%m.%Y, %H:%M')
-        self.last_scan_label.setText(f'Ostatnie skanowanie: {moment}')
+        self.last_scan_label.setText(f'{ui_text(self, "Ostatnie skanowanie:")} {moment}')
 
     def _open_library_folder(self) -> None:
         target = self._library_root if self._library_root.exists() else self._library_root.parent
@@ -373,6 +374,7 @@ class DashboardPage(QWidget):
 
     def set_library(self, settings: AppSettings, library_name: str | None = None):
         self._library_root = Path(settings.library.root)
+        self._last_scan_tooltip_source = ''
         self.library_label.setText(str(settings.library.root))
         self.library_label.setToolTip(str(settings.library.root))
         self._update_location_cards(settings)
@@ -383,13 +385,21 @@ class DashboardPage(QWidget):
             self._update_statistics()
 
     def set_library_name(self, name: str):
-        self.dashboard_title.setText(name or 'Biblioteka główna')
+        self.dashboard_title.setText(ui_text(self, name or 'Biblioteka główna'))
 
     def set_last_scan_summary(self, text: str):
         now = datetime.now()
+        self._last_scan_tooltip_source = text
         self._save_last_scan(now)
         self._show_last_scan_time(now)
-        self.last_scan_label.setToolTip(text or '')
+        self.last_scan_label.setToolTip(ui_text(self, text or ''))
+
+    def refresh_language(self) -> None:
+        self._load_last_scan()
+        self.last_scan_label.setToolTip(ui_text(self, getattr(self, '_last_scan_tooltip_source', '')))
+        for card in self.location_cards.values():
+            card.set_path(card.path)
+        self._update_attention()
 
     def set_summary(self, summary: dict[str, int]):
         self._summary = dict(summary)
@@ -452,13 +462,13 @@ class DashboardPage(QWidget):
 
         parts: list[str] = []
         if review:
-            parts.append(f'{review} do sprawdzenia')
+            parts.append(ui_text(self, f'{review} do sprawdzenia'))
         if duplicate:
-            parts.append(f'{duplicate} grup duplikatów')
+            parts.append(ui_text(self, f'{duplicate} grup duplikatów'))
         if missing_covers:
-            parts.append(f'{missing_covers} bez okładki')
+            parts.append(ui_text(self, f'{missing_covers} bez okładki'))
         if missing:
-            parts.append(f'{missing} brakujących plików')
+            parts.append(ui_text(self, f'{missing} brakujących plików'))
 
         self.attention_text.setText(' • '.join(parts))
         self.attention_frame.setVisible(bool(parts))

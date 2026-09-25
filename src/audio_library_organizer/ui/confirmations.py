@@ -15,7 +15,7 @@ def confirm_bulk_copy(parent, summary: dict[str, int], *, examples: list[str] | 
             f"The app will create {summary['total']} copies in the new library.\n\n"
             f"READY: {summary['ready']}\n"
             f"NOT SELECTED: {summary.get('duplicate', 0) + summary.get('not_selected', 0)}\n"
-            f"REVIEW: {summary['review']}\n"
+            f"NEEDS REVIEW: {summary['review']}\n"
             f"READY organization: {organization}\n"
             f"Name conflicts: {summary.get('name_conflicts', 0)}\n"
             f"Existing target names: {summary.get('existing_targets', 0)}\n"

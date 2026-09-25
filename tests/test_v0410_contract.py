@@ -28,7 +28,8 @@ def test_duplicate_rows_use_only_decision_colors_without_orange_difference_highl
 
 
 def test_duplicates_show_progress_without_extra_next_unresolved_button():
-    assert "decyzje {decided}/{len(group)}" in DUPLICATES
+    assert 'ui_text(self, "decyzje")' in DUPLICATES
+    assert ' {decided}/{len(group)}' in DUPLICATES
     assert "QPushButton('Następna nierozstrzygnięta')" not in DUPLICATES
     assert 'def _select_next_unresolved_group' not in DUPLICATES
 

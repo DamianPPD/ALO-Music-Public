@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from audio_library_organizer.metadata.genre import genre_items
+from audio_library_organizer.ui.i18n import ui_text
 
 DEFAULT_GENRES = (
     'House', 'Deep House', 'Progressive House', 'Funky House', 'Tech House',
@@ -123,7 +124,7 @@ if _QT:
                 chip = QToolButton(); chip.setObjectName('GenreChip'); chip.setText(f'{genre} ×')
                 chip.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
                 chip.setIcon(alo_icon('status' if index == 0 else 'cancel', '#62df98' if index == 0 else '#8da1ad', 13))
-                chip.setToolTip('Pierwszy gatunek jest główny i decyduje o folderze. Kliknij, aby usunąć.' if index == 0 else 'Kliknij prawym przyciskiem, aby ustawić jako główny. Kliknij, aby usunąć.')
+                chip.setToolTip(ui_text(self, 'Pierwszy gatunek jest główny i decyduje o folderze. Kliknij, aby usunąć.' if index == 0 else 'Kliknij prawym przyciskiem, aby ustawić jako główny. Kliknij, aby usunąć.'))
                 chip.clicked.connect(lambda _=False, i=index: self._remove(i))
                 chip.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                 chip.customContextMenuRequested.connect(lambda _pos, i=index: self._move_first(i))

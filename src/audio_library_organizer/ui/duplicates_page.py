@@ -137,12 +137,12 @@ class DuplicatesPage(QWidget):
         self.groups = group_potential_duplicates(tracks, include_resolved=True)
         self.group_list.clear()
         total_files = sum(len(group) for group in self.groups)
-        self.count_label.setText(f'{total_files} plików • {len(self.groups)} grup')
+        self.count_label.setText(ui_text(self, f'{total_files} plików • {len(self.groups)} grup'))
         for i, group in enumerate(self.groups, 1):
             label = group[0].proposed_filename or group[0].filename
             decided = sum(1 for t in group if '__status__' in t.locked_fields)
-            suffix = f' • decyzje {decided}/{len(group)}'
-            self.group_list.addItem(f'{i:03d} · {label} · {len(group)} pliki{suffix}')
+            suffix = f' • {ui_text(self, "decyzje")} {decided}/{len(group)}'
+            self.group_list.addItem(f'{i:03d} · {label} · {len(group)} {ui_text(self, "pliki")}{suffix}')
         if self.groups:
             group_index = min(max(current_group, 0), len(self.groups) - 1)
             if selected_path is not None:
@@ -159,7 +159,7 @@ class DuplicatesPage(QWidget):
             self.group_list.verticalScrollBar().setValue(group_scroll)
             self.files.verticalScrollBar().setValue(file_scroll)
         else:
-            self.files.setRowCount(0); self.title.setText('Brak potencjalnych duplikatów')
+            self.files.setRowCount(0); self.title.setText(ui_text(self, 'Brak potencjalnych duplikatów'))
 
     @staticmethod
     def _decision_text(track: TrackRecord) -> str:

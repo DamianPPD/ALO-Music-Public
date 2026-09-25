@@ -326,6 +326,94 @@ TEXT_MAP_EN.update({
 
 
 def _dynamic_en(text: str) -> str:
+    # Runtime labels are assembled from stable UI phrases and user data. Keep
+    # the data intact while translating only the surrounding interface copy.
+    if text.startswith('Sortowanie: '):
+        result = text.replace('Sortowanie:', 'Sort:', 1).replace('Filtry:', 'Filters:', 1)
+        result = result.replace('Filters: brak', 'Filters: none')
+        return result.replace('Szukaj:', 'Search:').replace('Gatunek:', 'Genre:')
+    if text.startswith('Brak: '):
+        return 'Missing: ' + translate_static_text(text[6:], 'en')
+    if text.startswith('Zapisano metadane i ustawiono ZACHOWAJ: '):
+        return 'Metadata saved and marked KEEP: ' + text.split(': ', 1)[1]
+    if text.startswith('Cofnięto: '):
+        return 'Undone: ' + translate_static_text(text[len('Cofnięto: '):], 'en')
+    if text.startswith('Decyzja w Duplikatach: '):
+        return 'Decision in Duplicates: ' + translate_static_text(text[len('Decyzja w Duplikatach: '):], 'en')
+    if text.startswith('Błąd rozpoznawania online — '):
+        return 'Online identification error — ' + translate_static_text(text[len('Błąd rozpoznawania online — '):], 'en')
+    if text.startswith('Zmieniono ') and ' dla ' in text:
+        match = re.fullmatch(r'Zmieniono (.+) dla (\d+) utworów\. Ręczna wartość jest chroniona przed automatycznym nadpisaniem\.', text)
+        if match:
+            return f'Updated {translate_static_text(match.group(1), "en")} for {match.group(2)} tracks. The manual value is protected from automatic changes.'
+    for source, target in (
+        ('Źródło: ', 'Source: '),
+        ('Następny: ', 'Next: '),
+        ('Zastosuj dostępne dane ze źródła: ', 'Apply available data from source: '),
+        ('Okładka online — ', 'Online cover art — '),
+        ('Błąd odtwarzania: ', 'Playback error: '),
+        ('Metadane zapisane • Status: ', 'Metadata saved • Status: '),
+    ):
+        if text.startswith(source):
+            return target + translate_static_text(text[len(source):], 'en')
+    for source, target in (
+        ('Brak ważnych danych: ', 'Missing essential data: '),
+        ('Pola wymagające uwagi: ', 'Fields needing attention: '),
+    ):
+        if text.startswith(source):
+            return target + ', '.join(translate_static_text(field, 'en') for field in text[len(source):].split(', '))
+    if re.match(r'^\d+% — ', text):
+        for source, target in (('bardzo pewne', 'very confident'), ('sprawdź wersję', 'check version'), ('wymaga sprawdzenia', 'needs review')):
+            text = text.replace(source, target)
+        return text
+    status_suffix = re.fullmatch(r'(.+): (GOTOWE|DO SPRAWDZENIA)', text)
+    if status_suffix:
+        return f'{status_suffix.group(1)}: {TEXT_MAP_EN[status_suffix.group(2)]}'
+    decision_message = re.fullmatch(r'(.+): wybrano (ZACHOWAJ|DUPLIKAT|NIE WYBIERAM|DO SPRAWDZENIA) → Biblioteka: (.+)\.', text)
+    if decision_message:
+        filename, decision, status = decision_message.groups()
+        return f'{filename}: selected {translate_static_text(decision, "en")} → Library: {translate_static_text(status, "en")}.'
+    for pattern, replacement in (
+        (r'^(\d+) plików • (\d+) grup$', r'\1 files • \2 groups'),
+        (r'^Biblioteka wymaga uwagi: (\d+) do sprawdzenia, (\d+) duplikatów\.$', r'Library needs attention: \1 need review, \2 duplicates.'),
+        (r'^(\d+) utworów jest gotowych\. Możesz filtrować Bibliotekę albo tworzyć własne foldery MP3\.$', r'\1 tracks are ready. You can filter Library or create your own MP3 folders.'),
+        (r'^Biblioteka wymaga odświeżenia — (\d+) plików nie jest już dostępnych\.$', r'Library needs a refresh — \1 files are no longer available.'),
+        (r'^(Skan zakończony|Skan anulowany): (\d+) przeanalizowano, (\d+) bez zmian, błędy: (\d+)\.$', r'\1: \2 analyzed, \3 unchanged, errors: \4.'),
+        (r'^Pewne (\d+), prawdopodobne (\d+), niepewne (\d+), błędy (\d+)\.( Pominięto zablokowane: (\d+)\.)?$', r'Certain \1, probable \2, uncertain \3, errors \4. Locked skipped: \6.'),
+        (r'^Skanowanie (\d+)/(\d+): (.+)$', r'Scanning \1/\2: \3'),
+        (r'^Rozpoznawanie online (\d+)/(\d+): (.+)$', r'Identifying online \1/\2: \3'),
+        (r'^Tworzenie plików i kontrola techniczna (\d+)/(\d+): (.+)$', r'Creating and verifying files \1/\2: \3'),
+        (r'^Utworzono playlistę: (.+)$', r'Playlist created: \1'),
+        (r'^Zapisano (\d+) utworów:\n(.+)$', r'Saved \1 tracks:\n\2'),
+        (r'^Zapisano kopię ALO bez plików muzycznych:\n(.+)$', r'ALO backup saved without music files:\n\1'),
+        (r'^Skopiowano (\d+) plików do MOJE_FOLDERY_MP3\.$', r'Copied \1 files to MOJE_FOLDERY_MP3.'),
+        (r'^Utworzono folder z (\d+) plikami w MOJE_FOLDERY_MP3\.$', r'Created a folder with \1 files in MOJE_FOLDERY_MP3.'),
+        (r'^Kopiowanie (\d+) zaznaczonych utworów…$', r'Copying \1 selected tracks…'),
+        (r'^Ręcznie zatwierdzono jako GOTOWE: (.+)$', r'Manually marked as READY: \1'),
+        (r'^Rozpoznawanie (.+): błąd providerów — sprawdź komunikat w danych utworu\.$', r'Identification of \1: provider error — see track details.'),
+        (r'^(.+): wysokie dopasowanie\.$', r'\1: high-confidence match.'),
+        (r'^(.+): dopasowanie wymaga kontroli\.$', r'\1: match needs review.'),
+        (r'^(.+): brak pewnego dopasowania\.$', r'\1: no confident match.'),
+        (r'^Biblioteka „(.+)” została wyzerowana\. Możesz dodać nowe pliki do skanowania\.$', r'Library “\1” has been reset. You can add new files to scan.'),
+        (r'^Nazwa nowego folderu \((\d+) utworów\):$', r'New folder name (\1 tracks):'),
+        (r'^Propozycje \((\d+)\)$', r'Suggestions (\1)'),
+        (r'^(\d+) do sprawdzenia$', r'\1 need review'),
+        (r'^(.+): błąd providerów — sprawdź komunikat w danych utworu\.$', r'\1: provider error — see track details.'),
+        (r'^(\d+) grup duplikatów$', r'\1 duplicate groups'),
+        (r'^(\d+) bez okładki$', r'\1 without cover art'),
+        (r'^(\d+) brakujących plików$', r'\1 missing files'),
+        (r'^(\d+) kanały$', r'\1 channels'),
+        (r'^(\d+) pliki • decyzje (\d+)/(\d+)$', r'\1 files • decisions \2/\3'),
+        (r'^Nowy gatunek dla (\d+) utworów:$', r'New genre for \1 tracks:'),
+        (r'^Utworzono i sprawdzono technicznie (\d+) plików\. Raport kontroli zapisano w folderze raportów\.$', r'Created and verified \1 files. The verification report was saved in the reports folder.'),
+    ):
+        if re.fullmatch(pattern, text, flags=re.DOTALL):
+            result = re.sub(pattern, replacement, text, flags=re.DOTALL)
+            if pattern.startswith('^(Skan zakończony|Skan anulowany)'):
+                result = result.replace('Skan zakończony', 'Scan complete').replace('Skan anulowany', 'Scan cancelled')
+            if pattern.startswith('^Pewne') and not re.search(r'Pominięto zablokowane:', text):
+                result = result.replace(' Locked skipped: .', '')
+            return result
     if text.startswith('Podgląd: '):
         return 'Preview: ' + text[len('Podgląd: '):]
     if text.startswith('Przykład: '):
@@ -371,14 +459,27 @@ def _dynamic_en(text: str) -> str:
     return result
 
 
+def _english_count_agreement(text: str) -> str:
+    text = re.sub(r'\b1 (available files|missing files|duplicate groups|files|tracks|groups|channels)\b',
+                  lambda match: '1 ' + match.group(1).replace('files', 'file').replace('tracks', 'track').replace('groups', 'group').replace('channels', 'channel'), text)
+    return re.sub(r'\b1 need review\b', '1 needs review', text)
+
+
 def translate_static_text(text: str, language: str) -> str:
     if language != 'en':
         return text
     if text in TEXT_MAP_EN:
         return TEXT_MAP_EN[text]
+    dynamic = _dynamic_en(text)
+    if dynamic != text:
+        return _english_count_agreement(dynamic)
+    if ' · ' in text:
+        parts = [translate_static_text(part, language) for part in text.split(' · ')]
+        if parts != text.split(' · '):
+            return ' · '.join(parts)
     if '\n' in text:
         return '\n'.join(TEXT_MAP_EN.get(line, _dynamic_en(line)) for line in text.split('\n'))
-    return _dynamic_en(text)
+    return _english_count_agreement(_dynamic_en(text))
 
 
 def _remembered_text(obj, prop: str, current: str, language: str) -> str:
@@ -414,6 +515,11 @@ def language_for(root) -> str:
 def ui_text(root, text: str) -> str:
     """Translate a runtime dialog/status string using the owning UI language."""
     return translate_static_text(text, language_for(root))
+
+
+def localized_no_cover_name(root) -> str:
+    """Select artwork copy for the UI; exported audio still uses its original art."""
+    return 'no_cover_en.png' if language_for(root) == 'en' else 'no_cover.png'
 
 
 def apply_static_language(root, language: str) -> None:
@@ -584,4 +690,232 @@ TEXT_MAP_EN.update({
     'Zarządzaj bibliotekami ALO': 'Manage ALO libraries',
     'Zarządzaj bibliotekami': 'Manage libraries',
     'Wyczyść historię skanów': 'Clear scan history',
+})
+
+# v0.4.24: English copy for labels generated outside the initial widget tree.
+TEXT_MAP_EN.update({
+    'DO SPRAWDZENIA': 'NEEDS REVIEW', 'NIE WYBIERAM': 'NOT SELECTED',
+    # These are real directory names. Translate the surrounding UI, not paths.
+    'Pliki wynikowe / GOTOWE': 'Output files / GOTOWE',
+    'Otwórz MOJE_FOLDERY_MP3': 'Open MOJE_FOLDERY_MP3',
+    'Organizacja folderu GOTOWE': 'GOTOWE folder organization',
+    'Opcjonalnie twórz jeden poziom podfolderów. Domyślnie wszystko trafia bezpośrednio do GOTOWE.': 'Optionally create one level of subfolders. By default, files go directly into GOTOWE.',
+    'Przy organizacji według gatunku używany jest pierwszy gatunek z listy, np. Trance, Progressive, Vocal → GOTOWE\\Trance.': 'When organizing by genre, the first genre in the list is used, e.g. Trance, Progressive, Vocal → GOTOWE\\Trance.',
+    'ALO Music utworzy w nim podfoldery GOTOWE, NIE_WYBRANE, DO_SPRAWDZENIA, MOJE_FOLDERY_MP3 i raporty oraz własną bazę .alo.': 'ALO Music will create the actual folders GOTOWE, NIE_WYBRANE, DO_SPRAWDZENIA, MOJE_FOLDERY_MP3 and raporty, plus its own .alo database.',
+    'Usunąć tylko tę kopię z MOJE_FOLDERY_MP3? Oryginalny plik i główna biblioteka pozostaną bez zmian.': 'Remove only this copy from MOJE_FOLDERY_MP3? The original file and Main Library will remain unchanged.',
+    '🟠 Do sprawdzenia': '🟠 Needs review', '⚪ Nie wybieram': '⚪ Not selected',
+    'Wymaga sprawdzenia': 'Needs review', 'Oznacz jako GOTOWE': 'Mark as ready',
+    'Odznacz jako GOTOWE': 'Unmark as ready', 'ZACHOWAJ': 'KEEP',
+    'Utwórz playlistę (.m3u8)': 'Create playlist (.m3u8)',
+    'Cofnij ostatnią zmianę': 'Undo last change', 'Odtwórz': 'Play',
+    'Ukryj szczegóły': 'Hide details', 'Utwórz playlistę z zaznaczonych': 'Create playlist from selected',
+    'Dane główne kompletne — nie musisz niczego uzupełniać.': 'Main metadata complete — nothing to add.',
+    'ŚREDNIA': 'MEDIUM', 'WYSOKA': 'HIGH', 'NISKA': 'LOW',
+    'Dodaj regułę': 'Add rule', 'Brakujące pliki': 'Missing files',
+    'OKŁADKI': 'COVER ART', 'BRAKUJĄCE PLIKI': 'MISSING FILES',
+    'Kliknij, aby otworzyć ten widok w Bibliotece': 'Click to open this view in Library',
+    'Oryginalne pliki NIE zostaną zmienione ani usunięte.': 'Original files will NOT be changed or deleted.',
+    'Pierwszy gatunek jest główny i decyduje o folderze. Kliknij, aby usunąć.': 'The first genre is primary and determines the folder. Click to remove.',
+    'Kliknij prawym przyciskiem, aby ustawić jako główny. Kliknij, aby usunąć.': 'Right-click to make primary. Click to remove.',
+    'Utwór należy do grupy wymagającej porównania.': 'Track belongs to a group that needs comparison.',
+    'Dane wymagają ręcznej kontroli.': 'Metadata needs manual review.',
+    'Poważny problem lub podejrzane dane wymagające szczególnej uwagi.': 'A serious issue or suspicious data needs special attention.',
+    'Utwór pominięty decyzją użytkownika.': 'Track skipped by your choice.',
+    'Legenda statusów': 'Status legend', 'Pokaż znaczenie kolorów statusów': 'Show what the status colors mean',
+    'GOTOWE — Utwór gotowy do użycia / eksportu.': 'READY — Track ready to use or export.',
+    'DUPLIKAT — Utwór należy do grupy wymagającej porównania.': 'DUPLICATE — Track belongs to a group that needs comparison.',
+    'DO SPRAWDZENIA — Dane wymagają ręcznej kontroli.': 'NEEDS REVIEW — Metadata needs manual review.',
+    'DO SPRAWDZENIA — ważne — Poważny problem lub podejrzane dane wymagające szczególnej uwagi.': 'NEEDS REVIEW — important — A serious issue or suspicious data needs special attention.',
+    'NIE WYBIERAM — Utwór pominięty decyzją użytkownika.': 'NOT SELECTED — Track skipped by your choice.',
+    'Źródła nie są modyfikowane ani usuwane': 'Sources are not changed or deleted',
+    'Dwuklik w wiersz uruchamia odsłuch. Przy przełączaniu wariantów A/B odsłuch zachowuje ten sam moment utworu. ZACHOWAJ = zielona komórka decyzji, NIE WYBIERAM = szara. Brak decyzji pozostawia zwykłe ciemne tło.': 'Double-click a row to play it. Switching between A/B variants keeps the same playback position. KEEP has a green decision cell, NOT SELECTED a gray one. Undecided files keep the normal dark background.',
+    'Sprawdź przed zamknięciem': 'Review before closing', 'Przed zamknięciem sprawdź ten utwór': 'Review this track before closing',
+    'ALO wykryło elementy, które mogą wymagać Twojej decyzji:': 'ALO found items that may need your decision:',
+    'Wróć do edycji': 'Return to editing', 'Odrzuć zmiany': 'Discard changes',
+    'Zamknij mimo ostrzeżeń': 'Close despite warnings', 'Przejdź do poprzedniego pliku': 'Go to previous file',
+    'Następny plik': 'Next file', 'Przejdź do następnego pliku': 'Go to next file',
+    'Przywróć dane sprzed online': 'Restore data from before online identification',
+    'Duża różnica względem danych sprzed online — sprawdź wykonawcę i tytuł przed zatwierdzeniem.': 'Large difference from the previous data — check artist and title before approval.',
+    'Otwórz adres w domyślnej przeglądarce': 'Open link in your default browser',
+    'Pewność': 'Confidence', 'Okładka (wybierana z listy)': 'Cover art (choose from list)',
+    'Wybierz własny plik okładki': 'Choose your own cover image',
+    'Szukaj okładki online': 'Search for cover art online',
+    'Odśwież propozycje okładek przez ponowne rozpoznanie online': 'Refresh cover suggestions by identifying online again',
+    'Pokaż więcej': 'Show more', 'Przywróć nazwę z metadanych': 'Restore filename from metadata',
+    'Porównanie źródeł  (pomocniczo)': 'Source comparison  (reference)',
+    'Legenda źródeł — kliknij': 'Source legend — click', 'Legenda źródeł': 'Source legend',
+    'identyfikacja nagrania i wydań': 'recording and release identification',
+    'wartość wpisana ręcznie': 'manually entered value',
+    'wartość wykryta z audio': 'value detected from audio',
+    'wartość odczytana z nazwy pliku': 'value read from the filename',
+    'Źródło': 'Source', 'Główne źródło': 'Primary source', 'Użyj danych': 'Use data',
+    'Podgląd wybranej okładki': 'Preview selected cover art',
+    'Kliknij, aby zmienić na DO SPRAWDZENIA': 'Click to change to NEEDS REVIEW',
+    'Kliknij, aby oznaczyć jako GOTOWE': 'Click to mark as READY',
+    'Nie udało się pobrać okładki': 'Could not download cover art',
+    'Odtwórz / pauza': 'Play / pause', 'Przewiń 10 sekund': 'Skip 10 seconds',
+    'Powtarzaj aktualny utwór': 'Repeat current track',
+    'Ten utwór jest zablokowany przed rozpoznawaniem online. Odblokuj go, aby wykonać skan.': 'This track is locked against online identification. Unlock it to identify it.',
+    'Brak ręcznych zmian do cofnięcia w tej sesji.': 'No manual changes to undo in this session.',
+    'UTWÓR ROZPOZNANY ONLINE': 'TRACK IDENTIFIED ONLINE',
+    'UTWÓR SPRAWDZONY ONLINE': 'TRACK CHECKED ONLINE',
+    'Każde źródło działa niezależnie. Klucze są przechowywane lokalnie i pozostają maskowane w interfejsie.': 'Each source works independently. Keys are stored locally and masked in the interface.',
+    'Rozpoznawanie utworów na podstawie fingerprintu audio.': 'Identify tracks using audio fingerprints.',
+    'Utwór, wykonawca, album i identyfikatory nagrania.': 'Track, artist, album and recording IDs.',
+    'Katalog, album, rok, gatunek i propozycje okładek.': 'Catalog, album, year, genre and cover art suggestions.',
+    'MusicBrainz i Apple/iTunes działają bez klucza. AcoustID i Discogs są używane, jeśli je skonfigurowano.': 'MusicBrainz and Apple/iTunes work without keys. AcoustID and Discogs are used when configured.',
+    'Wybierz folder biblioteki / zapisu': 'Choose library / output folder',
+    'Gotowe': 'Ready', 'Do sprawdzenia': 'Needs review', 'Nie wybieram': 'Not selected',
+    'Wszystkie utwory': 'All tracks', 'Wszystkie': 'All',
+    'decyzje': 'decisions', 'pliki': 'files', 'kanały': 'channels', 'Teraz: ': 'Now: ',
+    'Resetuj widok': 'Reset view', 'DANE TECHNICZNE': 'TECHNICAL DETAILS',
+    'UKRYJ DANE TECHNICZNE': 'HIDE TECHNICAL DETAILS',
+    'HISTORIA ZMIAN W SESJI': 'CHANGES IN THIS SESSION',
+    'ROZMIAR PLIKU': 'FILE SIZE', 'Wpisz lub wybierz gatunek…': 'Type or choose a genre…',
+    'Szukaj w pomocy…': 'Search Help…',
+    'BIBLIOTEKA ZOSTANIE UTWORZONA TUTAJ': 'THE LIBRARY WILL BE CREATED HERE',
+    'NAZWA FOLDERU BIBLIOTEKI': 'LIBRARY FOLDER NAME',
+    'Dodaj folder…': 'Add folder…',
+    'GOTOWE   •   NIE WYBRANE   •   DO SPRAWDZENIA   •   MOJE FOLDERY MP3   •   raporty': 'GOTOWE   •   NIE_WYBRANE   •   DO_SPRAWDZENIA   •   MOJE_FOLDERY_MP3   •   raporty',
+    'ALO Music — konfiguracja biblioteki': 'ALO Music — library setup',
+    'Utwórz bezpieczną bibliotekę muzyczną': 'Create a safe music library',
+    'Wybierz lokalizację i nazwę folderu': 'Choose a location and folder name',
+    'Dodaj przynajmniej jeden folder z muzyką.': 'Add at least one music folder.',
+    'Wybierz lokalizację folderu docelowego.': 'Choose the output folder location.',
+    'Podaj nazwę folderu biblioteki.': 'Enter a library folder name.',
+    'Nazwa folderu zawiera niedozwolone znaki.': 'The folder name contains invalid characters.',
+    'Nie można utworzyć biblioteki': 'Cannot create library',
+    'Nowa biblioteka': 'New library', 'np. House 2000': 'e.g. House 2000',
+    'Utwór gotowy do użycia / eksportu.': 'Track ready to use or export.',
+    'Wybierz…': 'Choose…', 'Okładka': 'Cover art', 'Propozycje (0)': 'Suggestions (0)',
+    'Rozpoznaj online': 'Identify online', 'Rozpoznawanie…': 'Identifying…',
+    'Poprzedni plik': 'Previous file', 'Plik ': 'File ',
+    'Metadane utworu': 'Track metadata', 'Status pliku': 'File status',
+    'Informacje o rozpoznaniu': 'Identification details',
+    'Rozpoznane pola': 'Identified fields', 'Dodaj komentarz…': 'Add a comment…',
+    'Analiza audio': 'Audio analysis', 'ANALIZA AUDIO': 'AUDIO ANALYSIS',
+    'Blokada rozpoznawania online': 'Online identification lock',
+    'Dane chronione przed ponownym rozpoznaniem online': 'Data protected from online identification',
+    'Rozpoznawanie online odblokowane': 'Online identification unlocked',
+    'Status: DO SPRAWDZENIA': 'Status: NEEDS REVIEW',
+    'Uruchom rozpoznawanie online tylko dla tego utworu.': 'Identify this track online only.',
+    'Zapisz i zamknij': 'Save and close', 'ŹRÓDŁO': 'SOURCE',
+    'Rozmiar obrazu: ': 'Image size: ', 'Cofnij 10 sekund': 'Back 10 seconds',
+    'Nieznany wykonawca': 'Unknown artist', 'Odtwarzacz jest gotowy': 'Player ready',
+    'Status DO SPRAWDZENIA': 'Status NEEDS REVIEW',
+    'Podejrzane BPM': 'Suspicious BPM', 'Sprzeczne dane online': 'Conflicting online data',
+    'Nieprawidłowa długość audio': 'Invalid audio duration',
+    'Plik niedostępny': 'File unavailable', 'Pusty plik': 'Empty file',
+    'Błąd odtwarzania: ': 'Playback error: ',
+    'ROZPOZNAWANIE WYMAGA UWAGI': 'IDENTIFICATION NEEDS ATTENTION',
+    'ROZPOZNAWANIE JEDNEGO UTWORU': 'IDENTIFYING ONE TRACK',
+    'ROZPOZNAWANIE ANULOWANE': 'IDENTIFICATION CANCELLED',
+    'ANULOWANIE ROZPOZNAWANIA': 'CANCELLING IDENTIFICATION',
+    'ANULOWANIE SKANOWANIA': 'CANCELLING SCAN',
+    'FOLDER MP3 GOTOWY': 'MP3 FOLDER READY',
+    'NOWE PLIKI': 'NEW FILES', 'SKANOWANIE ANULOWANE': 'SCAN CANCELLED',
+    'Anulowanie rozpoznawania…': 'Cancelling identification…',
+    'Anulowanie skanowania…': 'Cancelling scan…',
+    'Rozpoznawanie online tylko: ': 'Online identification only: ',
+    'Rozpoznawanie zablokowane': 'Identification locked',
+    'Najpierw zapisz albo anuluj zmiany w tym utworze, a potem uruchom rozpoznawanie online.': 'Save or discard this track’s changes before identifying it online.',
+    'Kopiowanie, zapis metadanych i techniczna kontrola kopii…': 'Copying files, writing metadata and verifying copies…',
+    'Tworzenie plików i techniczna kontrola kopii…': 'Creating and verifying files…',
+    'Odczyt tagów, BPM, jakości i fingerprintów…': 'Reading tags, BPM, quality and fingerprints…',
+    'Rozpoznawanie online — może potrwać, ponieważ bazy mają limity zapytań…': 'Identifying online — this may take time due to provider rate limits…',
+    'Dodaj do Moje foldery MP3': 'Add to My MP3 folders',
+    'MOJE FOLDERY MP3': 'MY MP3 FOLDERS',
+    'Utwórz pliki wynikowe': 'Create output files',
+    'ROZPOZNANE ONLINE': 'IDENTIFIED ONLINE', 'PODEJRZANE DANE': 'SUSPICIOUS DATA',
+    'ROZMIAR BIBLIOTEKI': 'LIBRARY SIZE', 'WOLNE MIEJSCE': 'FREE SPACE',
+    'Wymaga uwagi': 'Needs attention', 'Statystyki biblioteki': 'Library statistics',
+    'Ostatnie skanowanie: brak danych': 'Last scan: no data',
+    'Ostatnie skanowanie:': 'Last scan:', 'Ładowanie biblioteki…': 'Loading library…',
+    'Skanowanie: odczyt tagów, BPM, jakości i fingerprintów…': 'Scanning: reading tags, BPM, quality and fingerprints…',
+    'DO SPRAWDZENIA — ważne': 'NEEDS REVIEW — important',
+    'Moje pliki MP3': 'My MP3 files',
+    'Długość zgodna': 'Matching duration', 'długość zgodna': 'matching duration',
+    'Rozpoznawanie online nadal trwa. Poczekaj na zakończenie operacji.': 'Online identification is still running. Wait for it to finish.',
+    'ROZPOZNAWANIE ONLINE': 'ONLINE IDENTIFICATION',
+    'ANALIZA DŹWIĘKU': 'AUDIO ANALYSIS',
+    'Zapisano metadane': 'Metadata saved',
+    'Sprawdź utwory oznaczone jako DO SPRAWDZENIA.': 'Review tracks marked NEEDS REVIEW.',
+    'W tej sesji nie ma już plików oznaczonych DO SPRAWDZENIA.': 'No tracks need review in this session.',
+    'Nie można oznaczyć jako GOTOWE — uzupełnij wymagane pola: ': 'Cannot mark as READY — complete the required fields: ',
+    'WERYFIKACJA W BIBLIOTECE': 'REVIEW IN LIBRARY',
+    'BŁĄD': 'ERROR', 'Brak': 'Missing',
+    'Odtwarzanie': 'Playing', 'Pauza': 'Paused', 'Gotowy': 'Ready',
+    'BRAK': 'NONE',
+    'Zablokowany przed ponownym rozpoznaniem online': 'Locked against online identification',
+    'Powiększona okładka': 'Enlarged cover art',
+    'Kliknij okładkę, aby powiększyć': 'Click cover art to enlarge',
+    'Otwórz w Discogs': 'Open in Discogs', 'Otwórz link': 'Open link',
+    'Pola wymagające uwagi: ': 'Fields needing attention: ',
+    'Brak ważnych danych: ': 'Missing essential data: ',
+    'tytuł / wersja': 'title / version', 'wykonawca': 'artist', 'rok': 'year', 'gatunek': 'genre',
+    '✓ Dane główne kompletne — nie musisz niczego uzupełniać.': '✓ Main metadata complete — nothing to add.',
+    'Gotowe: ': 'Ready: ',
+    'Niska pewność rozpoznania': 'Low identification confidence',
+    'Zmiana pola title': 'Title changed', 'Zmiana pola artist': 'Artist changed',
+    'Zmiana pola year': 'Year changed', 'Zmiana pola genre': 'Genre changed',
+    'Edycja metadanych': 'Metadata edited', 'Edycja metadanych w Duplikatach': 'Metadata edited in Duplicates',
+    'Oznaczenie jako GOTOWE': 'Marked as READY', 'Odznaczenie jako GOTOWE': 'Unmarked as READY',
+    'Zatwierdzenie jako GOTOWE': 'Approved as READY',
+    'Zapisano metadane i ustawiono ZACHOWAJ: ': 'Metadata saved and marked KEEP: ',
+    'Analiza tylko wskazanego folderu…': 'Analyzing the selected folder only…',
+    'Odczyt tagów, BPM, jakości i fingerprintów…': 'Reading tags, BPM, quality and fingerprints…',
+    'SKANOWANIE ZAKOŃCZONE': 'SCAN COMPLETE',
+    'TWORZENIE MOJEGO FOLDERU MP3': 'CREATING MY MP3 FOLDER',
+    'TWORZENIE PLIKÓW': 'CREATING FILES',
+    'BŁĄD OPERACJI': 'OPERATION ERROR',
+    'ROZPOZNAWANIE ZAKOŃCZONE': 'IDENTIFICATION COMPLETE',
+    'Bieżące zapytanie zostanie dokończone; kolejne nie będą wysyłane.': 'The current request will finish; no more requests will be sent.',
+    'Zatrzymanie nastąpi bezpiecznie po zakończeniu bieżącego pliku…': 'The scan will stop after the current file finishes…',
+    'Brak pozycji DO SPRAWDZENIA.': 'No tracks need review.',
+    'Błąd rozpoznawania online': 'Online identification error',
+    'spróbuj ponownie lub sprawdź połączenie/klucze': 'try again or check your connection and API keys',
+    'Folder źródłowy i biblioteka nie mogą zawierać się wzajemnie.': 'A source folder and the library cannot be inside one another.',
+    'Podaj nazwę folderu.': 'Enter a folder name.',
+    'Nieobsługiwany format kopii ALO.': 'Unsupported ALO backup format.',
+    'Kopia nie zawiera bazy biblioteki.': 'The backup does not contain a library database.',
+    'Kopia nie przeszła weryfikacji SHA-256/rozmiaru przed zapisaniem tagów.': 'The copy failed SHA-256 or size verification before writing tags.',
+    'fpcalc nie zwrócił fingerprintu Chromaprint.': 'fpcalc returned no Chromaprint fingerprint.',
+    'fpcalc zwrócił nieprawidłową długość nagrania.': 'fpcalc returned an invalid recording duration.',
+    'FFmpeg nie wygenerował fingerprintu Chromaprint.': 'FFmpeg could not generate a Chromaprint fingerprint.',
+    'Wybrany plik nie należy do tej grupy duplikatów.': 'The selected file does not belong to this duplicate group.',
+    'np. D:\\Muzyka': 'e.g. D:\\Music',
+    'LOKALIZACJA': 'LOCATION', 'DOPASOWANIE': 'MATCH',
+    'WYKONAWCA': 'ARTIST', 'ROK': 'YEAR', 'GATUNEK': 'GENRE',
+    'KOMENTARZ': 'COMMENT', 'EDYTUJ': 'EDIT',
+    'Zapisano': 'Saved', 'Klucze zapisane': 'API keys saved',
+    'Ustawienia zapisane': 'Settings saved',
+    'Wersja, remix, rok, gatunek i informacje o wydaniu.': 'Version, remix, year, genre and release details.',
+    'Rok': 'Year', 'Tytuł': 'Title', 'Wykonawca': 'Artist', 'Gatunek': 'Genre',
+    'wykonawca zgodny': 'artist matches', 'wykonawca podobny': 'artist is similar',
+    'dokładny tytuł/wersja': 'exact title/version', 'tytuł/wersja podobna': 'similar title/version',
+    'długość zbliżona': 'similar duration', 'długość różna': 'different duration',
+    'album zgodny': 'album matches', 'album podobny': 'similar album', 'rok zgodny': 'year matches',
+    'wersja potwierdzona MusicBrainz': 'version confirmed by MusicBrainz',
+    'wersja zbliżona do MusicBrainz': 'similar version in MusicBrainz',
+    'Nie znaleziono pewnego dopasowania online': 'No confident online match found',
+    '⚠ Duża różnica względem danych sprzed online — sprawdź tożsamość utworu': '⚠ Large difference from previous data — verify the track identity',
+    'Nagranie wygląda na fragment audycji / plik z prefiksem czasu': 'Recording appears to be an excerpt or a file with a time prefix',
+    'Długość pliku istotnie różni się od znalezionego wydania': 'File duration differs significantly from the matched release',
+    'Ręcznie zatwierdzone przez użytkownika': 'Manually approved by the user',
+    'Zachowane ręcznie jako osobna wersja z grupy duplikatów': 'Manually kept as a separate version from a duplicate group',
+    'Przywrócono dane sprzed rozpoznania online — sprawdź i zatwierdź': 'Data from before online identification restored — review and approve',
+    'Możliwa inna wersja / potencjalny duplikat — sprawdź w zakładce Duplikaty': 'Possible different version or duplicate — check Duplicates',
+    'Brak informacji o kodeku': 'Missing codec information',
+    'Niekompletne podstawowe tagi': 'Incomplete essential tags',
+    'dane zapisane w pliku': 'data stored in the file',
+    'wydanie, wersja/remix, rok i gatunek': 'release, version/remix, year and genre',
+    'katalog Apple / iTunes bez klucza API': 'Apple/iTunes catalog without an API key',
+    'NAZWA': 'FILENAME', 'ANALIZA': 'ANALYSIS', '≋ ANALIZA': '≋ ANALYSIS',
+    'Nazwa pliku': 'Filename', 'Przywrócone': 'Restored',
+    'Zastosuj dostępne dane ze źródła: ': 'Apply available data from source: ',
+    'Błąd odtwarzania:': 'Playback error:',
+    'Uzupełnij dane z MusicBrainz i Apple/iTunes oraz opcjonalnie AcoustID i Discogs': 'Complete metadata with MusicBrainz and Apple/iTunes, and optionally AcoustID and Discogs',
+    'Ostatni skan:': 'Last scan:', 'Pliki:': 'Files:',
+    'Znajdź:': 'Find:', 'Zamień na:': 'Replace with:',
+    'Tytuł / wersja:': 'Title / version:',
 })

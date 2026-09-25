@@ -14,6 +14,7 @@ from audio_library_organizer.domain.settings import AppSettings, LibraryPaths
 from audio_library_organizer.ui.assets import asset_path
 from audio_library_organizer.ui.icons import alo_icon
 from audio_library_organizer.ui.state import build_library_root
+from audio_library_organizer.ui.i18n import ui_text
 
 
 class LanguageSelectionDialog(QDialog):
@@ -129,19 +130,19 @@ class FirstRunDialog(QDialog):
         parent = self.dest_parent.text().strip()
         name = self.dest_name.text().strip()
         if not parent or not name:
-            self.preview_path.setText('Wybierz lokalizację i nazwę folderu')
+            self.preview_path.setText(ui_text(self, 'Wybierz lokalizację i nazwę folderu'))
             return
         self.preview_path.setText(str(Path(parent) / name))
 
     def _add_source(self):
-        folder = QFileDialog.getExistingDirectory(self, 'Wybierz folder z muzyką')
+        folder = QFileDialog.getExistingDirectory(self, ui_text(self, 'Wybierz folder z muzyką'))
         if folder and not self.sources.findItems(folder, Qt.MatchFlag.MatchExactly): self.sources.addItem(folder)
 
     def _remove_source(self):
         for item in self.sources.selectedItems(): self.sources.takeItem(self.sources.row(item))
 
     def _choose_destination(self):
-        folder = QFileDialog.getExistingDirectory(self, 'Wybierz miejsce dla nowej biblioteki')
+        folder = QFileDialog.getExistingDirectory(self, ui_text(self, 'Wybierz miejsce dla nowej biblioteki'))
         if folder: self.dest_parent.setText(folder)
 
     def _accept_settings(self):
@@ -156,5 +157,5 @@ class FirstRunDialog(QDialog):
             library = LibraryPaths(build_library_root(parent, self.dest_name.text()))
             settings = AppSettings(sources, library); library.ensure_created(); self.settings_result = settings
         except Exception as exc:
-            QMessageBox.warning(self, 'Nie można utworzyć biblioteki', str(exc)); return
+            QMessageBox.warning(self, ui_text(self, 'Nie można utworzyć biblioteki'), ui_text(self, str(exc))); return
         self.accept()

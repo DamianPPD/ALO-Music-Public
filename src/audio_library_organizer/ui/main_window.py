@@ -173,12 +173,12 @@ class DashboardPage(QWidget):
         self.dashboard_title.setText(name or 'Biblioteka ALO Music')
 
     def set_last_scan_summary(self, text: str):
-        self.last_scan_label.setText(text)
+        self.last_scan_label.setText(ui_text(self, text))
         self.last_scan_label.setVisible(bool(text.strip()))
 
     def set_summary(self, summary: dict[str, int]):
         total = summary.get('total', 0); ready = summary.get('ready', 0); review = summary.get('review', 0); duplicate = summary.get('duplicate', 0)
-        self.session_count.setText(f'{total} dostępnych plików')
+        self.session_count.setText(ui_text(self, f'{total} dostępnych plików'))
         for key, card in self.cards.items():
             card.set_value(summary.get(key, 0))
         if total == 0:
@@ -189,12 +189,12 @@ class DashboardPage(QWidget):
             text = f'{ready} utworów jest gotowych. Możesz filtrować Bibliotekę albo tworzyć własne foldery MP3.'
         else:
             text = 'Uruchom rozpoznawanie online lub sprawdź dane w Bibliotece.'
-        self.next_label.setText(text)
+        self.next_label.setText(ui_text(self, text))
 
     def set_health(self, health: dict[str, object]):
         available = int(health.get('available', 0)); missing = int(health.get('missing', 0))
         organized = int(round(float(health.get('organized_percent', 0))))
-        self.organized.setText(f'{organized}% uporządkowana')
+        self.organized.setText(ui_text(self, f'{organized}% uporządkowana'))
         self.health_values['available'].setText(str(available))
         self.health_values['missing'].setText(str(missing))
         self.health_values['missing_covers'].setText(str(int(health.get('missing_covers', 0))))
@@ -217,7 +217,7 @@ class DashboardPage(QWidget):
         except OSError:
             free_label.setText('—')
             free_label.setStyleSheet('font-size:12pt;font-weight:750;')
-        self.missing_text.setText(f'Biblioteka wymaga odświeżenia — {missing} plików nie jest już dostępnych.')
+        self.missing_text.setText(ui_text(self, f'Biblioteka wymaga odświeżenia — {missing} plików nie jest już dostępnych.'))
         if missing == 0:
             self._missing_dismissed = False
         self.missing_banner.setVisible(missing > 0 and not self._missing_dismissed)
@@ -957,7 +957,7 @@ class MainWindow(QMainWindow):
         self.manage_libraries_nav.setText(tr('library.manage', self.preferences.language))
         destination = profile.library_root
         tip = 'Manage libraries' if self.preferences.language == 'en' else 'Zarządzaj bibliotekami'
-        self.manage_libraries_nav.setToolTip(f'{profile.name}\n{destination}\n{tip}')
+        self.manage_libraries_nav.setToolTip(f'{self._t(profile.name)}\n{destination}\n{tip}')
 
     def _apply_preferences(self, prefs: AppPreferences):
         self.preferences = AppPreferences(
@@ -977,6 +977,23 @@ class MainWindow(QMainWindow):
             self._refresh_workflow_button_texts()
         self._update_library_nav_action()
         apply_static_language(self.settings_page, self.preferences.language)
+        for page in (self.dashboard, self.library, self.duplicates, self.collections):
+            apply_static_language(page, self.preferences.language)
+        if hasattr(self.dashboard, 'refresh_language'):
+            self.dashboard.refresh_language()
+        self.help.set_language(self.preferences.language)
+        self.player.refresh_language()
+        if hasattr(self, '_last_ui_summary'):
+            self.dashboard.set_summary(self._last_ui_summary)
+            self.dashboard.set_health(self._last_ui_health)
+        self.library.refresh(preserve_order=True)
+        self.duplicates.set_tracks(self.library._tracks)
+        if hasattr(self, '_operation_source'):
+            kind, title, detail = self._operation_source
+            status_source = getattr(self, '_operation_status_source', None)
+            self._set_operation_state(kind, title, detail)
+            if status_source is not None:
+                self._show_operation(status_source)
 
     def _open_library_manager(self):
         dialog = LibraryManagerDialog(self.library_registry, self)
@@ -1015,7 +1032,7 @@ class MainWindow(QMainWindow):
                     if new_root == source_root or source_root in new_root.parents or new_root in source_root.parents:
                         raise ValueError(self._t('Wybrana lokalizacja koliduje ze źródłem skanowania ALO.'))
         except ValueError as exc:
-            QMessageBox.warning(self, self._t('Nieprawidłowy folder'), str(exc))
+            QMessageBox.warning(self, self._t('Nieprawidłowy folder'), self._t(str(exc)))
             return
 
         confirmation = QMessageBox.question(
@@ -1039,7 +1056,7 @@ class MainWindow(QMainWindow):
             candidate_repository.initialize()
             candidate_availability = candidate_repository.sync_availability()
         except (OSError, ValueError, sqlite3.Error) as exc:
-            QMessageBox.warning(self, self._t('Nie można użyć lokalizacji biblioteki'), str(exc))
+            QMessageBox.warning(self, self._t('Nie można użyć lokalizacji biblioteki'), self._t(str(exc)))
             return
 
         self.main_settings = updated
@@ -1054,7 +1071,7 @@ class MainWindow(QMainWindow):
                 repository=candidate_repository,
                 availability=candidate_availability,
             )
-        self._show_operation(self._t('Zmieniono lokalizację biblioteki głównej.'))
+        self._show_operation('Zmieniono lokalizację biblioteki głównej.')
 
     def _library_registry_changed(self):
         self.library_registry.save(self.qt_settings)
@@ -1133,7 +1150,7 @@ class MainWindow(QMainWindow):
         if profile is None:
             return
         self._rebind_active_profile(profile)
-        self._show_operation(self._t(f'Biblioteka „{profile.name}” została wyzerowana. Możesz dodać nowe pliki do skanowania.'))
+        self._show_operation(f'Biblioteka „{profile.name}” została wyzerowana. Możesz dodać nowe pliki do skanowania.')
 
     def _rebind_active_profile(self, profile, *, repository=None, availability=None):
         self.app_settings = self.library_registry.settings_for(profile)
@@ -1149,8 +1166,7 @@ class MainWindow(QMainWindow):
         self.collections.set_library(self._collections_library_for_active())
         self._update_library_nav_action()
         self.refresh_data()
-        active_text = 'Active library' if self.preferences.language == 'en' else 'Aktywna biblioteka'
-        self._show_operation(f'{active_text}: {profile.name}')
+        self._show_operation(f'Aktywna biblioteka: {profile.name}')
 
     def _export_playlist(self, paths):
         paths = [Path(p) for p in (paths or []) if Path(p).is_file()]
@@ -1159,7 +1175,7 @@ class MainWindow(QMainWindow):
             return
         base = self._collections_library_for_active().custom_folders
         default = base / 'playlista.m3u8'
-        filename, _ = QFileDialog.getSaveFileName(self, self._t('Zapisz playlistę M3U8'), str(default), 'Playlista M3U8 (*.m3u8)')
+        filename, _ = QFileDialog.getSaveFileName(self, self._t('Zapisz playlistę M3U8'), str(default), self._t('Playlista M3U8 (*.m3u8)'))
         if not filename:
             return
         target = Path(filename)
@@ -1168,7 +1184,7 @@ class MainWindow(QMainWindow):
         try:
             result = write_m3u8(target, paths, relative=True)
         except OSError as exc:
-            QMessageBox.critical(self, self._t('Nie można zapisać playlisty'), str(exc)); return
+            QMessageBox.critical(self, self._t('Nie można zapisać playlisty'), self._t(str(exc))); return
         self._show_operation(f'Utworzono playlistę: {result.name}')
         QMessageBox.information(self, self._t('Playlista gotowa'), self._t(f'Zapisano {len(paths)} utworów:\n{result}'))
 
@@ -1186,7 +1202,7 @@ class MainWindow(QMainWindow):
 
     def _create_backup(self):
         default = self.main_settings.library.reports / f'ALO_backup_{datetime.now():%Y%m%d_%H%M%S}.alo-backup.zip'
-        filename, _ = QFileDialog.getSaveFileName(self, self._t('Utwórz kopię bezpieczeństwa ALO'), str(default), 'Kopia ALO (*.zip)')
+        filename, _ = QFileDialog.getSaveFileName(self, self._t('Utwórz kopię bezpieczeństwa ALO'), str(default), self._t('Kopia ALO (*.zip)'))
         if not filename:
             return
         try:
@@ -1199,21 +1215,21 @@ class MainWindow(QMainWindow):
                 settings_payload=self._backup_settings_payload(), profile_databases=profile_databases,
             )
         except OSError as exc:
-            QMessageBox.critical(self, self._t('Błąd kopii bezpieczeństwa'), str(exc)); return
+            QMessageBox.critical(self, self._t('Błąd kopii bezpieczeństwa'), self._t(str(exc))); return
         QMessageBox.information(self, self._t('Kopia utworzona'), self._t(f'Zapisano kopię ALO bez plików muzycznych:\n{target}'))
 
     def _restore_backup(self):
-        filename, _ = QFileDialog.getOpenFileName(self, self._t('Wybierz kopię bezpieczeństwa ALO'), str(self.main_settings.library.reports), 'Kopia ALO (*.zip)')
+        filename, _ = QFileDialog.getOpenFileName(self, self._t('Wybierz kopię bezpieczeństwa ALO'), str(self.main_settings.library.reports), self._t('Kopia ALO (*.zip)'))
         if not filename:
             return
         path = Path(filename)
         try:
             info = inspect_alo_backup(path)
         except Exception as exc:
-            QMessageBox.critical(self, self._t('Nieprawidłowa kopia'), str(exc)); return
+            QMessageBox.critical(self, self._t('Nieprawidłowa kopia'), self._t(str(exc))); return
         answer = QMessageBox.question(
-            self, 'Przywróć bazę ALO',
-            'Przywrócenie zastąpi bazę Biblioteki głównej danymi z kopii. Pliki muzyczne nie zostaną zmienione. Kontynuować?',
+            self, self._t('Przywróć bazę ALO'),
+            self._t('Przywrócenie zastąpi bazę Biblioteki głównej danymi z kopii. Pliki muzyczne nie zostaną zmienione. Kontynuować?'),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -1222,7 +1238,7 @@ class MainWindow(QMainWindow):
         try:
             restore_database_from_backup(path, self.main_settings.library.database)
         except Exception as exc:
-            QMessageBox.critical(self, self._t('Nie można przywrócić kopii'), str(exc)); return
+            QMessageBox.critical(self, self._t('Nie można przywrócić kopii'), self._t(str(exc))); return
         settings = info.get('settings') if isinstance(info, dict) else None
         if isinstance(settings, dict):
             language = str(settings.get('language') or self.preferences.language)
@@ -1246,6 +1262,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, self._t('Kopia przywrócona'), self._t('Przywrócono bazę Biblioteki głównej, dostępne bazy profili i ustawienia z kopii. Pliki muzyczne pozostały bez zmian.'))
 
     def _set_operation_state(self, kind: str, title: str, detail: str = ''):
+        self._operation_source = (kind, title, detail)
         icons = {
             'idle': ('info', '#8fa1b3'), 'scan': ('scan', '#5ca3ff'),
             'online': ('recognize', '#b987ff'), 'review': ('edit', '#ffb84d'),
@@ -1257,6 +1274,7 @@ class MainWindow(QMainWindow):
         self.operation_icon.setPixmap(alo_icon(icon_name, icon_color, 20).pixmap(20, 20))
         self.operation_title.setText(self._t(title))
         if detail:
+            self._operation_status_source = detail
             self.operation_status.setText(self._t(detail))
         self.operation_frame.setProperty('operationKind', kind)
         self.operation_frame.style().unpolish(self.operation_frame)
@@ -1296,7 +1314,7 @@ class MainWindow(QMainWindow):
             updated_profile = self.library_registry.add_source_dir(profile.profile_id, source)
             updated = self.library_registry.settings_for(updated_profile)
         except ValueError as exc:
-            QMessageBox.warning(self, self._t('Nieprawidłowy folder'), str(exc)); return
+            QMessageBox.warning(self, self._t('Nieprawidłowy folder'), self._t(str(exc))); return
         self.app_settings = updated
         self.service.settings = updated
         self.library_registry.save(self.qt_settings)
@@ -1408,7 +1426,7 @@ class MainWindow(QMainWindow):
         try:
             plan = build_collection_plan(self._collections_library_for_active(), name.strip(), available)
         except ValueError as exc:
-            QMessageBox.warning(self, self._t('Nie można utworzyć folderu'), str(exc)); return
+            QMessageBox.warning(self, self._t('Nie można utworzyć folderu'), self._t(str(exc))); return
         if self._thread is not None:
             return
         self._set_operation_state('export', 'TWORZENIE MOJEGO FOLDERU MP3', f'Kopiowanie {len(plan.items)} zaznaczonych utworów…')
@@ -1668,6 +1686,7 @@ class MainWindow(QMainWindow):
                 self.repository.upsert_track(track)
         summary = build_operation_summary(tracks)
         health = build_library_health(all_tracks)
+        self._last_ui_summary, self._last_ui_health = summary, health
         self.dashboard.set_summary(summary); self.dashboard.set_health(health)
         self.library.set_tracks(tracks); self.duplicates.set_tracks(tracks); self.collections.refresh()
         for page in (self.dashboard, self.library, self.duplicates, self.collections):
@@ -1682,6 +1701,7 @@ class MainWindow(QMainWindow):
         self.nav_buttons[2].style().unpolish(self.nav_buttons[2]); self.nav_buttons[2].style().polish(self.nav_buttons[2])
 
     def _show_operation(self, text: str):
+        self._operation_status_source = text
         self.operation_status.setText(self._t(text))
 
     def _refresh_workflow_button_texts(self):
@@ -1835,15 +1855,22 @@ class MainWindow(QMainWindow):
         if export_needs_library_review(summary):
             box = QMessageBox(self)
             box.setIcon(QMessageBox.Icon.Warning)
-            box.setWindowTitle('Najpierw sprawdź Bibliotekę')
-            box.setText(
-                f"Masz jeszcze {summary['review']} plików oznaczonych DO SPRAWDZENIA.\n\n"
-                'Najlepiej najpierw sprawdzić ich metadane, okładki i wersje w zakładce Biblioteka. '
-                'Techniczna kontrola kopii nie zastępuje tej weryfikacji.'
-            )
-            review_button = box.addButton('Przejdź do Biblioteki', QMessageBox.ButtonRole.AcceptRole)
-            continue_button = box.addButton('Utwórz mimo to', QMessageBox.ButtonRole.DestructiveRole)
-            box.addButton('Anuluj', QMessageBox.ButtonRole.RejectRole)
+            box.setWindowTitle(self._t('Najpierw sprawdź Bibliotekę'))
+            if self.preferences.language == 'en':
+                box.setText(
+                    f"{summary['review']} files still need review.\n\n"
+                    'Check their metadata, cover art and versions in Library first. '
+                    'Technical copy verification does not replace that review.'
+                )
+            else:
+                box.setText(
+                    f"Masz jeszcze {summary['review']} plików oznaczonych DO SPRAWDZENIA.\n\n"
+                    'Najlepiej najpierw sprawdzić ich metadane, okładki i wersje w zakładce Biblioteka. '
+                    'Techniczna kontrola kopii nie zastępuje tej weryfikacji.'
+                )
+            review_button = box.addButton(self._t('Przejdź do Biblioteki'), QMessageBox.ButtonRole.AcceptRole)
+            continue_button = box.addButton(self._t('Utwórz mimo to'), QMessageBox.ButtonRole.DestructiveRole)
+            box.addButton(self._t('Anuluj'), QMessageBox.ButtonRole.RejectRole)
             box.exec()
             if box.clickedButton() is review_button:
                 self._open_review()
@@ -1870,36 +1897,56 @@ class MainWindow(QMainWindow):
         stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         tracks = self.repository.list_tracks(available_only=True)
         export_csv(tracks, self.app_settings.library.reports / f'eksport_{stamp}.csv')
-        session_report = export_session_html(tracks, self.app_settings.library.reports / f'raport_sesji_{stamp}.html')
+        session_report = export_session_html(tracks, self.app_settings.library.reports / f'raport_sesji_{stamp}.html', language=self.preferences.language)
         verification_report = export_verification_csv(result, self.app_settings.library.reports / f'weryfikacja_kopii_{stamp}.csv')
         verified = len(result.verified)
         total = verified + len(result.errors) + len(result.verification_errors)
         pending_review = build_operation_summary(tracks).get('review', 0)
         if result.errors or result.verification_errors:
-            text = (
-                f'Stworzono i sprawdzono technicznie: {verified}/{max(total, len(result.copied))}\n'
-                f'Błędy kopiowania: {len(result.errors)}\n'
-                f'Błędy kontroli: {len(result.verification_errors)}\n\n'
-                f'Raport kontroli: {verification_report}\n'
-                f'Raport sesji: {session_report}'
-            )
-            box = QMessageBox(QMessageBox.Icon.Warning, 'Tworzenie plików wymaga uwagi', text, parent=self)
-        else:
-            text = (
-                f'Skopiowano i sprawdzono technicznie: {verified}/{verified}\n'
-                'Kopia przed zmianą tagów przeszła kontrolę SHA-256, a plik końcowy istnieje w folderze docelowym.\n\n'
-            )
-            if pending_review:
-                text += (
-                    f'Pozostało {pending_review} plików DO SPRAWDZENIA. '
-                    'Przejdź do Biblioteki, aby zweryfikować ich metadane i okładki.\n\n'
+            if self.preferences.language == 'en':
+                text = (
+                    f'Created and verified: {verified}/{max(total, len(result.copied))}\n'
+                    f'Copy errors: {len(result.errors)}\n'
+                    f'Verification errors: {len(result.verification_errors)}\n\n'
+                    f'Verification report: {verification_report}\n'
+                    f'Session report: {session_report}'
                 )
             else:
-                text += 'W tej sesji nie ma już plików oznaczonych DO SPRAWDZENIA.\n\n'
-            text += f'Raport kontroli: {verification_report}\nRaport sesji: {session_report}'
-            box = QMessageBox(QMessageBox.Icon.Information, 'Pliki utworzone i sprawdzone', text, parent=self)
-        library_button = box.addButton('Przejdź do Biblioteki', QMessageBox.ButtonRole.ActionRole)
-        open_button = box.addButton('Otwórz folder biblioteki', QMessageBox.ButtonRole.ActionRole)
+                text = (
+                    f'Stworzono i sprawdzono technicznie: {verified}/{max(total, len(result.copied))}\n'
+                    f'Błędy kopiowania: {len(result.errors)}\n'
+                    f'Błędy kontroli: {len(result.verification_errors)}\n\n'
+                    f'Raport kontroli: {verification_report}\n'
+                    f'Raport sesji: {session_report}'
+                )
+            box = QMessageBox(QMessageBox.Icon.Warning, self._t('Tworzenie plików wymaga uwagi'), text, parent=self)
+        else:
+            if self.preferences.language == 'en':
+                text = (
+                    f'Copied and verified: {verified}/{verified}\n'
+                    'The original copy passed SHA-256 verification before tag changes, and the final file is in the output folder.\n\n'
+                )
+                if pending_review:
+                    text += f'{pending_review} files still need review. Check their metadata and cover art in Library.\n\n'
+                else:
+                    text += 'No files need review in this session.\n\n'
+                text += f'Verification report: {verification_report}\nSession report: {session_report}'
+            else:
+                text = (
+                    f'Skopiowano i sprawdzono technicznie: {verified}/{verified}\n'
+                    'Kopia przed zmianą tagów przeszła kontrolę SHA-256, a plik końcowy istnieje w folderze docelowym.\n\n'
+                )
+                if pending_review:
+                    text += (
+                        f'Pozostało {pending_review} plików DO SPRAWDZENIA. '
+                        'Przejdź do Biblioteki, aby zweryfikować ich metadane i okładki.\n\n'
+                    )
+                else:
+                    text += 'W tej sesji nie ma już plików oznaczonych DO SPRAWDZENIA.\n\n'
+                text += f'Raport kontroli: {verification_report}\nRaport sesji: {session_report}'
+            box = QMessageBox(QMessageBox.Icon.Information, self._t('Pliki utworzone i sprawdzone'), text, parent=self)
+        library_button = box.addButton(self._t('Przejdź do Biblioteki'), QMessageBox.ButtonRole.ActionRole)
+        open_button = box.addButton(self._t('Otwórz folder biblioteki'), QMessageBox.ButtonRole.ActionRole)
         box.addButton(QMessageBox.StandardButton.Ok)
         box.exec()
         if box.clickedButton() is library_button:

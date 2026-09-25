@@ -68,10 +68,9 @@ def test_start_dashboard_has_compact_library_statistics_without_unwanted_metrics
 def test_start_dashboard_shows_attention_only_when_there_is_something_to_fix():
     source = _dashboard_source()
     assert 'self.attention_frame.setVisible(bool(parts))' in source
-    assert "parts.append(f'{review} do sprawdzenia')" in source
-    assert "parts.append(f'{duplicate} grup duplikatów')" in source
-    assert "parts.append(f'{missing_covers} bez okładki')" in source
-    assert "parts.append(f'{missing} brakujących plików')" in source
+    for phrase in ('{review} do sprawdzenia', '{duplicate} grup duplikatów',
+                   '{missing_covers} bez okładki', '{missing} brakujących plików'):
+        assert f"parts.append(ui_text(self, f'{phrase}'))" in source
 
 
 def test_last_scan_is_compact_and_persisted_per_library():
@@ -101,7 +100,7 @@ def test_main_installs_dashboard_and_wires_quick_views_only():
 def test_startup_loader_shows_version_and_ready_track_count():
     assert 'from audio_library_organizer import __version__' in MAIN
     assert "version = QLabel(f'ALO Music v{__version__}')" in MAIN
-    assert "status = QLabel('Ładowanie biblioteki…')" in MAIN
+    assert "status = QLabel(translate_static_text('Ładowanie biblioteki…', language))" in MAIN
     assert 'loader.status_label = status' in MAIN
     assert "setText(f'Gotowe: {total} utworów')" in MAIN
     assert 'QTimer.singleShot(450, startup_loader.close)' in MAIN

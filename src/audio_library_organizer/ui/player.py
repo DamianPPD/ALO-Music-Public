@@ -16,7 +16,7 @@ from audio_library_organizer.metadata.artwork import extract_embedded_cover
 from audio_library_organizer.ui.widgets import ClickableCoverLabel, ElidedLabel, show_cover_preview
 from audio_library_organizer.ui.assets import asset_path
 from audio_library_organizer.ui.icons import alo_icon, editor_icon
-from audio_library_organizer.ui.i18n import ui_text
+from audio_library_organizer.ui.i18n import ui_text, localized_no_cover_name
 from audio_library_organizer.ui.playback_sync import PendingPlaybackPosition
 from audio_library_organizer.ui.waveform import WaveformSlider, WaveformJob, read_waveform
 
@@ -54,6 +54,7 @@ class PlayerBar(QWidget):
         self.player.setAudioOutput(self.audio)
         self.current_path: Path | None = None
         self.current_track: TrackRecord | None = None
+        self._playback_error_text = ''
         self._cover_pixmap = QPixmap()
         self._cover_note = ''
         self._pending_seek = PendingPlaybackPosition(end_margin_ms=250)
@@ -269,6 +270,7 @@ class PlayerBar(QWidget):
             self.output_device.setToolTip(device.description())
 
     def load_track(self, track: TrackRecord, *, position_ms: int = 0, autoplay: bool = True, source_label: str = 'Biblioteka'):
+        self._playback_error_text = ''
         same_track = False
         if self.current_path is not None:
             try:
@@ -278,7 +280,7 @@ class PlayerBar(QWidget):
         self.current_track = track
         self.current_source_label = source_label or '—'
         artist, title, meta = track_display_lines(track)
-        self.artist.setText(artist)
+        self.artist.setText(ui_text(self, artist))
         self.title.setText(title)
         self.title.setToolTip(title)
         self.meta.setText(meta or track.path.name)
@@ -298,7 +300,7 @@ class PlayerBar(QWidget):
         self.queued_source_label = source_label or 'Biblioteka'
         artist = track.artist or 'Nieznany wykonawca'
         title = track.title or track.path.stem
-        self.queue_label.setText(f"{ui_text(self, 'Następny:')} {artist} — {title}")
+        self.queue_label.setText(f"{ui_text(self, 'Następny:')} {ui_text(self, artist)} — {title}")
         self.queue_label.setToolTip(str(track.path))
         self.queue_label.setVisible(True)
 
@@ -318,6 +320,7 @@ class PlayerBar(QWidget):
         self._pending_seek_retry_scheduled = False
 
     def load(self, path: Path, *, position_ms: int = 0, autoplay: bool = True, keep_display: bool = False):
+        self._playback_error_text = ''
         self.current_path = Path(path)
         self._waveform_cancel.set()
         self._waveform_cancel = Event()
@@ -361,8 +364,8 @@ class PlayerBar(QWidget):
 
     def toggle(self):
         if self.current_path is None:
-            self.meta.setText('Najpierw wybierz utwór w Bibliotece lub Duplikatach.')
-            self.playback_status.setText('Brak wybranego utworu')
+            self.meta.setText(ui_text(self, 'Najpierw wybierz utwór w Bibliotece lub Duplikatach.'))
+            self.playback_status.setText(ui_text(self, 'Brak wybranego utworu'))
             return
         if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.player.pause()
@@ -458,14 +461,14 @@ class PlayerBar(QWidget):
             if embedded:
                 pix.loadFromData(embedded[0])
         if pix.isNull():
-            pix = QPixmap(str(asset_path('no_cover.png')))
+            pix = QPixmap(str(asset_path(localized_no_cover_name(self))))
             self._cover_note = 'Brak potwierdzonej okładki — grafika zastępcza ALO Music.'
         else:
             self._cover_note = ''
         self._cover_pixmap = pix
         if pix.isNull():
             self.cover.setPixmap(QPixmap())
-            self.cover.setText('BRAK')
+            self.cover.setText(ui_text(self, 'BRAK'))
         else:
             self.cover.setText('')
             self.cover.setPixmap(
@@ -479,9 +482,9 @@ class PlayerBar(QWidget):
     def _state(self, state):
         playing = state == QMediaPlayer.PlaybackState.PlayingState
         self.play.setIcon(alo_icon('pause' if playing else 'play', '#ffffff', 25))
-        self.playback_status.setText(
+        self.playback_status.setText(ui_text(self,
             'Odtwarzanie' if playing else ('Pauza' if self.current_path else 'Gotowy')
-        )
+        ))
 
     def _volume_changed(self, value: int):
         self.audio.setVolume(value / 100)
@@ -514,8 +517,27 @@ class PlayerBar(QWidget):
     def _error(self, _error, text: str):
         self._clear_pending_seek_state()
         if text:
-            self.meta.setText(f'Błąd odtwarzania: {text}')
-            self.playback_status.setText('Błąd odtwarzania')
+            self._playback_error_text = text
+            self.meta.setText(f'{ui_text(self, "Błąd odtwarzania:")} {text}')
+            self.playback_status.setText(ui_text(self, 'Błąd odtwarzania'))
+
+    def refresh_language(self) -> None:
+        if self.current_track is not None and self._cover_note == 'Brak potwierdzonej okładki — grafika zastępcza ALO Music.':
+            self._load_cover(self.current_track)
+        if self.current_track is not None:
+            artist, _, _ = track_display_lines(self.current_track)
+            self.artist.setText(ui_text(self, artist))
+        if self.current_path is not None:
+            self.source_label.setText(f"{ui_text(self, 'Źródło:')} {ui_text(self, self.current_source_label)}")
+        if self.queued_track is not None:
+            artist = ui_text(self, self.queued_track.artist or 'Nieznany wykonawca')
+            title = self.queued_track.title or self.queued_track.path.stem
+            self.queue_label.setText(f"{ui_text(self, 'Następny:')} {artist} — {title}")
+        if self._playback_error_text:
+            self.meta.setText(f'{ui_text(self, "Błąd odtwarzania:")} {self._playback_error_text}')
+            self.playback_status.setText(ui_text(self, 'Błąd odtwarzania'))
+        else:
+            self._state(self.player.playbackState())
 
     @staticmethod
     def _fmt(ms: int) -> str:

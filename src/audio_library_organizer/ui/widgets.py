@@ -116,8 +116,9 @@ class SelectableElidedLineEdit(QLineEdit):
 def show_cover_preview(parent, pixmap: QPixmap | None, *, title: str = 'Podgląd okładki', note: str = '') -> None:
     if pixmap is None or pixmap.isNull():
         return
+    from audio_library_organizer.ui.i18n import ui_text
     dialog = QDialog(parent)
-    dialog.setWindowTitle(title)
+    dialog.setWindowTitle(ui_text(parent, title))
     dialog.resize(820, 860)
     root = QVBoxLayout(dialog)
     root.setContentsMargins(16, 16, 16, 16)
@@ -128,18 +129,18 @@ def show_cover_preview(parent, pixmap: QPixmap | None, *, title: str = 'Podgląd
     image.setPixmap(pixmap.scaled(760, 760, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
     root.addWidget(image, 1)
 
-    size = QLabel(f'Rozmiar obrazu: {pixmap.width()} × {pixmap.height()} px')
+    size = QLabel(f'{ui_text(parent, "Rozmiar obrazu: ")}{pixmap.width()} × {pixmap.height()} px')
     size.setObjectName('MutedText')
     size.setAlignment(Qt.AlignmentFlag.AlignCenter)
     root.addWidget(size)
     if note:
-        info = QLabel(note)
+        info = QLabel(ui_text(parent, note))
         info.setWordWrap(True)
         info.setObjectName('MutedText')
         info.setAlignment(Qt.AlignmentFlag.AlignCenter)
         root.addWidget(info)
 
     row = QHBoxLayout(); row.addStretch()
-    close = QPushButton('Zamknij'); close.clicked.connect(dialog.accept); row.addWidget(close)
+    close = QPushButton(ui_text(parent, 'Zamknij')); close.clicked.connect(dialog.accept); row.addWidget(close)
     root.addLayout(row)
     dialog.exec()

@@ -24,13 +24,14 @@ def _smoke_test() -> int:
     return 0
 
 
-def _show_startup_loader(app):
+def _show_startup_loader(app, language: str = 'pl'):
     try:
         from PySide6.QtCore import Qt
         from PySide6.QtGui import QIcon, QPixmap
         from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar
         from audio_library_organizer import __version__
         from audio_library_organizer.ui.assets import asset_path
+        from audio_library_organizer.ui.i18n import translate_static_text
     except (ImportError, AttributeError):
         return None
 
@@ -70,7 +71,7 @@ def _show_startup_loader(app):
     version.setObjectName('MutedText')
     version.setStyleSheet('font-size:9pt;font-weight:600;')
     text_box.addWidget(version)
-    status = QLabel('Ładowanie biblioteki…')
+    status = QLabel(translate_static_text('Ładowanie biblioteki…', language))
     status.setObjectName('MutedText')
     text_box.addWidget(status)
     text_box.addStretch(1)
@@ -155,18 +156,21 @@ def main(argv: list[str] | None = None) -> int:
     if settings is None:
         dialog = FirstRunDialog()
         apply_static_language(dialog, prefs.language)
+        if prefs.language == 'en' and dialog.dest_name.text() == 'ALO Music - Biblioteka':
+            dialog.dest_name.setText('ALO Music - Library')
         if dialog.exec() != QDialog.DialogCode.Accepted or dialog.settings_result is None:
             return 0
         settings = dialog.settings_result
         save_app_settings(store, settings)
 
-    startup_loader = _show_startup_loader(app)
+    startup_loader = _show_startup_loader(app, prefs.language)
     try:
         window = MainWindow(settings, store)
         _wire_dashboard_actions(window)
         if hasattr(window, 'library'):
             from audio_library_organizer.ui.library_status_legend import install_library_status_legend
             install_library_status_legend(window.library)
+            apply_static_language(window.library, prefs.language)
         window.setMinimumSize(1180, 720)
         saved_geometry = store.value('main_window/geometry')
         if saved_geometry:

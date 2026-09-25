@@ -182,11 +182,11 @@ class LibraryManagerDialog(QDialog):
         if main is not None:
             is_main_active = active.profile_id == 'main'
             state = 'AKTYWNA' if is_main_active else 'Kliknij, aby zaznaczyć'
-            self.main_card.setText(f'{main.name}\n{main.library_root}\n{state}')
+            self.main_card.setText(f'{ui_text(self, main.name)}\n{main.library_root}\n{ui_text(self, state)}')
             self.main_card.setProperty('activeLibrary', is_main_active)
             self.main_card.setChecked(self._selected_profile_id == 'main')
             self.main_card.style().unpolish(self.main_card); self.main_card.style().polish(self.main_card)
-            self.main_activate_button.setText('Aktywna' if is_main_active else 'Ustaw jako aktywną')
+            self.main_activate_button.setText(ui_text(self, 'Aktywna' if is_main_active else 'Ustaw jako aktywną'))
             self.main_activate_button.setIcon(alo_icon('status' if is_main_active else 'library', '#73dda0' if is_main_active else '#b9c8d1', 16))
             self.main_activate_button.setEnabled(not is_main_active)
 
@@ -199,7 +199,7 @@ class LibraryManagerDialog(QDialog):
                 continue
             is_active = active.profile_id == profile.profile_id
             state = 'AKTYWNA' if is_active else 'Kliknij, aby zaznaczyć'
-            item = QListWidgetItem(f'{profile.name}\n{profile.library_root}\n{state}')
+            item = QListWidgetItem(f'{profile.name}\n{profile.library_root}\n{ui_text(self, state)}')
             item.setData(Qt.ItemDataRole.UserRole, profile.profile_id)
             item.setData(Qt.ItemDataRole.UserRole + 1, is_active)
             item.setData(Qt.ItemDataRole.UserRole + 2, 'ActiveLibraryRow' if is_active else 'LibraryRow')
@@ -218,13 +218,13 @@ class LibraryManagerDialog(QDialog):
 
         self.scan_history_list.clear()
         history = self.registry.scan_history(active.profile_id)
-        self.history_heading.setText(f'Skanowane źródła ({len(history)})')
+        self.history_heading.setText(ui_text(self, f'Skanowane źródła ({len(history)})'))
         if not history:
-            self.scan_history_list.addItem('Brak zapisanej historii skanowania.')
+            self.scan_history_list.addItem(ui_text(self, 'Brak zapisanej historii skanowania.'))
         else:
             for entry in history:
                 when = self._format_history_time(entry.scanned_at)
-                self.scan_history_list.addItem(f'{entry.source_dir}\nOstatni skan: {when}   •   Pliki: {entry.file_count}')
+                self.scan_history_list.addItem(f'{entry.source_dir}\n{ui_text(self, "Ostatni skan:")} {when}   •   {ui_text(self, "Pliki:")} {entry.file_count}')
         self.clear_history_button.setEnabled(bool(history))
 
     def _select_main_library(self, checked: bool = True):
@@ -259,7 +259,7 @@ class LibraryManagerDialog(QDialog):
         has_selection = profile is not None
         is_active = bool(profile and profile.profile_id == self.registry.active.profile_id)
         self.activate_library_button.setEnabled(has_selection and not is_active)
-        self.activate_library_button.setText('Aktywna' if is_active else 'Ustaw jako aktywną')
+        self.activate_library_button.setText(ui_text(self, 'Aktywna' if is_active else 'Ustaw jako aktywną'))
         self.activate_library_button.setIcon(alo_icon('status' if is_active else 'library', '#73dda0' if is_active else '#b9c8d1', 16))
         self.library_actions_button.setEnabled(has_selection)
 
@@ -286,7 +286,7 @@ class LibraryManagerDialog(QDialog):
         try:
             profile = self.registry.add_library(name, (), library_root=library_root)
         except ValueError as exc:
-            QMessageBox.warning(self, ui_text(self, 'Nie można dodać biblioteki'), str(exc)); return
+            QMessageBox.warning(self, ui_text(self, 'Nie można dodać biblioteki'), ui_text(self, str(exc))); return
         self._selected_profile_id = profile.profile_id
         self.registry_changed.emit()
         self.refresh()
@@ -301,7 +301,7 @@ class LibraryManagerDialog(QDialog):
         try:
             self.registry.rename_library(profile.profile_id, name)
         except (KeyError, ValueError) as exc:
-            QMessageBox.warning(self, ui_text(self, 'Nie można zmienić nazwy'), str(exc)); return
+            QMessageBox.warning(self, ui_text(self, 'Nie można zmienić nazwy'), ui_text(self, str(exc))); return
         self.registry_changed.emit(); self.refresh()
 
     def _open_selected_library(self):
