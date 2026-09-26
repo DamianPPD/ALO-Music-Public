@@ -62,7 +62,9 @@ def test_no_key_no_results_and_invalid_response(tmp_path):
         AudioIdentification(AcoustIDClient('')).lookup(track)
     identify = AudioIdentification(AcoustIDClient('key', Session({'status': 'ok', 'results': []})), fingerprinter=lambda _: FingerprintResult('FP', 230))
     assert identify.lookup(track) == []
-    for data in ({'status': 'error', 'error': {'message': 'bad key'}}, {'results': 'bad'}, ['bad']):
+    for data in ({'status': 'error', 'error': {'message': 'bad key'}}, {'results': 'bad'}, ['bad'],
+                 {'status': 'ok', 'results': [{'score': 'nan', 'recordings': [{'id': 'mb1'}]}]},
+                 {'status': 'ok', 'results': [{'score': 'inf', 'recordings': [{'id': 'mb1'}]}]}):
         with pytest.raises(ValueError):
             AcoustIDClient('key', Session(data)).lookup('FP', 230)
 

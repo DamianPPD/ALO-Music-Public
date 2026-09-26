@@ -2333,6 +2333,37 @@ QLabel#SafeResetNotice {
     border-radius:8px; padding:9px 11px; font-weight:620;
 }
 '''
+APP_STYLE += r'''
+/* Audio Identification shares the online action dimensions and interaction states. */
+QPushButton#SingleTrackAudioButton {
+    min-height:36px; max-height:36px; padding:0 13px; border-radius:7px;
+    background:#0b4b55; border:1px solid #25bed0; color:#edfdff; font-weight:760;
+}
+QPushButton#SingleTrackAudioButton:hover { background:#0e6571; border-color:#62deeb; }
+QPushButton#SingleTrackAudioButton:pressed, QPushButton#SingleTrackOnlineButton:pressed {
+    background:#093943; border-color:#199bae;
+}
+QPushButton#SingleTrackAudioButton:disabled, QPushButton#SingleTrackOnlineButton:disabled {
+    background:#0c2229; border-color:#36505b; color:#91a5ae;
+}
+QFrame#AudioRecognitionPanel {
+    background:#0b141b; border:1px solid #29414d; border-radius:9px;
+}
+QLabel#AudioRecognitionPhase { color:#88dfe1; font-weight:730; }
+QListWidget#AudioRecognitionCandidates {
+    background:#0d1b23; border:1px solid #31515f; border-radius:6px;
+    padding:2px; color:#deedf1;
+}
+QListWidget#AudioRecognitionCandidates::item { padding:4px 6px; }
+QListWidget#AudioRecognitionCandidates::item:selected { background:#125662; color:#f5ffff; }
+QLabel#AudioRecognitionDetail { color:#a9c2cb; font-size:8.2pt; }
+QPushButton#AudioRecognitionConfirmButton {
+    background:#0b4b55; border:1px solid #25bed0; border-radius:7px;
+    color:#edfdff; padding:5px 10px; font-weight:690;
+}
+QPushButton#AudioRecognitionConfirmButton:hover { background:#0e6571; border-color:#62deeb; }
+QPushButton#AudioRecognitionConfirmButton:disabled { background:#0c2229; border-color:#36505b; color:#91a5ae; }
+'''
 DARK_STYLE = APP_STYLE
 
 # Light-theme counterparts for controls introduced in the final editor pass.

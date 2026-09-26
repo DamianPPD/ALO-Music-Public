@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
     QMenu,
     QMessageBox,
     QPushButton,
@@ -34,6 +35,8 @@ from PySide6.QtWidgets import (
 
 from audio_library_organizer import __version__
 from audio_library_organizer.domain.models import TrackRecord
+from audio_library_organizer.domain.candidates import AcoustIDHit
+from audio_library_organizer.jobs.audio_identification import SOURCE as AUDIO_SOURCE, approve_audio_source
 from audio_library_organizer.metadata.artwork import extract_embedded_cover
 from audio_library_organizer.metadata.naming import DEFAULT_FILENAME_TEMPLATE, normalize_title_case, propose_filename
 from audio_library_organizer.metadata.normalization import normalize_music_text, is_valid_year_text
@@ -291,6 +294,8 @@ class MetadataEditorDialog(QDialog):
     save_requested = Signal(object)
     ready_requested = Signal(object, bool)
     online_scan_requested = Signal(object)
+    audio_scan_requested = Signal(object)
+    audio_source_confirmed = Signal(object, object)
     navigation_requested = Signal(int)
 
     CORE_FIELDS = ('artist', 'title', 'year', 'genre', 'bpm')
@@ -301,6 +306,7 @@ class MetadataEditorDialog(QDialog):
         'Apple / iTunes': 'APPLE',
         'Ręcznie': 'RĘCZNIE',
         'Analiza audio': '≋ ANALIZA',
+        AUDIO_SOURCE: 'ROZPOZNANIE AUDIO',
         'Nazwa pliku': 'NAZWA',
         'Przywrócone': 'TAG',
     }
@@ -312,15 +318,17 @@ class MetadataEditorDialog(QDialog):
         'Apple / iTunes': 'apple',
         'Ręcznie': 'manual',
         'Analiza audio': 'analysis',
+        AUDIO_SOURCE: 'audio_recognition',
         'Nazwa pliku': 'filename',
     }
-    SOURCE_ORDER = ('Tag', 'Discogs', 'MusicBrainz', 'Apple / iTunes', 'Analiza audio', 'Nazwa pliku')
+    SOURCE_ORDER = ('Tag', 'Discogs', 'MusicBrainz', 'Apple / iTunes', AUDIO_SOURCE, 'Analiza audio', 'Nazwa pliku')
     SOURCE_COLORS = {
         'Tag': '#5ca3ff',
         'Discogs': '#43d17d',
         'MusicBrainz': '#b36cff',
         'Apple / iTunes': '#ff6670',
         'Analiza audio': '#ef5b64',
+        AUDIO_SOURCE: '#20c5c3',
         'Nazwa pliku': '#9aa6b2',
         'Ręcznie': '#ffb84d',
     }
@@ -350,6 +358,8 @@ class MetadataEditorDialog(QDialog):
         self._suspend_tracking = True
         self._filename_manual = bool(track.filename_override)
         self._online_scan_busy = False
+        self._audio_scan_busy = False
+        self._audio_hits: list[AcoustIDHit] = []
         self._undo_stack: list[dict[str, object]] = []
         self._field_widgets: dict[str, QLineEdit | QTextEdit] = {}
         self._source_buttons: dict[str, QToolButton] = {}
@@ -495,6 +505,13 @@ class MetadataEditorDialog(QDialog):
         self.scan_online_button.setToolTip('Uruchom rozpoznawanie online tylko dla tego utworu.')
         self.scan_online_button.clicked.connect(lambda: self.online_scan_requested.emit(self))
         pol.addWidget(self.scan_online_button)
+        self.audio_scan_button = QPushButton('Rozpoznaj po audio')
+        self.audio_scan_button.setObjectName('SingleTrackAudioButton')
+        self.audio_scan_button.setProperty('actionRole', 'primary')
+        _set_editor_button_icon(self.audio_scan_button, 'audio_recognize', '#e9fdff', 19)
+        self.audio_scan_button.setToolTip('Rozpoznaj ten utwór po lokalnie wygenerowanym fingerprintcie audio.')
+        self.audio_scan_button.clicked.connect(lambda: self.audio_scan_requested.emit(self))
+        pol.addWidget(self.audio_scan_button)
         self.restore_pre_online_button = QPushButton('Przywróć dane sprzed online')
         self.restore_pre_online_button.setObjectName('RestoreOnlineButton')
         self.restore_pre_online_button.setProperty('actionRole', 'secondary')
@@ -504,11 +521,36 @@ class MetadataEditorDialog(QDialog):
         pol.addWidget(self.restore_pre_online_button)
         self.online_lock.setProperty('actionRole', 'tool')
         pol.addWidget(self.online_lock)
-        for online_action in (self.scan_online_button, self.restore_pre_online_button, self.online_lock):
+        for online_action in (self.scan_online_button, self.audio_scan_button, self.restore_pre_online_button, self.online_lock):
             online_action.setFixedHeight(36)
         self._update_online_lock_button()
         content.addWidget(pre_online)
         self.set_online_scan_busy(False)
+
+        audio_panel = self.audio_panel = QFrame()
+        audio_panel.setObjectName('AudioRecognitionPanel')
+        ap = QVBoxLayout(audio_panel)
+        ap.setContentsMargins(10, 7, 10, 7)
+        ap.setSpacing(4)
+        self.audio_phase = QLabel('Oczekiwanie na rozpoznanie audio')
+        self.audio_phase.setObjectName('AudioRecognitionPhase')
+        ap.addWidget(self.audio_phase)
+        self.audio_candidates = QListWidget()
+        self.audio_candidates.setObjectName('AudioRecognitionCandidates')
+        self.audio_candidates.setMaximumHeight(108)
+        self.audio_candidates.currentRowChanged.connect(self._show_audio_candidate_detail)
+        ap.addWidget(self.audio_candidates)
+        self.audio_detail = QLabel('')
+        self.audio_detail.setObjectName('AudioRecognitionDetail')
+        self.audio_detail.setWordWrap(True)
+        ap.addWidget(self.audio_detail)
+        self.audio_confirm_button = QPushButton('Zatwierdź jako źródło audio')
+        self.audio_confirm_button.setObjectName('AudioRecognitionConfirmButton')
+        self.audio_confirm_button.setEnabled(False)
+        self.audio_confirm_button.clicked.connect(self._approve_audio_candidate)
+        ap.addWidget(self.audio_confirm_button, 0, Qt.AlignmentFlag.AlignRight)
+        audio_panel.hide()
+        content.addWidget(audio_panel)
 
         self.suspicious_warning = QLabel('Duża różnica względem danych sprzed online — sprawdź wykonawcę i tytuł przed zatwierdzeniem.')
         self.suspicious_warning.setObjectName('SuspiciousOnlineWarning')
@@ -638,6 +680,22 @@ class MetadataEditorDialog(QDialog):
             value = QLabel('—')
             value.setObjectName('RecognitionFieldValue')
             value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            line.addWidget(name)
+            line.addStretch(1)
+            line.addWidget(value)
+            ril.addLayout(line)
+            self.recognition_values[key] = value
+
+        for key, label in (('audio_status', 'Rozpoznanie audio'), ('audio_score', 'Dopasowanie'), ('audio_result', 'Wynik audio')):
+            line = QHBoxLayout()
+            line.setSpacing(8)
+            name = QLabel(label)
+            name.setObjectName('RecognitionFieldName')
+            value = QLabel('—')
+            value.setObjectName('AudioRecognitionValue')
+            value.setStyleSheet(f'color:{self.SOURCE_COLORS[AUDIO_SOURCE]};font-weight:700;')
+            value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            value.setWordWrap(True)
             line.addWidget(name)
             line.addStretch(1)
             line.addWidget(value)
@@ -812,6 +870,7 @@ class MetadataEditorDialog(QDialog):
             ('Apple / iTunes', 'Apple', 'katalog Apple / iTunes bez klucza API'),
             ('Ręcznie', 'RĘCZNIE', 'wartość wpisana ręcznie'),
             ('Analiza audio', 'ANALIZA', 'wartość wykryta z audio'),
+            (AUDIO_SOURCE, 'ROZPOZNANIE AUDIO', 'identyfikacja przez fingerprint i AcoustID'),
             ('Nazwa pliku', 'NAZWA', 'wartość odczytana z nazwy pliku'),
         )
         legend_colors = dict(self.SOURCE_COLORS)
@@ -819,8 +878,8 @@ class MetadataEditorDialog(QDialog):
         for source_key, source, description in legend_rows:
             action = QWidgetAction(legend_menu)
             option = SourceMenuOption(
-                source,
-                description,
+                ui_text(self, source),
+                ui_text(self, description),
                 legend_colors.get(source_key, '#8a96a8'),
                 legend_menu,
             )
@@ -1108,6 +1167,8 @@ class MetadataEditorDialog(QDialog):
         self.online_lock.style().polish(self.online_lock)
         if hasattr(self, 'scan_online_button'):
             self.scan_online_button.setEnabled(not locked and not self._online_scan_busy)
+        if hasattr(self, 'audio_scan_button'):
+            self.audio_scan_button.setEnabled(not locked and not self._audio_scan_busy)
 
     def set_online_scan_busy(self, busy: bool) -> None:
         self._online_scan_busy = bool(busy)
@@ -1118,6 +1179,77 @@ class MetadataEditorDialog(QDialog):
         self.scan_online_button.setEnabled(not busy and not self.online_lock.isChecked())
         self.previous_file_button.setEnabled(not busy and self.navigation_index > 0)
         self.next_file_button.setEnabled(not busy and self.navigation_index + 1 < self.navigation_total)
+
+    def start_audio_lookup(self) -> None:
+        self.audio_panel.show()
+        self._audio_hits.clear()
+        self.audio_candidates.clear()
+        self.audio_detail.clear()
+        self.audio_confirm_button.setEnabled(False)
+        self.audio_phase.setText(ui_text(self, 'Oczekiwanie na rozpoznanie audio'))
+        self.set_audio_scan_busy(True)
+
+    def set_audio_scan_busy(self, busy: bool) -> None:
+        self._audio_scan_busy = bool(busy)
+        self.audio_scan_button.setEnabled(not busy and not self.online_lock.isChecked())
+        self.audio_scan_button.setText(ui_text(self, 'Rozpoznawanie…' if busy else 'Rozpoznaj po audio'))
+        self.previous_file_button.setEnabled(not busy and self.navigation_index > 0)
+        self.next_file_button.setEnabled(not busy and self.navigation_index + 1 < self.navigation_total)
+
+    def set_audio_phase(self, phase: str) -> None:
+        messages = {'fingerprint': 'Generowanie fingerprintu…', 'lookup': 'Wyszukiwanie w AcoustID…'}
+        self.audio_phase.setText(ui_text(self, messages.get(phase, phase)))
+
+    def show_audio_error(self, message: str) -> None:
+        self.audio_panel.show()
+        self.audio_phase.setText(ui_text(self, 'Błąd rozpoznawania audio'))
+        self.audio_detail.setText(ui_text(self, message))
+        self.set_audio_scan_busy(False)
+
+    def show_audio_candidates(self, hits: list[AcoustIDHit]) -> None:
+        self.audio_panel.show()
+        self._audio_hits = list(hits[:5])
+        self.audio_candidates.clear()
+        for hit in self._audio_hits:
+            name = f'{hit.artist or "—"} – {hit.title or "—"}'
+            self.audio_candidates.addItem(f'{name}  ·  {round(hit.score * 100)}%')
+        self.audio_phase.setText(ui_text(self, 'Znaleziono kandydatów' if self._audio_hits else 'Brak wyników'))
+        self.audio_detail.setText('' if self._audio_hits else ui_text(self, 'AcoustID nie znalazł dopasowania dla tego nagrania.'))
+        self.set_audio_scan_busy(False)
+
+    def _show_audio_candidate_detail(self, index: int) -> None:
+        self.audio_confirm_button.setEnabled(0 <= index < len(self._audio_hits) and not self._audio_scan_busy)
+        if 0 <= index < len(self._audio_hits):
+            hit = self._audio_hits[index]
+            details = [f'{ui_text(self, "Album")}: {hit.album or "—"}',
+                       f'{ui_text(self, "Rok")}: {hit.year or "—"}',
+                       f'MusicBrainz: {hit.recording_id}',
+                       f'AcoustID: {hit.acoustid_id or "—"}',
+                       ui_text(self, 'Wynik jest propozycją, nie gwarancją poprawności.')]
+            self.audio_detail.setText('  ·  '.join(details))
+
+    def _approve_audio_candidate(self) -> None:
+        index = self.audio_candidates.currentRow()
+        if not 0 <= index < len(self._audio_hits):
+            return
+        previous = deepcopy(self.track)
+        approve_audio_source(self.track, self._audio_hits[index])
+        self._source_values = deepcopy(self.track.field_source_values)
+        for field_name in self._field_widgets:
+            self._rebuild_source_menu(field_name)
+        self._refresh_source_comparison()
+        self._refresh_recognition_info()
+        self.audio_phase.setText(ui_text(self, 'Źródło audio zatwierdzone'))
+        self.audio_source_confirmed.emit(self, previous)
+
+    def refresh_audio_language(self) -> None:
+        for field_name in self._field_widgets:
+            self._rebuild_source_menu(field_name)
+            self._refresh_source_badge(field_name)
+        self._refresh_source_comparison()
+        self._refresh_recognition_info()
+        if self.audio_candidates.currentRow() >= 0:
+            self._show_audio_candidate_detail(self.audio_candidates.currentRow())
 
     def apply_online_result(self, track: TrackRecord) -> None:
         """Refresh the open editor from the just-saved single-track online result."""
@@ -1380,6 +1512,13 @@ class MetadataEditorDialog(QDialog):
         self.recognition_values['fields'].setText(f'{present}/5')
         self.recognition_values['duration'].setText(duration)
         self.recognition_values['bitrate'].setText(bitrate)
+        approved = self.track.audio_recognition
+        self.recognition_values['audio_status'].setText(ui_text(self, 'Zatwierdzone') if approved else '—')
+        score = approved.get('score') if approved else None
+        self.recognition_values['audio_score'].setText(f'{round(float(score) * 100)}%' if score is not None else '—')
+        self.recognition_values['audio_result'].setText(
+            f'{approved.get("artist") or "—"} – {approved.get("title") or "—"}' if approved else '—'
+        )
         if self.track.confidence is None:
             percent = None
             kind = 'none'
@@ -1401,14 +1540,14 @@ class MetadataEditorDialog(QDialog):
         # Comparison stays compact: only sources that can populate a visible
         # comparison column are shown. Audio analysis (BPM only) remains in the
         # per-field badge/legend instead of creating an all-dash table row.
-        comparison_fields = ('title', 'artist', 'year', 'genre')
+        comparison_fields = ('title', 'artist', 'album', 'year', 'genre')
         available: set[str] = set()
         for field_name in comparison_fields:
             values = self._source_values.get(field_name, {})
             if isinstance(values, dict):
                 available.update(source for source, value in values.items() if value not in (None, ''))
         available.discard('Przywrócone')
-        preferred = ('Tag', 'Discogs', 'MusicBrainz', 'Apple / iTunes', 'Nazwa pliku', 'Ręcznie')
+        preferred = ('Tag', 'Discogs', 'MusicBrainz', 'Apple / iTunes', AUDIO_SOURCE, 'Nazwa pliku', 'Ręcznie')
         sources = [source for source in preferred if source in available]
         sources.extend(source for source in sorted(available) if source not in sources)
         return sources
@@ -1418,21 +1557,14 @@ class MetadataEditorDialog(QDialog):
             return
         sources = self._source_rows()
         self.source_table.setRowCount(len(sources))
-        colors = {
-            'Tag': '#5ca3ff',
-            'Discogs': '#43d17d',
-            'MusicBrainz': '#b36cff',
-            'Apple / iTunes': '#ff6670',
-            'Analiza audio': '#ef5b64',
-            'Nazwa pliku': '#9aa6b2',
-            'Ręcznie': '#ffb84d',
-        }
+        colors = self.SOURCE_COLORS
         display_names = {
             'Tag': 'TAG',
             'Discogs': 'Discogs',
             'MusicBrainz': 'MusicBrainz',
             'Apple / iTunes': 'Apple / iTunes',
             'Analiza audio': 'ANALIZA AUDIO',
+            AUDIO_SOURCE: 'ROZPOZNANIE AUDIO',
             'Nazwa pliku': 'NAZWA',
             'Ręcznie': 'RĘCZNIE',
         }
@@ -1464,7 +1596,12 @@ class MetadataEditorDialog(QDialog):
             self.source_table.setCellWidget(row, 0, source_cell)
             for column, field_name in ((1, 'title'), (2, 'artist'), (3, 'year'), (4, 'genre')):
                 value = self._source_values.get(field_name, {}).get(source)
-                self.source_table.setItem(row, column, QTableWidgetItem(self._display_source_value(field_name, value) if value not in (None, '') else '—'))
+                shown = self._display_source_value(field_name, value) if value not in (None, '') else '—'
+                if column == 1 and source == AUDIO_SOURCE:
+                    album = self._source_values.get('album', {}).get(source)
+                    if album:
+                        shown += f'  ·  {ui_text(self, "Album")}: {album}'
+                self.source_table.setItem(row, column, QTableWidgetItem(shown))
             use_button = QPushButton(ui_text(self, 'Użyj danych'))
             use_button.setObjectName('UseSourceDataButton')
             use_button.setFixedSize(82, 18)
@@ -1727,9 +1864,14 @@ class MetadataEditorDialog(QDialog):
         )
 
     def _run_close_guard(self, *, attention_when_clean: bool) -> bool:
-        if self._online_scan_busy:
+        if self._online_scan_busy or self._audio_scan_busy:
+            message = (
+                'Rozpoznawanie online nadal trwa. Poczekaj na zakończenie operacji.'
+                if self._online_scan_busy else
+                'Rozpoznawanie po audio nadal trwa. Poczekaj na zakończenie operacji.'
+            )
             guard = EditorCloseGuardDialog(
-                [('amber', 'Rozpoznawanie online nadal trwa. Poczekaj na zakończenie operacji.')],
+                [('amber', message)],
                 has_unsaved_changes=False,
                 allow_close=False,
                 parent=self,

@@ -2,6 +2,20 @@ from __future__ import annotations
 
 from PySide6.QtCore import QObject, Signal, Slot, Qt
 from threading import Event
+import subprocess
+import requests
+
+
+def _audio_error_text(exc: Exception) -> str:
+    if isinstance(exc, requests.Timeout):
+        return 'Przekroczono czas oczekiwania na AcoustID.'
+    if isinstance(exc, requests.ConnectionError):
+        return 'Brak połączenia z AcoustID. Sprawdź internet.'
+    if isinstance(exc, requests.HTTPError):
+        return 'AcoustID odrzucił zapytanie.'
+    if isinstance(exc, subprocess.SubprocessError):
+        return 'Nie udało się wygenerować fingerprintu audio.'
+    return str(exc).strip() if isinstance(exc, (ValueError, RuntimeError)) else 'Błąd rozpoznawania audio.'
 
 
 class ScanWorker(QObject):
@@ -37,6 +51,7 @@ class _GuiThreadRelay(QObject):
 
     finished = Signal(object)
     failed = Signal(str)
+    phase = Signal(str)
 
     @Slot(object)
     def forward_finished(self, result):
@@ -45,6 +60,49 @@ class _GuiThreadRelay(QObject):
     @Slot(str)
     def forward_failed(self, message: str):
         self.failed.emit(message)
+
+    @Slot(str)
+    def forward_phase(self, phase: str):
+        self.phase.emit(phase)
+
+
+class AudioIdentificationWorker(QObject):
+    """Run a single fingerprint lookup away from the GUI thread."""
+
+    _raw_finished = Signal(object)
+    _raw_failed = Signal(str)
+    _raw_phase = Signal(str)
+
+    def __init__(self, job, track):
+        super().__init__()
+        self.job = job
+        self.track = track
+        self._gui_relay = _GuiThreadRelay()
+        for signal, slot in (
+            (self._raw_finished, self._gui_relay.forward_finished),
+            (self._raw_failed, self._gui_relay.forward_failed),
+            (self._raw_phase, self._gui_relay.forward_phase),
+        ):
+            signal.connect(slot, Qt.ConnectionType.QueuedConnection)
+
+    @property
+    def finished(self):
+        return self._gui_relay.finished
+
+    @property
+    def failed(self):
+        return self._gui_relay.failed
+
+    @property
+    def phase(self):
+        return self._gui_relay.phase
+
+    @Slot()
+    def run(self):
+        try:
+            self._raw_finished.emit(self.job.lookup(self.track, progress=self._raw_phase.emit))
+        except Exception as exc:
+            self._raw_failed.emit(_audio_error_text(exc))
 
 
 class IdentificationWorker(QObject):

@@ -11,7 +11,7 @@ from audio_library_organizer.domain.models import TrackRecord
 _SNAPSHOT_FIELDS = (
     'artist', 'title', 'album', 'year', 'genre', 'bpm', 'comment', 'discogs_url',
     'manual_cover_path', 'has_cover', 'status', 'proposed_filename', 'filename_override',
-    'locked_fields', 'match_reasons', 'field_sources', 'field_source_values', 'cover_choice',
+    'locked_fields', 'match_reasons', 'field_sources', 'field_source_values', 'audio_recognition', 'cover_choice',
 )
 
 

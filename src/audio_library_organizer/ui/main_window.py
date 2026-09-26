@@ -30,6 +30,7 @@ from audio_library_organizer.domain.preferences import (
 from audio_library_organizer.jobs.exporter import ExportPlan
 from audio_library_organizer.jobs.library_service import LibraryService
 from audio_library_organizer.jobs.identifier import IdentificationJob
+from audio_library_organizer.jobs.audio_identification import AudioIdentification
 from audio_library_organizer.jobs.reporting import build_operation_summary, build_library_health, export_csv, export_session_html, export_verification_csv
 from audio_library_organizer.matching.resolver import IdentificationService
 from audio_library_organizer.providers.acoustid import AcoustIDClient
@@ -58,7 +59,7 @@ from audio_library_organizer.jobs.backup import create_alo_backup, inspect_alo_b
 from audio_library_organizer.jobs.reset import reset_alo_state
 from audio_library_organizer.ui.metadata_editor import MetadataEditorDialog
 from audio_library_organizer.ui.player import PlayerBar
-from audio_library_organizer.ui.workers import ScanWorker, IdentificationWorker, ExportWorker
+from audio_library_organizer.ui.workers import ScanWorker, IdentificationWorker, AudioIdentificationWorker, ExportWorker
 from audio_library_organizer.ui.assets import asset_path
 from audio_library_organizer.ui.icons import alo_icon
 from audio_library_organizer.ui.theme import style_for_theme
@@ -1500,7 +1501,14 @@ class MainWindow(QMainWindow):
                 dialog.online_scan_requested.connect(
                     lambda editor, target=current_track: self._start_single_track_identification(target, editor)
                 )
+                dialog.audio_scan_requested.connect(
+                    lambda editor, target=current_track: self._start_audio_identification(target, editor)
+                )
+                dialog.audio_source_confirmed.connect(
+                    lambda editor, previous, target=current_track: self._save_audio_source(target, previous)
+                )
                 apply_static_language(dialog, self.preferences.language)
+                dialog.refresh_audio_language()
                 self._active_metadata_editor = dialog
                 dialog.exec()
                 previous_geometry = dialog.geometry()
@@ -1575,6 +1583,36 @@ class MainWindow(QMainWindow):
     def _single_track_identification_failed(self, message: str, editor: MetadataEditorDialog):
         editor.set_online_scan_busy(False)
         self._job_failed(message)
+
+    def _start_audio_identification(self, track: TrackRecord, editor: MetadataEditorDialog) -> None:
+        if self._thread is not None:
+            editor.show_audio_error('Najpierw zakończ bieżącą operację.')
+            return
+        editor.start_audio_lookup()
+        cfg = ProviderSettings.from_store(self.qt_settings)
+        job = AudioIdentification(AcoustIDClient(cfg.acoustid_key))
+        thread = QThread(self)
+        worker = AudioIdentificationWorker(job, track)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.phase.connect(editor.set_audio_phase)
+        worker.finished.connect(editor.show_audio_candidates)
+        worker.failed.connect(editor.show_audio_error)
+        worker.finished.connect(thread.quit)
+        worker.failed.connect(thread.quit)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._thread_done)
+        self._thread = thread
+        self._worker = worker
+        self._set_busy(True, self._t('Rozpoznawanie po audio…'), kind='audio')
+        thread.start()
+
+    def _save_audio_source(self, track: TrackRecord, previous: TrackRecord) -> None:
+        self.change_history.record([previous], 'Zatwierdzenie źródła audio')
+        self.repository.upsert_track(track)
+        self.refresh_data()
+        self.library.select_track_by_path(track.path)
 
     def _save_metadata_from_editor(self, track, dialog, *, duplicate_context: bool = False):
         self.change_history.record([track], 'Edycja metadanych w Duplikatach' if duplicate_context else 'Edycja metadanych')

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from audio_library_organizer.domain.candidates import AcoustIDHit
 
 
@@ -20,6 +21,8 @@ def parse_acoustid_results(data: dict) -> list[AcoustIDHit]:
             score = float(result.get('score') or 0.0)
         except (TypeError, ValueError) as exc:
             raise ValueError('Nieprawidłowa odpowiedź AcoustID.') from exc
+        if not math.isfinite(score) or not 0 <= score <= 1:
+            raise ValueError('Nieprawidłowa odpowiedź AcoustID.')
         for recording in result.get('recordings') or []:
             if not isinstance(recording, dict):
                 raise ValueError('Nieprawidłowa odpowiedź AcoustID.')

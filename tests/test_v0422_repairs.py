@@ -300,6 +300,7 @@ def test_source_legend_colors_provider_text_not_whole_row(tmp_path: Path):
             'Apple': '#ff6670',
             'RĘCZNIE': '#ffb84d',
             'ANALIZA': '#ef5b64',
+            'ROZPOZNANIE AUDIO': '#20c5c3',
             'NAZWA': '#9aa6b2',
         }
     finally:
