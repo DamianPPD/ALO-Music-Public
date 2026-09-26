@@ -53,6 +53,7 @@ class TrackRecord:
     pre_online_metadata: dict[str, Any] = field(default_factory=dict)
     field_sources: dict[str, str] = field(default_factory=dict)
     field_source_values: dict[str, dict[str, Any]] = field(default_factory=dict)
+    audio_recognition: dict[str, Any] = field(default_factory=dict)
     is_available: bool = True
 
     @property

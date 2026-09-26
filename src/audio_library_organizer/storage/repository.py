@@ -39,6 +39,7 @@ class LibraryRepository:
             json.dumps(track.pre_online_metadata, ensure_ascii=False),
             json.dumps(track.field_sources, ensure_ascii=False),
             json.dumps(track.field_source_values, ensure_ascii=False),
+            json.dumps(track.audio_recognition, ensure_ascii=False),
             int(track.is_available),
         )
         with connect(self.database_path) as conn:
@@ -47,8 +48,8 @@ class LibraryRepository:
                     path,size_bytes,mtime_ns,duration_seconds,bitrate_kbps,sample_rate_hz,
                     channels,codec,artist,title,album,year,genre,bpm,bpm_raw,bpm_confidence,fingerprint,fingerprint_duration,comment,has_cover,
                     sha256,status,confidence,proposed_filename,filename_override,original_tags_json,
-                    discogs_release_id,discogs_url,musicbrainz_recording_id,musicbrainz_release_id,cover_art_url,manual_cover_path,cover_choice,match_reasons_json,locked_fields_json,pre_online_metadata_json,field_sources_json,field_source_values_json,is_available
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    discogs_release_id,discogs_url,musicbrainz_recording_id,musicbrainz_release_id,cover_art_url,manual_cover_path,cover_choice,match_reasons_json,locked_fields_json,pre_online_metadata_json,field_sources_json,field_source_values_json,audio_recognition_json,is_available
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(path) DO UPDATE SET
                     size_bytes=excluded.size_bytes, mtime_ns=excluded.mtime_ns,
                     duration_seconds=excluded.duration_seconds, bitrate_kbps=excluded.bitrate_kbps,
@@ -68,6 +69,7 @@ class LibraryRepository:
                     pre_online_metadata_json=excluded.pre_online_metadata_json,
                     field_sources_json=excluded.field_sources_json,
                     field_source_values_json=excluded.field_source_values_json,
+                    audio_recognition_json=excluded.audio_recognition_json,
                     is_available=excluded.is_available
             ''', values)
 
@@ -143,5 +145,6 @@ class LibraryRepository:
             pre_online_metadata=json.loads(row['pre_online_metadata_json'] or '{}'),
             field_sources=json.loads(row['field_sources_json'] or '{}'),
             field_source_values=json.loads(row['field_source_values_json'] or '{}'),
+            audio_recognition=json.loads(row['audio_recognition_json'] or '{}'),
             is_available=bool(row['is_available']),
         )

@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS tracks (
     pre_online_metadata_json TEXT NOT NULL DEFAULT '{}',
     field_sources_json TEXT NOT NULL DEFAULT '{}',
     field_source_values_json TEXT NOT NULL DEFAULT '{}',
+    audio_recognition_json TEXT NOT NULL DEFAULT '{}',
     is_available INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX IF NOT EXISTS idx_tracks_sha256 ON tracks(sha256);
@@ -79,6 +80,7 @@ def ensure_track_columns(conn: sqlite3.Connection) -> None:
         'pre_online_metadata_json': "TEXT NOT NULL DEFAULT '{}'",
         'field_sources_json': "TEXT NOT NULL DEFAULT '{}'",
         'field_source_values_json': "TEXT NOT NULL DEFAULT '{}'",
+        'audio_recognition_json': "TEXT NOT NULL DEFAULT '{}'",
         'is_available': 'INTEGER NOT NULL DEFAULT 1',
     }
     for name, sql_type in additions.items():

@@ -9,6 +9,9 @@ class AcoustIDHit:
     score: float
     title: str | None = None
     artist: str | None = None
+    album: str | None = None
+    year: str | None = None
+    acoustid_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
