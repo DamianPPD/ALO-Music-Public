@@ -78,6 +78,6 @@ HELP_TOPICS_EN = {
 <p>ALO then checks that the final file exists and has a nonzero size. This is technical copy verification, not manual metadata review. Before creating files, ALO reminds you to <b>Review in Library</b>. Afterward, you can see the results, open Library or its folder, and read the <code>weryfikacja_kopii_....csv</code> report.</p>
 <p>A file that fails verification is not counted as verified.</p>'''),
     'O programie': ('About ALO Music', '''
-<h2>ALO Music — Audio Library Organizer</h2><p>Version <b>0.4.23</b> · 2026. A local Windows music organizer with safe copying, track identification, metadata editing, duplicate comparison, version families, cover art and BPM analysis.</p>
+<h2>ALO Music — Audio Library Organizer</h2><p>Version <b>0.4.24</b> · 2026. A local Windows music organizer with safe copying, track identification, metadata editing, duplicate comparison, version families, cover art and BPM analysis.</p>
 <p>Each persistent library separates its output folder from the source folders used for scanning. Scan history is for reference; ALO does not automatically reopen an old source because it was scanned before.</p>'''),
 }

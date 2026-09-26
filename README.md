@@ -2,7 +2,7 @@
 
 **ALO Music** to desktopowa aplikacja dla Windows do bezpiecznego porządkowania dużych bibliotek muzycznych. Skanuje lokalne foldery, analizuje pliki audio i metadane, pomaga rozpoznawać utwory online, porównuje potencjalne duplikaty i tworzy uporządkowane pliki wynikowe — bez ingerowania w oryginały.
 
-**Wersja wyświetlana: 0.4.23** · Windows · interfejs PL / EN · kod źródłowy dostępny publicznie · projekt aktywnie rozwijany
+**Wersja wyświetlana: 0.4.24** · Windows · interfejs PL / EN · kod źródłowy dostępny publicznie · projekt aktywnie rozwijany
 
 > **Najważniejsza zasada ALO:** pliki źródłowe pozostają nietknięte. Program pracuje na indeksie biblioteki i tworzy osobne kopie wynikowe.
 

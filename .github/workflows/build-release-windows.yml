@@ -1,13 +1,12 @@
-name: Build Windows release 0.4.23
+name: Build Windows release 0.4.24
 
 on:
   workflow_dispatch:
     inputs:
       source_sha:
-        description: Exact public source commit for ALO Music 0.4.23
+        description: Exact public source commit for ALO Music 0.4.24
         required: true
         type: string
-        default: '7ae25935b99f639ab6eb214cbb48bb817fc6536d'
 
 permissions:
   contents: read
@@ -46,8 +45,8 @@ jobs:
             throw "Wrong source commit: $actual"
           }
           $versionFile = Get-Content 'src/audio_library_organizer/__init__.py' -Raw
-          if ($versionFile -notmatch "__version__\s*=\s*'0\.4\.23'") {
-            throw 'Source version is not 0.4.23.'
+          if ($versionFile -notmatch "__version__\s*=\s*'0\.4\.24'") {
+            throw 'Source version is not 0.4.24.'
           }
           python --version
           Write-Host "Building source commit $actual"
@@ -87,8 +86,10 @@ jobs:
           $bundleAssets = 'dist/ALO-Music/_internal/audio_library_organizer/assets'
           $iconDir = Join-Path $bundleAssets 'icons/a1'
           $infoIcon = Join-Path $iconDir 'info.svg'
+          $englishNoCover = Join-Path $bundleAssets 'no_cover_en.png'
           if (-not (Test-Path $iconDir -PathType Container)) { throw "Missing A1 icon directory: $iconDir" }
           if (-not (Test-Path $infoIcon -PathType Leaf)) { throw "Missing frozen UI fallback icon: $infoIcon" }
+          if (-not (Test-Path $englishNoCover -PathType Leaf)) { throw "Missing English NO COVER asset: $englishNoCover" }
 
           $sourceFiles = @(Get-ChildItem $sourceAssets -Recurse -File)
           $sourceIcons = @(Get-ChildItem (Join-Path $sourceAssets 'icons/a1') -Recurse -File)
@@ -110,9 +111,9 @@ jobs:
       - name: Verify release artifacts and SHA256
         shell: pwsh
         run: |
-          $releaseDir = 'release/v0.4.23'
-          $portable = 'ALO-Music-v0.4.23-Windows-Portable.zip'
-          $installer = 'ALO-Music-v0.4.23-Setup.exe'
+          $releaseDir = 'release/v0.4.24'
+          $portable = 'ALO-Music-v0.4.24-Windows-Portable.zip'
+          $installer = 'ALO-Music-v0.4.24-Setup.exe'
           $expected = @($portable, $installer, 'SHA256SUMS.txt')
           foreach ($name in $expected) {
             $path = Join-Path $releaseDir $name
@@ -167,9 +168,9 @@ jobs:
       - name: Upload final Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ALO-Music-v0.4.23-Windows-icons-fixed
+          name: ALO-Music-v0.4.24-Windows
           if-no-files-found: error
           path: |
-            release/v0.4.23/ALO-Music-v0.4.23-Windows-Portable.zip
-            release/v0.4.23/ALO-Music-v0.4.23-Setup.exe
-            release/v0.4.23/SHA256SUMS.txt
+            release/v0.4.24/ALO-Music-v0.4.24-Windows-Portable.zip
+            release/v0.4.24/ALO-Music-v0.4.24-Setup.exe
+            release/v0.4.24/SHA256SUMS.txt

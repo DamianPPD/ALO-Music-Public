@@ -116,7 +116,7 @@ HELP_TOPICS = {
 ''',
     'O programie': '''
 <h2>ALO Music — Audio Library Organizer</h2>
-<p>Wersja <b>0.4.23</b> · 2026. Lokalny organizator biblioteki muzycznej dla Windows z bezpiecznym kopiowaniem, rozpoznawaniem nagrań, edycją metadanych, tabelą duplikatów, rodzinami wersji, okładkami i BPM.</p>
+<p>Wersja <b>0.4.24</b> · 2026. Lokalny organizator biblioteki muzycznej dla Windows z bezpiecznym kopiowaniem, rozpoznawaniem nagrań, edycją metadanych, tabelą duplikatów, rodzinami wersji, okładkami i BPM.</p>
 <p>Biblioteki są trwałe i rozdzielają folder wynikowy od źródeł używanych do skanowania. Historia skanów jest informacyjna; ALO nie uruchamia automatycznie starego źródła tylko dlatego, że było wcześniej skanowane.</p>
 '''
 

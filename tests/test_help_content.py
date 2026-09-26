@@ -65,7 +65,7 @@ def test_help_matches_v045_duplicate_and_editor_workflow():
 def test_help_about_and_rescan_do_not_claim_old_source_autorestore_behavior():
     about = HELP_TOPICS['O programie']
     rescan = HELP_TOPICS['Ponowne skanowanie']
-    assert '0.4.23' in about
+    assert '0.4.24' in about
     assert 'źródła, lokalizacja biblioteki i wyniki skanowania są przywracane' not in about.casefold()
     assert 'zapamiętuje foldery źródłowe' not in rescan.casefold()
     assert 'histori' in rescan.casefold()

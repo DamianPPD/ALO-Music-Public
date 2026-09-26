@@ -69,6 +69,6 @@ def test_help_describes_decision_colors_without_separate_duplicate_status_column
 
 
 def test_version_is_0415_in_runtime_and_package_metadata():
-    assert "__version__ = '0.4.23'" in INIT
-    assert 'version = "0.4.23"' in PYPROJECT
-    assert 'v0.4.23' in START
+    assert "__version__ = '0.4.24'" in INIT
+    assert 'version = "0.4.24"' in PYPROJECT
+    assert 'v0.4.24' in START
