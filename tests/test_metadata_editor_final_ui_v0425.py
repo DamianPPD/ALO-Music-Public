@@ -135,13 +135,14 @@ def test_source_comparison_has_album_column_and_action_only_at_last_index(tmp_pa
         table = editor.source_table
         assert table.columnCount() == 7
         assert [table.horizontalHeaderItem(i).text() for i in range(7)] == [
-            'Źródło', 'Tytuł / wersja', 'Album / Release', 'Wykonawca', 'Rok', 'Gatunek', 'Akcja']
+            'Źródło', 'Wykonawca', 'Tytuł / wersja', 'Album / Release', 'Rok', 'Gatunek', 'Akcja']
         assert table.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         for row, source in enumerate(sources):
             assert table.item(row, 0).data(Qt.ItemDataRole.UserRole) == source
-            assert table.item(row, 1).text() == f'Title {row}'
-            assert 'Album:' not in table.item(row, 1).text()
-            assert table.item(row, 2).text() == f'Album {row}'
+            assert table.item(row, 1).text() == f'Artist {row}'
+            assert table.item(row, 2).text() == f'Title {row}'
+            assert 'Album:' not in table.item(row, 2).text()
+            assert table.item(row, 3).text() == f'Album {row}'
             assert table.cellWidget(row, 0) is None
             assert table.cellWidget(row, 6).findChild(QPushButton, 'UseSourceDataButton').text() == 'Użyj danych'
         table.cellWidget(1, 6).findChild(QPushButton, 'UseSourceDataButton').click()
@@ -149,7 +150,7 @@ def test_source_comparison_has_album_column_and_action_only_at_last_index(tmp_pa
         assert editor._current_sources['album'] == 'Discogs'
         apply_static_language(editor, 'en')
         editor.refresh_audio_language()
-        assert table.horizontalHeaderItem(2).text() == 'Album / Release'
+        assert table.horizontalHeaderItem(3).text() == 'Album / Release'
         assert table.horizontalHeaderItem(6).text() == 'Action'
     finally:
         _close(editor)

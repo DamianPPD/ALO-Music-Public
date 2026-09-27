@@ -2553,3 +2553,36 @@ QPushButton#AudioRecognitionShowCandidates:hover, QPushButton#AudioRecognitionRe
     background:#e2f3f6; border-color:#3d9aaa;
 }
 '''
+
+# One player skin is shared by the footer and the inline editor transport.
+VARIANT_D_STYLE = r'''
+QFrame#CompactPlayerBar { background:transparent; border:0; border-radius:0; }
+QFrame#VariantDPlayerSurface {
+    background:#0f151d; border:1px solid #344d55; border-radius:13px;
+}
+QWidget#VariantDIdentity { background:transparent; }
+QLabel#VariantDCover {
+    background:transparent; border:1px solid #49736c; border-radius:6px;
+}
+QPushButton#VariantDTitle {
+    background:transparent; border:0; color:#f1f9fc; padding:0;
+    text-align:left; font-size:10pt; font-weight:700;
+}
+QPushButton#VariantDTitle:hover { color:#ffffff; text-decoration:underline; }
+QLabel#VariantDArtist { background:transparent; color:#adc4cd; font-size:8.5pt; }
+QPushButton#VariantDPlayButton {
+    background:transparent; border:0; border-radius:25px; padding:0;
+}
+QPushButton#VariantDPlayButton:hover { background:rgba(38,213,197,0.12); }
+QPushButton#VariantDPlayButton[playing="true"] { background:rgba(38,213,197,0.09); }
+QPushButton#VariantDPlayButton:disabled { background:transparent; opacity:0.5; }
+QLabel#VariantDTime { background:transparent; color:#b8cbd1; font-size:8.5pt; }
+QPushButton#VariantDSpeaker { background:transparent; border:0; padding:0; }
+QPushButton#VariantDSpeaker:hover { background:rgba(38,213,197,0.12); }
+QSlider#VariantDVolume::groove:horizontal { height:5px; background:#34434a; border-radius:2px; }
+QSlider#VariantDVolume::handle:horizontal {
+    width:12px; margin:-4px 0; border-radius:6px; background:#35cdbb;
+}
+'''
+DARK_STYLE += VARIANT_D_STYLE
+LIGHT_STYLE += VARIANT_D_STYLE

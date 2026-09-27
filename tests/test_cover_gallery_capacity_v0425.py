@@ -109,8 +109,8 @@ def test_source_comparison_distributes_width_to_album_and_artist_without_moving_
         editor.show()
         app.processEvents()
         table = editor.source_table
-        assert table.columnWidth(1) < 400
-        assert table.columnWidth(2) >= 250
+        assert table.columnWidth(1) >= 300
+        assert 260 <= table.columnWidth(2) < 400
         assert table.columnWidth(3) >= 220
         assert table.columnWidth(4) <= 72
         assert table.columnWidth(6) <= 130
@@ -119,9 +119,9 @@ def test_source_comparison_distributes_width_to_album_and_artist_without_moving_
         assert not table.verticalScrollBar().isVisible()
         for row, source in enumerate(sources):
             assert table.item(row, 0).data(Qt.ItemDataRole.UserRole) == source
-            assert table.item(row, 1).text() == f'Title {row}'
-            assert table.item(row, 2).text() == f'Album {row}'
-            assert table.item(row, 3).text() == f'Artist {row}'
+            assert table.item(row, 1).text() == f'Artist {row}'
+            assert table.item(row, 2).text() == f'Title {row}'
+            assert table.item(row, 3).text() == f'Album {row}'
             assert table.cellWidget(row, 0) is None
             assert table.cellWidget(row, 6).findChild(QPushButton, 'UseSourceDataButton').text() == 'Użyj danych'
     finally:

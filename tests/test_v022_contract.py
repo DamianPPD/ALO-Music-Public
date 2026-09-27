@@ -162,11 +162,11 @@ def test_metadata_editor_marks_changed_fields_and_main_window_reselects_after_sa
 
 
 def test_player_uses_compact_flat_footer_layout():
-    assert "self.play.setFixedSize(58, 58)" in PLAYER
-    assert "alo_icon('repeat'" in PLAYER
-    assert "timeline = QHBoxLayout()" in PLAYER
-    assert 'QFrame#PlayerCard' in THEME
-    assert 'QPushButton#PlayerIconButton' in THEME
+    assert "self.play.setFixedSize(50, 50)" in PLAYER
+    assert "self.repeat.hide()" in PLAYER
+    assert "row.addWidget(self.seek, 3)" in PLAYER
+    assert 'QFrame#VariantDPlayerSurface' in THEME
+    assert 'QPushButton#VariantDPlayButton' in THEME
 
 
 def test_manual_completion_immediately_promotes_review_track_to_ready(tmp_path: Path):

@@ -150,14 +150,14 @@ def test_source_comparison_reserves_readable_columns_and_scrolls_when_narrow(tmp
         dialog.show()
         app.processEvents()
         table = dialog.source_table
-        assert table.columnWidth(0) >= 210
-        assert table.columnWidth(1) >= 250
+        assert 190 <= table.columnWidth(0) < 220
+        assert table.columnWidth(2) >= 250
         for row in range(table.rowCount()):
             source_item = table.item(row, 0)
             assert table.cellWidget(row, 0) is None
             assert table.columnWidth(0) >= table.fontMetrics().horizontalAdvance(source_item.text()) + 25
-            title = table.item(row, 1)
-            assert table.columnWidth(1) >= table.fontMetrics().horizontalAdvance(title.text()) + 16
+            title = table.item(row, 2)
+            assert table.columnWidth(2) >= table.fontMetrics().horizontalAdvance(title.text()) + 16
             action = table.cellWidget(row, 6)
             assert action.geometry().right() <= table.viewport().width()
             assert table.columnViewportPosition(6) >= table.columnViewportPosition(1) + table.columnWidth(1)

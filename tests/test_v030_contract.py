@@ -61,7 +61,7 @@ def test_editor_has_compact_shared_player_without_skip_buttons():
     assert 'CompactPlayerBar' in PLAYER
     assert 'compact_player' in EDITOR
     compact = PLAYER[PLAYER.index('class CompactPlayerBar'):]
-    assert 'SeekSlider' in compact
+    assert 'self.seek = self.surface.seek' in compact
     assert "'−10 s'" not in compact and "'+10 s'" not in compact
     assert 'self.player_bar.player' in compact
 

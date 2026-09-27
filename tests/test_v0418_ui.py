@@ -39,7 +39,7 @@ def test_navigation_and_players_do_not_depend_on_qt_standard_icons():
     assert "self.nav_icon_ids = ('home', 'library', 'duplicate', 'folder', 'help', 'settings')" in MAIN
     assert "(self.scan_btn, 'scan')" in MAIN
     assert "(self.identify_btn, 'search')" in MAIN
-    assert "alo_icon('play', '#ffffff'" in PLAYER
+    assert "alo_icon('pause' if playing else 'play', '#4ce5cf'" in PLAYER
 
 
 def test_metadata_editor_status_colors_and_source_action_are_visible(tmp_path: Path):

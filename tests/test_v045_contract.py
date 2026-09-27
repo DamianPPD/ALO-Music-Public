@@ -67,10 +67,10 @@ def test_library_details_surface_version_family_information():
 
 def test_main_player_transport_is_compact_and_visually_balanced():
     player = (ROOT / 'src/audio_library_organizer/ui/player.py').read_text(encoding='utf-8')
-    assert 'self.play.setFixedSize(58, 58)' in player
-    assert 'button.setFixedSize(44, 44)' in player
-    assert "alo_icon('repeat'" in player
-    assert 'QPushButton#PlayerIconButton' in THEME
+    assert 'self.play.setFixedSize(50, 50)' in player
+    assert 'self.repeat.hide()' in player
+    assert 'row.addWidget(self.seek, 3)' in player
+    assert 'QPushButton#VariantDPlayButton' in THEME
 
 
 def test_duplicate_recommendation_engine_is_not_part_of_user_workflow_anymore():

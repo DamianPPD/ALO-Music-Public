@@ -73,6 +73,26 @@ class MissingCompleteGraphic(QWidget):
         painter.drawLine(30, 35, 35, 39); painter.drawLine(35, 39, 46, 28)
 
 
+class SourceNameDelegate(QStyledItemDelegate):
+    """Paint the source name in its provider color even under Qt's item stylesheet."""
+
+    def paint(self, painter, option, index):
+        styled = QStyleOptionViewItem(option)
+        self.initStyleOption(styled, index)
+        label = styled.text
+        styled.text = ''
+        widget = styled.widget or self.parent()
+        widget.style().drawControl(QStyle.ControlElement.CE_ItemViewItem, styled, painter, widget)
+        foreground = index.data(Qt.ItemDataRole.ForegroundRole)
+        painter.save()
+        painter.setFont(styled.font)
+        painter.setPen(foreground.color() if foreground is not None else QColor('#cbd6e2'))
+        text_rect = styled.rect.adjusted(styled.decorationSize.width() + 8, 0, -3, 0)
+        painter.setClipRect(text_rect)
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, label)
+        painter.restore()
+
+
 class SourceComparisonTable(QTableWidget):
     """Keep source, title and action readable as the editor width changes."""
 
@@ -83,15 +103,17 @@ class SourceComparisonTable(QTableWidget):
 
     def resize_columns(self):
         header = self.horizontalHeader()
-        fixed = {0: 220, 4: 58, 5: 95, 6: 126}
+        fixed = {0: 208, 4: 58, 5: 95, 6: 126}
         for column, width in fixed.items():
             header.resizeSection(column, width)
         available = self.viewport().width() - sum(fixed.values())
-        title = max(280, round(available * 27 / 71))
-        album = max(152, round(available * 24 / 71))
-        artist = max(170, available - title - album)
-        album = max(152, album - max(0, title + album + artist - available))
-        for column, width in ((1, title), (2, album), (3, artist)):
+        artist = max(200, round(available * 29 / 71))
+        title = max(280, round(available * 23 / 71))
+        album = max(155, available - artist - title)
+        if artist + title + album > available:
+            artist = max(200, available - title - album)
+            album = max(155, available - artist - title)
+        for column, width in ((1, artist), (2, title), (3, album)):
             header.resizeSection(column, width)
 
     def resize_to_rows(self):
@@ -1100,7 +1122,7 @@ class MetadataEditorDialog(QDialog):
 
         self.source_table = SourceComparisonTable(0, 7)
         self.source_table.setObjectName('SourceComparisonTable')
-        self.source_table.setHorizontalHeaderLabels(('Źródło', 'Tytuł / wersja', 'Album / Release', 'Wykonawca', 'Rok', 'Gatunek', 'Akcja'))
+        self.source_table.setHorizontalHeaderLabels(('Źródło', 'Wykonawca', 'Tytuł / wersja', 'Album / Release', 'Rok', 'Gatunek', 'Akcja'))
         self.source_table.verticalHeader().setVisible(False)
         self.source_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.source_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -1108,6 +1130,7 @@ class MetadataEditorDialog(QDialog):
         self.source_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.source_table.setAlternatingRowColors(True)
         self.source_table.setIconSize(QSize(12, 12))
+        self.source_table.setItemDelegateForColumn(0, SourceNameDelegate(self.source_table))
         self.source_table.setWordWrap(False)
         self.source_table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.source_table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -1556,6 +1579,8 @@ class MetadataEditorDialog(QDialog):
             self._show_audio_empty(self._audio_empty_heading_key, self._audio_empty_message_key)
         self._refresh_cover_information()
         self._show_audio_candidate_detail(self.audio_candidates.currentRow())
+        if self.compact_player is not None:
+            self.compact_player.surface.set_muted(self.compact_player.player_bar.audio.isMuted())
 
     def apply_online_result(self, track: TrackRecord) -> None:
         """Refresh the open editor from the just-saved single-track online result."""
@@ -1887,7 +1912,7 @@ class MetadataEditorDialog(QDialog):
             source_item.setIcon(editor_icon('audio_recognize', source_color, 15) if source == AUDIO_SOURCE
                                 else _color_dot_icon(source_color, 12))
             self.source_table.setItem(row, 0, source_item)
-            for column, field_name in ((1, 'title'), (2, 'album'), (3, 'artist'), (4, 'year'), (5, 'genre')):
+            for column, field_name in ((1, 'artist'), (2, 'title'), (3, 'album'), (4, 'year'), (5, 'genre')):
                 value = self._source_values.get(field_name, {}).get(source)
                 shown = self._display_source_value(field_name, value) if value not in (None, '') else '—'
                 self.source_table.setItem(row, column, QTableWidgetItem(shown))
@@ -2446,6 +2471,8 @@ class MetadataEditorDialog(QDialog):
     def _update_cover_main_preview(self) -> None:
         key = getattr(self, '_selected_cover_key', 'placeholder')
         pix = self._cover_candidate_pixmaps.get(key, QPixmap())
+        if self.compact_player is not None:
+            self.compact_player.surface.set_cover_pixmap(pix)
         if pix.isNull():
             self.cover_main_preview.setPixmap(QPixmap())
             state = self._cover_candidate_states.get(key, 'unavailable')

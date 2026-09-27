@@ -47,9 +47,9 @@ def test_dashboard_does_not_duplicate_main_toolbar_action_buttons_and_player_is_
     assert "QPushButton('3. Skopiuj" not in dashboard_section
     assert 'Etapy pracy' not in dashboard_section
 
-    assert "setObjectName('PlayButton')" in player
-    assert 'setFixedSize(58, 58)' in player
-    assert 'QPushButton#PlayButton' in theme
+    assert "setObjectName('VariantDPlayButton')" in player
+    assert 'setFixedSize(50, 50)' in player
+    assert 'QPushButton#VariantDPlayButton' in theme
 
 
 def test_v017_layout_uses_top_navigation_collapsible_details_and_single_click_player_source():
@@ -65,7 +65,7 @@ def test_v017_layout_uses_top_navigation_collapsible_details_and_single_click_pl
     assert 'Szczegóły' in library
     assert 'ZATWIERDŹ JAKO GOTOWE' in library
     assert 'Edytuj metadane' in library
-    assert 'setFixedSize(58, 58)' in player
+    assert 'setFixedSize(50, 50)' in player
 
 
 def test_settings_and_locations_use_colored_cards_and_saved_confirmation():

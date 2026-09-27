@@ -3,12 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from threading import Event
 
-from PySide6.QtCore import Qt, QUrl, Signal, QTimer, QSize, QThreadPool, Slot
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt, QUrl, Signal, QTimer, QSize, QThreadPool, Slot, QPoint, QRect
+from PySide6.QtGui import QPixmap, QColor, QPainter, QLinearGradient
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QMediaDevices
 from PySide6.QtWidgets import (
     QWidget, QFrame, QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout,
-    QGraphicsDropShadowEffect, QSizePolicy, QComboBox,
+    QSizePolicy, QComboBox,
 )
 
 from audio_library_organizer.domain.models import TrackRecord
@@ -35,6 +35,162 @@ def track_display_lines(track: TrackRecord) -> tuple[str, str, str]:
     if quality:
         bits.append(quality)
     return artist, title, '  •  '.join(bits)
+
+
+class _TrackTitleButton(QPushButton):
+    """Keep the complete title accessible while using only the available width."""
+
+    def __init__(self, title: str = '', parent=None):
+        super().__init__(parent)
+        self._full_title = ''
+        self.setText(title)
+
+    def setText(self, title: str) -> None:  # noqa: N802 - Qt API
+        self._full_title = str(title or '')
+        self.setToolTip(self._full_title)
+        self._elide()
+
+    def _elide(self):
+        width = max(0, self.contentsRect().width() - 4)
+        super().setText(self.fontMetrics().elidedText(self._full_title, Qt.TextElideMode.ElideRight, width))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._elide()
+
+
+class VariantDPlayerSurface(QFrame):
+    """One visual player for the library footer and the metadata editor."""
+
+    def __init__(self, title: str = '', artist: str = '', parent=None):
+        super().__init__(parent)
+        self.setObjectName('VariantDPlayerSurface')
+        self.cover_pixmap = QPixmap()
+        self.ambient_source = QPixmap()
+        self._ambient_cache = QPixmap()
+        self._ambient_cache_size = (0, 0)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(12, 5, 12, 5)
+        row.setSpacing(8)
+
+        self.cover = ClickableCoverLabel('')
+        self.cover.setObjectName('VariantDCover')
+        self.cover.setFixedSize(52, 52)
+        self.cover.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        row.addWidget(self.cover, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        info = QWidget(self)
+        info.setObjectName('VariantDIdentity')
+        info.setMinimumWidth(0)
+        info.setMaximumHeight(52)
+        labels = QVBoxLayout(info)
+        labels.setContentsMargins(0, 0, 0, 0)
+        labels.setSpacing(1)
+        self.title = _TrackTitleButton(title)
+        self.title.setObjectName('VariantDTitle')
+        self.title.setFlat(True)
+        self.title.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.title.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.artist = ElidedLabel(artist)
+        self.artist.setObjectName('VariantDArtist')
+        labels.addWidget(self.title)
+        labels.addWidget(self.artist)
+        row.addWidget(info, 4, Qt.AlignmentFlag.AlignVCenter)
+
+        self.play = QPushButton()
+        self.play.setObjectName('VariantDPlayButton')
+        self.play.setFixedSize(50, 50)
+        self.play.setIconSize(QSize(46, 46))
+        self.play.setToolTip('Odtwórz / pauza')
+        self.set_playing(False)
+        row.addWidget(self.play, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        self.elapsed = QLabel('00:00')
+        self.elapsed.setObjectName('VariantDTime')
+        self.elapsed.setFixedWidth(42)
+        row.addWidget(self.elapsed)
+        self.seek = WaveformSlider()
+        self.seek.setObjectName('VariantDWaveform')
+        self.seek.setMinimumWidth(120)
+        row.addWidget(self.seek, 3)
+        self.total = QLabel('00:00')
+        self.total.setObjectName('VariantDTime')
+        self.total.setFixedWidth(42)
+        row.addWidget(self.total)
+
+        self.speaker = QPushButton()
+        self.speaker.setObjectName('VariantDSpeaker')
+        self.speaker.setFixedSize(28, 32)
+        self.speaker.setIconSize(QSize(22, 22))
+        self.set_muted(False)
+        row.addWidget(self.speaker)
+        self.volume = QSlider(Qt.Orientation.Horizontal)
+        self.volume.setObjectName('VariantDVolume')
+        self.volume.setRange(0, 100)
+        self.volume.setFixedWidth(88)
+        row.addWidget(self.volume)
+        self.volume_percent = QLabel('75%')
+        self.volume_percent.setObjectName('VariantDTime')
+        self.volume_percent.setFixedWidth(38)
+        row.addWidget(self.volume_percent)
+
+        self.set_cover_pixmap(QPixmap())
+
+    def set_playing(self, playing: bool) -> None:
+        self.play.setIcon(alo_icon('pause' if playing else 'play', '#4ce5cf', 46))
+        self.play.setProperty('playing', playing)
+        self.play.style().unpolish(self.play)
+        self.play.style().polish(self.play)
+
+    def set_muted(self, muted: bool) -> None:
+        self.speaker.setIcon(alo_icon('mute' if muted else 'speaker', '#26d5c5' if muted else '#b9ccd5', 22))
+        tooltip = 'Włącz dźwięk' if muted else 'Wycisz'
+        self.speaker.setProperty('_alo_pl_tooltip', tooltip)
+        self.speaker.setToolTip(ui_text(self, tooltip))
+
+    def set_cover_pixmap(self, pixmap: QPixmap) -> None:
+        if pixmap.isNull():
+            pixmap = QPixmap(str(asset_path(localized_no_cover_name(self))))
+        self.cover_pixmap = pixmap
+        self.ambient_source = pixmap
+        self._ambient_cache = QPixmap()
+        self._ambient_cache_size = (0, 0)
+        self.cover.setText('' if not pixmap.isNull() else '—')
+        self.cover.setPixmap(pixmap.scaled(50, 50, Qt.AspectRatioMode.KeepAspectRatio,
+                                         Qt.TransformationMode.SmoothTransformation) if not pixmap.isNull() else QPixmap())
+        self.update()
+
+    def ambient_end_x(self) -> int:
+        return self.play.mapTo(self, QPoint(self.play.width() // 2, 0)).x()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self.ambient_source.isNull():
+            return
+        end = max(0, min(self.width(), self.ambient_end_x()))
+        if not end:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        painter.setClipRect(QRect(0, 0, end, self.height()))
+        # Blur at runtime from the current cover; no extra background file is stored.
+        if self._ambient_cache_size != (end, self.height()):
+            enlarged = self.ambient_source.scaled(end, self.height(), Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                                                   Qt.TransformationMode.SmoothTransformation)
+            left = max(0, (enlarged.width() - end) // 2)
+            top = max(0, (enlarged.height() - self.height()) // 2)
+            self._ambient_cache = enlarged.copy(left, top, end, self.height()).scaled(
+                max(12, end // 18), max(6, self.height() // 9), Qt.AspectRatioMode.IgnoreAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self._ambient_cache_size = (end, self.height())
+        painter.drawPixmap(QRect(0, 0, end, self.height()), self._ambient_cache)
+        fade = QLinearGradient(0, 0, end, 0)
+        fade.setColorAt(0, QColor(9, 16, 20, 170))
+        fade.setColorAt(.55, QColor(9, 16, 20, 180))
+        fade.setColorAt(1, QColor(15, 21, 29, 255))
+        painter.fillRect(QRect(0, 0, end, self.height()), fade)
+        painter.end()
 
 
 class PlayerBar(QWidget):
@@ -72,151 +228,57 @@ class PlayerBar(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(10, 4, 10, 8)
         outer.setSpacing(4)
-
         separator = QFrame()
         separator.setObjectName('FooterSeparator')
         separator.setFixedHeight(1)
         outer.addWidget(separator)
-
-        card = QFrame()
-        card.setObjectName('PlayerCard')
-        shadow = QGraphicsDropShadowEffect(card)
-        shadow.setBlurRadius(16)
-        shadow.setOffset(0, -1)
-        shadow.setColor(Qt.GlobalColor.black)
-        card.setGraphicsEffect(shadow)
-        card_lay = QHBoxLayout(card)
-        card_lay.setContentsMargins(16, 14, 16, 14)
-        card_lay.setSpacing(16)
-        content = QVBoxLayout()
-        content.setSpacing(8)
-
-        top = QHBoxLayout()
-        top.setSpacing(11)
-
-        self.cover = ClickableCoverLabel('♪')
-        self.cover.setObjectName('PlayerCover')
-        self.cover.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.cover.setFixedSize(86, 86)
-        self.cover.clicked.connect(
-            lambda: show_cover_preview(
-                self, self._cover_pixmap, title='Okładka odtwarzanego utworu', note=self._cover_note
-            )
-        )
-        card_lay.addWidget(self.cover)
-
-        info = QVBoxLayout()
-        info.setSpacing(1)
-        self.playback_status = QLabel('Gotowy')
-        self.playback_status.setObjectName('PlaybackStatus')
-        self.playback_status.setVisible(False)
-        self.artist = QLabel('ALO Music')
-        self.artist.setObjectName('PlayerArtist')
-        self.title = QPushButton('Wybierz utwór w Bibliotece, aby rozpocząć odsłuch')
-        self.title.setObjectName('PlayerTitleLink')
-        self.title.setFlat(True)
-        self.title.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.surface = VariantDPlayerSurface('Wybierz utwór w Bibliotece, aby rozpocząć odsłuch', 'ALO Music', self)
+        outer.addWidget(self.surface, 1)
+        self.cover = self.surface.cover
+        self.title = self.surface.title
+        self.artist = self.surface.artist
+        self.play = self.surface.play
+        self.elapsed = self.surface.elapsed
+        self.seek = self.surface.seek
+        self.seek.setRange(0, 0)
+        self.total = self.surface.total
+        self.speaker = self.surface.speaker
+        self.volume = self.surface.volume
+        self.volume.setValue(75)
+        self.volume_percent = self.surface.volume_percent
+        self.cover.clicked.connect(lambda: show_cover_preview(
+            self, self._cover_pixmap, title='Okładka odtwarzanego utworu', note=self._cover_note
+        ))
         self.title.clicked.connect(self._activate_current_track)
-        info.addWidget(self.title)
-        info.addWidget(self.artist)
-        self.meta = QLabel('Odtwarzacz jest gotowy')
-        self.meta.setObjectName('PlayerMeta')
-        info.addWidget(self.meta)
-        self.source_label = QLabel(f"{ui_text(self, 'Źródło:')} —")
-        self.source_label.setObjectName('PlayerSource')
-        self.source_label.setVisible(False)
-        info.addWidget(self.source_label)
-        self.queue_label = QLabel(f"{ui_text(self, 'Następny:')} —")
-        self.queue_label.setObjectName('PlayerQueue')
-        self.queue_label.setVisible(False)
-        info.addWidget(self.queue_label)
-        top.addLayout(info, 4)
-        for label in (self.artist, self.title, self.meta, self.queue_label):
-            label.setMinimumWidth(0)
-            label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
 
-        transport = QHBoxLayout()
-        transport.setSpacing(6)
-        transport.addStretch(1)
-        self.back = QPushButton()
+        # Keep existing playback state/queue and audio-device synchronization;
+        # these controls are not part of the Variant D visual surface.
+        self.playback_status = QLabel('Gotowy', self)
+        self.playback_status.hide()
+        self.meta = QLabel('Odtwarzacz jest gotowy', self)
+        self.meta.hide()
+        self.source_label = QLabel(f"{ui_text(self, 'Źródło:')} —", self)
+        self.source_label.hide()
+        self.queue_label = QLabel(f"{ui_text(self, 'Następny:')} —", self)
+        self.queue_label.hide()
+        self.back = QPushButton(self)
         self.back.setObjectName('PlayerIconButton')
-        self.back.setIcon(alo_icon('rewind', '#dfe8ee', 20))
-        self.back.setIconSize(QSize(20, 20))
-        self.back.setToolTip('Cofnij 10 sekund')
-        self.play = QPushButton()
-        self.play.setObjectName('PlayButton')
-        self.play.setIcon(alo_icon('play', '#ffffff', 25))
-        self.play.setIconSize(QSize(25, 25))
-        self.play.setFixedSize(58, 58)
-        self.play.setToolTip('Odtwórz / pauza')
-        self.forward = QPushButton()
+        self.back.hide()
+        self.forward = QPushButton(self)
         self.forward.setObjectName('PlayerIconButton')
-        self.forward.setIcon(alo_icon('forward', '#dfe8ee', 20))
-        self.forward.setIconSize(QSize(20, 20))
-        self.forward.setToolTip('Przewiń 10 sekund')
-        self.repeat = QPushButton()
+        self.forward.hide()
+        self.repeat = QPushButton(self)
         self.repeat.setObjectName('PlayerIconButton')
-        self.repeat.setIcon(alo_icon('repeat', '#dfe8ee', 18))
-        self.repeat.setIconSize(QSize(18, 18))
         self.repeat.setCheckable(True)
-        self.repeat.setToolTip('Powtarzaj aktualny utwór')
-        for button in (self.back, self.forward, self.repeat):
-            button.setFixedSize(44, 44)
-        transport.addWidget(self.back)
-        transport.addWidget(self.play)
-        transport.addWidget(self.forward)
-        transport.addWidget(self.repeat)
-        transport.addStretch(1)
-        top.addLayout(transport, 3)
-        self.output_device = QComboBox()
+        self.repeat.hide()
+        self.output_device = QComboBox(self)
         self.output_device.setObjectName('PlayerOutputDevice')
-        self.output_device.setFixedWidth(190)
+        self.output_device.hide()
         self.output_device.setToolTip(ui_text(self, 'Wyjście audio'))
         self.output_device.currentIndexChanged.connect(self._select_audio_device)
         self.media_devices = QMediaDevices(self)
         self.media_devices.audioOutputsChanged.connect(self._refresh_audio_devices)
         self._refresh_audio_devices()
-        top.addWidget(self.output_device)
-
-        volume_box = QHBoxLayout()
-        volume_box.setSpacing(6)
-        self.speaker = QLabel()
-        self.speaker.setPixmap(alo_icon('speaker', '#b9ccd5', 18).pixmap(18, 18))
-        self.speaker.setObjectName('PlayerMeta')
-        self.volume = QSlider(Qt.Orientation.Horizontal)
-        self.volume.setObjectName('VolumeSlider')
-        self.volume.setRange(0, 100)
-        self.volume.setValue(75)
-        self.volume.setFixedWidth(130)
-        self.volume_percent = QLabel('75%')
-        self.volume_percent.setObjectName('PlayerTime')
-        self.volume_percent.setFixedWidth(34)
-        volume_box.addWidget(self.speaker)
-        volume_box.addWidget(self.volume)
-        volume_box.addWidget(self.volume_percent)
-        content.addLayout(top)
-
-        timeline = QHBoxLayout()
-        timeline.setSpacing(7)
-        self.elapsed = QLabel('00:00')
-        self.elapsed.setObjectName('PlayerTime')
-        self.elapsed.setFixedWidth(42)
-        self.seek = WaveformSlider()
-        self.seek.setObjectName('SeekSlider')
-        self.seek.setRange(0, 0)
-        self.seek.setMinimumWidth(180)
-        self.total = QLabel('00:00')
-        self.total.setObjectName('PlayerTime')
-        self.total.setFixedWidth(42)
-        timeline.addWidget(self.elapsed)
-        timeline.addWidget(self.seek, 1)
-        timeline.addWidget(self.total)
-        timeline.addSpacing(12)
-        timeline.addLayout(volume_box)
-        content.addLayout(timeline)
-        card_lay.addLayout(content, 1)
-
-        outer.addWidget(card)
 
         self.play.clicked.connect(self.toggle)
         self.back.clicked.connect(
@@ -229,6 +291,8 @@ class PlayerBar(QWidget):
         )
         self.seek.sliderMoved.connect(self.player.setPosition)
         self.volume.valueChanged.connect(self._volume_changed)
+        self.speaker.clicked.connect(self._toggle_mute)
+        self.audio.mutedChanged.connect(self._mute_changed)
         self.player.positionChanged.connect(self._position)
         self.player.durationChanged.connect(self._duration_changed)
         self.player.playbackStateChanged.connect(self._state)
@@ -348,8 +412,7 @@ class PlayerBar(QWidget):
             self.meta.setText(str(self.current_path))
             self.source_label.setText(f"{ui_text(self, 'Źródło:')} {ui_text(self, 'Plik lokalny')}")
             self._cover_pixmap = QPixmap()
-            self.cover.setPixmap(QPixmap())
-            self.cover.setText('♪')
+            self.surface.set_cover_pixmap(QPixmap())
         self.player.setSource(source_url)
         if requested_position <= 0:
             self._clear_pending_seek_state()
@@ -466,22 +529,11 @@ class PlayerBar(QWidget):
         else:
             self._cover_note = ''
         self._cover_pixmap = pix
-        if pix.isNull():
-            self.cover.setPixmap(QPixmap())
-            self.cover.setText(ui_text(self, 'BRAK'))
-        else:
-            self.cover.setText('')
-            self.cover.setPixmap(
-                pix.scaled(
-                    self.cover.width() - 4, self.cover.height() - 4,
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-            )
+        self.surface.set_cover_pixmap(pix)
 
     def _state(self, state):
         playing = state == QMediaPlayer.PlaybackState.PlayingState
-        self.play.setIcon(alo_icon('pause' if playing else 'play', '#ffffff', 25))
+        self.surface.set_playing(playing)
         self.playback_status.setText(ui_text(self,
             'Odtwarzanie' if playing else ('Pauza' if self.current_path else 'Gotowy')
         ))
@@ -489,6 +541,12 @@ class PlayerBar(QWidget):
     def _volume_changed(self, value: int):
         self.audio.setVolume(value / 100)
         self.volume_percent.setText(f'{value}%')
+
+    def _toggle_mute(self):
+        self.audio.setMuted(not self.audio.isMuted())
+
+    def _mute_changed(self, muted: bool):
+        self.surface.set_muted(muted)
 
     def _duration_changed(self, value: int):
         self.seek.setMaximum(max(0, value))
@@ -522,6 +580,7 @@ class PlayerBar(QWidget):
             self.playback_status.setText(ui_text(self, 'Błąd odtwarzania'))
 
     def refresh_language(self) -> None:
+        self.surface.set_muted(self.audio.isMuted())
         if self.current_track is not None and self._cover_note == 'Brak potwierdzonej okładki — grafika zastępcza ALO Music.':
             self._load_cover(self.current_track)
         if self.current_track is not None:
@@ -555,69 +614,34 @@ class CompactPlayerBar(QFrame):
         self.setObjectName('CompactPlayerBar')
         self.setFixedHeight(74)
 
-        row = QHBoxLayout(self)
-        row.setContentsMargins(10, 5, 10, 5)
-        row.setSpacing(9)
-
-        self.track_cover = QLabel()
-        self.track_cover.setObjectName('PlayerCover')
-        self.track_cover.setFixedSize(48, 48)
-        self.track_cover.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.track_cover.setPixmap(editor_icon('music', '#38dcac', 30).pixmap(30, 30))
-        row.addWidget(self.track_cover)
-        track_info = QVBoxLayout()
-        track_info.setSpacing(2)
-        self.track_title = ElidedLabel(track.title or track.path.stem)
-        self.track_title.setObjectName('CompactTrackTitle')
-        self.track_title.setMaximumWidth(250)
-        self.track_artist = ElidedLabel(track.artist or '—')
-        self.track_artist.setObjectName('CompactTrackArtist')
-        self.track_artist.setMaximumWidth(250)
-        track_info.addWidget(self.track_title)
-        track_info.addWidget(self.track_artist)
-        row.addLayout(track_info)
-
-        self.play = QPushButton()
-        self.play.setObjectName('CompactPlayButton')
-        self.play.setIcon(editor_icon('play', '#ffffff', 20))
-        self.play.setIconSize(QSize(20, 20))
-        self.play.setFixedSize(40, 40)
-        self.play.setToolTip('Odtwórz / pauza')
-        self.play.clicked.connect(self._toggle)
-        row.addWidget(self.play)
-
-        self.elapsed = QLabel('00:00')
-        self.elapsed.setObjectName('CompactPlayerTime')
-        self.elapsed.setFixedWidth(40)
-        row.addWidget(self.elapsed)
-
-        self.seek = WaveformSlider()
-        self.seek.setObjectName('CompactSeekSlider')
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.surface = VariantDPlayerSurface(track.title or track.path.stem, track.artist or '—', self)
+        layout.addWidget(self.surface)
+        self.track_cover = self.surface.cover
+        self.track_title = self.surface.title
+        self.track_artist = self.surface.artist
+        self.play = self.surface.play
+        self.elapsed = self.surface.elapsed
+        self.seek = self.surface.seek
         self.seek.setRange(0, max(0, self.player_bar.player.duration()))
-        self.seek.setMinimumWidth(160)
-        self.seek.sliderMoved.connect(self._seek_edited_track)
-        row.addWidget(self.seek, 1)
-
-        self.total = QLabel('00:00')
-        self.total.setObjectName('CompactPlayerTime')
-        self.total.setFixedWidth(40)
-        row.addWidget(self.total)
-
-        speaker = QLabel()
-        speaker.setPixmap(editor_icon('speaker', '#b9ccd5', 18).pixmap(18, 18))
-        speaker.setObjectName('CompactPlayerMeta')
-        row.addWidget(speaker)
-        self.volume = QSlider(Qt.Orientation.Horizontal)
-        self.volume.setObjectName('CompactVolumeSlider')
-        self.volume.setRange(0, 100)
-        self.volume.setFixedWidth(112)
+        self.total = self.surface.total
+        self.speaker = self.surface.speaker
+        self.volume = self.surface.volume
         self.volume.setValue(self.player_bar.volume.value())
+        self.volume_percent = self.surface.volume_percent
+        self.volume_percent.setText(f'{self.volume.value()}%')
+        self.play.clicked.connect(self._toggle)
+        self.seek.sliderMoved.connect(self._seek_edited_track)
+        self.speaker.clicked.connect(self.player_bar._toggle_mute)
+        self.player_bar.audio.mutedChanged.connect(self.surface.set_muted)
         self.volume.valueChanged.connect(self.player_bar.volume.setValue)
-        row.addWidget(self.volume)
-        self.volume_percent = QLabel(f'{self.player_bar.volume.value()}%')
-        self.volume_percent.setObjectName('CompactPlayerTime')
-        self.volume_percent.setFixedWidth(34)
-        row.addWidget(self.volume_percent)
+        selected = QPixmap(track.manual_cover_path) if track.manual_cover_path else QPixmap()
+        if selected.isNull():
+            embedded = extract_embedded_cover(track.path)
+            if embedded:
+                selected.loadFromData(embedded[0])
+        self.surface.set_cover_pixmap(selected)
 
         self.player_bar.player.positionChanged.connect(self._position_changed)
         self.player_bar.player.durationChanged.connect(self._duration_changed)
@@ -684,4 +708,4 @@ class CompactPlayerBar(QFrame):
 
     def _state_changed(self, state):
         playing = state == QMediaPlayer.PlaybackState.PlayingState and self._is_edited_track_loaded()
-        self.play.setIcon(editor_icon('pause' if playing else 'play', '#ffffff', 20))
+        self.surface.set_playing(playing)

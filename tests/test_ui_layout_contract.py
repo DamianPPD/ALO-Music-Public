@@ -30,8 +30,8 @@ def test_global_operation_panel_is_prominent_and_state_colored():
 
 def test_player_is_global_footer_without_duplicate_branding_and_has_richer_card():
     assert 'FooterSeparator' in PLAYER
-    assert 'QFrame#PlayerCard' in THEME
-    assert 'QGraphicsDropShadowEffect' in PLAYER
+    assert 'QFrame#VariantDPlayerSurface' in THEME
+    assert 'self.surface = VariantDPlayerSurface' in PLAYER
     assert 'ALO Music v{__version__}' not in PLAYER
     assert 'Powered by Damian' not in PLAYER
     assert 'GitHub Issues' not in PLAYER
@@ -40,13 +40,11 @@ def test_player_is_global_footer_without_duplicate_branding_and_has_richer_card(
 
 def test_player_is_compact_elegant_and_keeps_seek_volume_controls():
     # Cover/timeline geometry is exercised by test_player_reference_followup.
-    assert 'self.play.setFixedSize(58, 58)' in PLAYER
-    assert 'timeline = QHBoxLayout()' in PLAYER
-    assert 'timeline.addWidget(self.seek, 1)' in PLAYER
-    assert 'self.volume.setFixedWidth(130)' in PLAYER
-    assert "alo_icon('repeat'" in PLAYER
-    assert 'QPushButton#PlayerIconButton' in THEME
-    assert 'QSlider#SeekSlider::groove:horizontal { height:6px;' in THEME
+    assert 'self.play.setFixedSize(50, 50)' in PLAYER
+    assert 'row.addWidget(self.seek, 3)' in PLAYER
+    assert 'self.volume.setFixedWidth(88)' in PLAYER
+    assert 'QPushButton#VariantDPlayButton' in THEME
+    assert 'QSlider#VariantDVolume::groove:horizontal' in THEME
 
 
 def test_library_detail_actions_are_pinned_outside_scroll_area():
@@ -221,8 +219,9 @@ def test_metadata_editor_inline_player_keeps_seek_and_volume():
     compact = PLAYER.split('class CompactPlayerBar', 1)[1]
     assert 'ClickableCoverLabel' not in compact
     # The reference layout now includes track identity and a flexible seek bar.
-    assert "self.volume.setObjectName('CompactVolumeSlider')" in compact
-    assert "editor_icon('play', '#ffffff'" in compact
+    assert 'self.surface = VariantDPlayerSurface' in compact
+    assert 'self.volume = self.surface.volume' in compact
+    assert 'self.seek = self.surface.seek' in compact
 
 
 def test_navigation_buttons_use_icons_and_workflow_colors_follow_approved_reference():
