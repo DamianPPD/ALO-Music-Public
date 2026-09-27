@@ -4,7 +4,7 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
 import pytest
 from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QColor, QFontMetrics, QPixmap
+from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPixmap
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtWidgets import QApplication, QPushButton
 
@@ -249,5 +249,94 @@ def test_variant_d_ambient_uses_fallback_and_refreshes_when_editor_cover_changes
         assert surface.cover_pixmap.toImage() == fallback.toImage()
     finally:
         _close(editor)
+        bar.close()
+        app.setStyleSheet(previous)
+
+
+@pytest.mark.parametrize('width', [1020, 1300, 1450])
+def test_variant_d_play_sits_near_the_title_without_sacrificing_title_width(tmp_path, width):
+    app = _app()
+    bar = PlayerBar()
+    compact = CompactPlayerBar(bar, TrackRecord(path=tmp_path / 'song.mp3',
+                                                title='Newik – My Love (Noise Walkers Remix)', artist='Newik'))
+    try:
+        for widget in (bar, compact):
+            widget.resize(width, 114 if widget is bar else 74)
+            widget.show()
+            app.processEvents()
+            surface = widget.surface
+            title_x = surface.title.mapTo(surface, QPoint(0, 0)).x()
+            play_x = surface.play.mapTo(surface, QPoint(0, 0)).x()
+            waveform_x = surface.seek.mapTo(surface, QPoint(0, 0)).x()
+            text_width = QFontMetrics(surface.title.font()).horizontalAdvance(surface.title.text())
+            assert surface.title.width() >= 300
+            assert 0 < play_x - (title_x + min(text_width, surface.title.width())) <= 125
+            assert surface.ambient_end_x() <= play_x + surface.play.width() // 2
+            assert surface.ambient_end_x() < waveform_x
+            if widget is bar:
+                assert widget.minimumHeight() == 114
+            else:
+                assert widget.height() == 74
+    finally:
+        compact.close()
+        bar.close()
+
+
+def test_variant_d_ambient_preserves_artwork_shapes_and_fades_before_waveform(tmp_path):
+    app = _app()
+    previous = app.styleSheet()
+    app.setStyleSheet(style_for_theme('dark'))
+    bar = PlayerBar()
+    compact = CompactPlayerBar(bar, TrackRecord(path=tmp_path / 'song.mp3', title='Title', artist='Artist'))
+    patterned = QPixmap(320, 320)
+    patterned.fill(QColor('#050a10'))
+    painter = QPainter(patterned)
+    for x in range(0, 320, 80):
+        painter.fillRect(x, 0, 40, 320, QColor('#f82b27'))
+    painter.end()
+    try:
+        for widget in (bar, compact):
+            widget.resize(1300, 114 if widget is bar else 74)
+            widget.show()
+            widget.surface.set_cover_pixmap(patterned)
+            app.processEvents()
+            surface = widget.surface
+            assert surface.ambient_source.cacheKey() == surface.cover_pixmap.cacheKey()
+            rendered = surface.grab().toImage()
+            left = surface.cover.mapTo(surface, QPoint(surface.cover.width(), 0)).x()
+            red = [rendered.pixelColor(x, surface.height() - 12).red()
+                   for x in range(left + 12, min(left + 190, surface.play.x() - 20))]
+            assert max(red) - min(red) >= 95
+            assert rendered.pixelColor(surface.seek.x() + 15, surface.height() - 12).red() < 80
+    finally:
+        compact.close()
+        bar.close()
+        app.setStyleSheet(previous)
+
+
+def test_variant_d_title_stays_readable_on_a_bright_cover(tmp_path):
+    app = _app()
+    previous = app.styleSheet()
+    app.setStyleSheet(style_for_theme('dark'))
+    bar = PlayerBar()
+    compact = CompactPlayerBar(bar, TrackRecord(path=tmp_path / 'song.mp3', title='Title', artist='Artist'))
+    bright = QPixmap(320, 320)
+    bright.fill(QColor('#ffffff'))
+    try:
+        for widget in (bar, compact):
+            widget.resize(1300, 114 if widget is bar else 74)
+            widget.show()
+            widget.surface.set_cover_pixmap(bright)
+            app.processEvents()
+            surface = widget.surface
+            rendered = surface.grab().toImage()
+            x = surface.title.mapTo(surface, QPoint(110, 0)).x()
+            title_y = surface.title.mapTo(surface, QPoint(0, surface.title.height() // 2)).y()
+            background_at_title = rendered.pixelColor(x, title_y).red()
+            background_below_title = rendered.pixelColor(x, surface.height() - 12).red()
+            assert background_at_title <= 90
+            assert background_below_title >= background_at_title + 15
+    finally:
+        compact.close()
         bar.close()
         app.setStyleSheet(previous)

@@ -82,6 +82,7 @@ class VariantDPlayerSurface(QFrame):
         info = QWidget(self)
         info.setObjectName('VariantDIdentity')
         info.setMinimumWidth(0)
+        info.setMaximumWidth(350)
         info.setMaximumHeight(52)
         labels = QVBoxLayout(info)
         labels.setContentsMargins(0, 0, 0, 0)
@@ -173,23 +174,32 @@ class VariantDPlayerSurface(QFrame):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         painter.setClipRect(QRect(0, 0, end, self.height()))
-        # Blur at runtime from the current cover; no extra background file is stored.
+        # Scale down only slightly: preserve recognizable cover shapes in the ambient.
         if self._ambient_cache_size != (end, self.height()):
             enlarged = self.ambient_source.scaled(end, self.height(), Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                                                    Qt.TransformationMode.SmoothTransformation)
             left = max(0, (enlarged.width() - end) // 2)
             top = max(0, (enlarged.height() - self.height()) // 2)
             self._ambient_cache = enlarged.copy(left, top, end, self.height()).scaled(
-                max(12, end // 18), max(6, self.height() // 9), Qt.AspectRatioMode.IgnoreAspectRatio,
+                max(32, end // 3), max(20, self.height() // 2), Qt.AspectRatioMode.IgnoreAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
             self._ambient_cache_size = (end, self.height())
         painter.drawPixmap(QRect(0, 0, end, self.height()), self._ambient_cache)
         fade = QLinearGradient(0, 0, end, 0)
-        fade.setColorAt(0, QColor(9, 16, 20, 170))
-        fade.setColorAt(.55, QColor(9, 16, 20, 180))
+        fade.setColorAt(0, QColor(9, 16, 20, 140))
+        fade.setColorAt(.35, QColor(9, 16, 20, 150))
+        fade.setColorAt(.68, QColor(9, 16, 20, 195))
         fade.setColorAt(1, QColor(15, 21, 29, 255))
         painter.fillRect(QRect(0, 0, end, self.height()), fade)
+        # Keep title and artist legible even when the enlarged cover is bright.
+        text_shade = QLinearGradient(0, 0, 0, self.height())
+        text_shade.setColorAt(0, QColor(9, 16, 20, 0))
+        text_shade.setColorAt(.25, QColor(9, 16, 20, 75))
+        text_shade.setColorAt(.60, QColor(9, 16, 20, 75))
+        text_shade.setColorAt(.75, QColor(9, 16, 20, 0))
+        painter.fillRect(QRect(self.cover.x() + self.cover.width(), 0,
+                               max(0, end - self.cover.x() - self.cover.width()), self.height()), text_shade)
         painter.end()
 
 
