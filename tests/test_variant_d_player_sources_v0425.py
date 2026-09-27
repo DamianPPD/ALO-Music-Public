@@ -3,9 +3,10 @@ import os
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
 import pytest
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QBuffer, QIODevice, QObject, QPoint, Qt, Signal
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPixmap
 from PySide6.QtMultimedia import QMediaPlayer
+from PySide6.QtNetwork import QNetworkReply
 from PySide6.QtWidgets import QApplication, QPushButton
 
 from audio_library_organizer.domain.models import TrackRecord
@@ -340,3 +341,277 @@ def test_variant_d_title_stays_readable_on_a_bright_cover(tmp_path):
         compact.close()
         bar.close()
         app.setStyleSheet(previous)
+
+
+def _cover_bytes(color):
+    pix = QPixmap(120, 96)
+    pix.fill(QColor(color))
+    buffer = QBuffer()
+    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+    assert pix.save(buffer, 'PNG')
+    return bytes(buffer.data())
+
+
+class _PendingCoverReply(QObject):
+    finished = Signal()
+
+    def __init__(self):
+        super().__init__()
+        self.payload = b''
+        self.aborted = False
+
+    def error(self):
+        return QNetworkReply.NetworkError.NoError
+
+    def readAll(self):
+        return self.payload
+
+    def abort(self):
+        self.aborted = True
+
+    def complete(self, payload):
+        self.payload = payload
+        self.finished.emit()
+
+
+class _PendingCoverNetwork:
+    def __init__(self):
+        self.requests = []
+
+    def get(self, request):
+        reply = _PendingCoverReply()
+        self.requests.append((request.url().toString(), reply))
+        return reply
+
+
+def test_playback_loads_selected_external_cover_and_updates_ambient(tmp_path, monkeypatch):
+    _app()
+    bar = PlayerBar()
+    started = []
+    monkeypatch.setattr(bar.player, 'play', lambda: started.append(True))
+    network = _PendingCoverNetwork()
+    monkeypatch.setattr(bar, '_cover_network', network, raising=False)
+    track = TrackRecord(path=tmp_path / 'track.mp3', title='Track', cover_choice='external',
+                        cover_art_url='https://example.test/track.png')
+    try:
+        bar.load_track(track, autoplay=True)
+        assert started == [True]
+        fallback = QPixmap(str(asset_path('no_cover.png')))
+        assert bar.surface.cover_pixmap.toImage() == fallback.toImage()
+        assert [url for url, _ in network.requests] == [track.cover_art_url]
+        image = _cover_bytes('#de4627')
+        network.requests[0][1].complete(image)
+        assert bar.surface.cover_pixmap.toImage() == bar.surface.ambient_source.toImage()
+        assert bar.surface.cover_pixmap.toImage().pixelColor(10, 10) == QColor('#de4627')
+    finally:
+        bar.close()
+
+
+def test_editor_opens_with_selected_cover_already_loaded_by_main_player(tmp_path, monkeypatch):
+    _app()
+    bar = PlayerBar()
+    network = _PendingCoverNetwork()
+    monkeypatch.setattr(bar, '_cover_network', network, raising=False)
+    monkeypatch.setattr(MetadataEditorDialog, '_load_candidate_cover', lambda *args: None)
+    track = TrackRecord(path=tmp_path / 'track.mp3', cover_choice='external',
+                        cover_art_url='https://example.test/track.png')
+    try:
+        bar.load_track(track, autoplay=False)
+        network.requests[0][1].complete(_cover_bytes('#328dff'))
+        editor = MetadataEditorDialog(track, player_bar=bar)
+        try:
+            assert editor._selected_cover_key.startswith('external:')
+            assert editor.compact_player.surface.cover_pixmap.toImage() == bar.surface.cover_pixmap.toImage()
+            assert editor.compact_player.surface.ambient_source.toImage() == bar.surface.cover_pixmap.toImage()
+        finally:
+            _close(editor)
+    finally:
+        bar.close()
+
+
+def test_pending_editor_cover_shows_fallback_then_refreshes_without_click(tmp_path, monkeypatch):
+    _app()
+    monkeypatch.setattr(MetadataEditorDialog, '_load_candidate_cover', lambda *args: None)
+    bar = PlayerBar()
+    track = TrackRecord(path=tmp_path / 'track.mp3', cover_choice='external',
+                        cover_art_url='https://example.test/track.png')
+    editor = MetadataEditorDialog(track, player_bar=bar)
+    try:
+        key = editor._selected_cover_key
+        assert key.startswith('external:')
+        assert editor.compact_player.surface.cover_pixmap.toImage() == QPixmap(str(asset_path('no_cover.png'))).toImage()
+        reply = _PendingCoverReply()
+        reply.payload = _cover_bytes('#e85843')
+        editor._candidate_cover_finished(reply, key, editor._cover_request_serial)
+        assert editor.compact_player.surface.cover_pixmap.toImage().pixelColor(10, 10) == QColor('#e85843')
+        assert editor.compact_player.surface.ambient_source.toImage() == editor.compact_player.surface.cover_pixmap.toImage()
+    finally:
+        _close(editor)
+        bar.close()
+
+
+def test_editor_receives_cover_ready_from_playing_track_without_waiting_for_its_own_reply(tmp_path, monkeypatch):
+    _app()
+    monkeypatch.setattr(MetadataEditorDialog, '_load_candidate_cover', lambda *args: None)
+    bar = PlayerBar()
+    network = _PendingCoverNetwork()
+    monkeypatch.setattr(bar, '_cover_network', network, raising=False)
+    track = TrackRecord(path=tmp_path / 'song.mp3', cover_choice='external',
+                        cover_art_url='https://example.test/song.png')
+    try:
+        bar.load_track(track, autoplay=False)
+        editor = MetadataEditorDialog(track, player_bar=bar)
+        try:
+            assert editor._cover_candidate_states[editor._selected_cover_key] == 'loading'
+            network.requests[0][1].complete(_cover_bytes('#269ad9'))
+            assert editor.compact_player.surface.cover_pixmap.toImage().pixelColor(10, 10) == QColor('#269ad9')
+            assert editor.compact_player.surface.ambient_source.toImage() == editor.compact_player.surface.cover_pixmap.toImage()
+            assert editor._cover_candidate_states[editor._selected_cover_key] == 'ready'
+            editor._candidate_cover_finished(_PendingCoverReply(), editor._selected_cover_key,
+                                             editor._cover_request_serial)
+            assert editor.compact_player.surface.cover_pixmap.toImage().pixelColor(10, 10) == QColor('#269ad9')
+        finally:
+            _close(editor)
+    finally:
+        bar.close()
+
+
+def test_old_cover_reply_cannot_replace_new_track_artwork(tmp_path, monkeypatch):
+    _app()
+    bar = PlayerBar()
+    network = _PendingCoverNetwork()
+    monkeypatch.setattr(bar, '_cover_network', network, raising=False)
+    a = TrackRecord(path=tmp_path / 'a.mp3', cover_choice='external', cover_art_url='https://example.test/a.png')
+    b = TrackRecord(path=tmp_path / 'b.mp3', cover_choice='external', cover_art_url='https://example.test/b.png')
+    try:
+        bar.load_track(a, autoplay=False)
+        bar.load_track(b, autoplay=False)
+        assert [url for url, _ in network.requests] == [a.cover_art_url, b.cover_art_url]
+        network.requests[1][1].complete(_cover_bytes('#24974c'))
+        network.requests[0][1].complete(_cover_bytes('#cc2929'))
+        assert bar.current_track is b
+        assert bar.surface.cover_pixmap.toImage().pixelColor(10, 10) == QColor('#24974c')
+        assert bar.surface.ambient_source.toImage() == bar.surface.cover_pixmap.toImage()
+    finally:
+        bar.close()
+
+
+def test_invalid_manual_cover_does_not_block_online_cover_load(tmp_path, monkeypatch):
+    _app()
+    bad = tmp_path / 'broken.png'
+    bad.write_bytes(b'not an image')
+    bar = PlayerBar()
+    network = _PendingCoverNetwork()
+    monkeypatch.setattr(bar, '_cover_network', network, raising=False)
+    track = TrackRecord(path=tmp_path / 'song.mp3', cover_choice='auto', manual_cover_path=str(bad),
+                        cover_art_url='https://example.test/usable.png')
+    try:
+        bar.load_track(track, autoplay=False)
+        assert [url for url, _ in network.requests] == [track.cover_art_url]
+        network.requests[0][1].complete(_cover_bytes('#2255bb'))
+        assert bar.surface.cover_pixmap.toImage().pixelColor(10, 10) == QColor('#2255bb')
+    finally:
+        bar.close()
+
+
+def test_explicit_no_cover_keeps_green_fallback_until_next_track(tmp_path, monkeypatch):
+    _app()
+    manual = tmp_path / 'manual.png'
+    pix = QPixmap(120, 96)
+    pix.fill(QColor('#df4825'))
+    assert pix.save(str(manual))
+    bar = PlayerBar()
+    network = _PendingCoverNetwork()
+    monkeypatch.setattr(bar, '_cover_network', network, raising=False)
+    track = TrackRecord(path=tmp_path / 'one.mp3', cover_choice='placeholder', manual_cover_path=str(manual),
+                        cover_art_url='https://example.test/remote.png')
+    try:
+        bar.load_track(track, autoplay=False)
+        fallback = QPixmap(str(asset_path('no_cover.png')))
+        assert bar.surface.cover_pixmap.toImage() == fallback.toImage()
+        assert bar.surface.ambient_source.toImage() == fallback.toImage()
+        assert network.requests == []
+        track_two = TrackRecord(path=tmp_path / 'two.mp3', cover_choice='manual', manual_cover_path=str(manual))
+        bar.load_track(track_two, autoplay=False)
+        assert bar.surface.cover_pixmap.toImage() == pix.toImage()
+        assert bar.surface.ambient_source.toImage() == pix.toImage()
+    finally:
+        bar.close()
+
+
+def test_first_editor_open_respects_embedded_source_even_with_a_manual_alternative(tmp_path):
+    from mutagen.id3 import APIC, ID3
+
+    _app()
+    track_path = tmp_path / 'song.mp3'
+    tags = ID3()
+    tags.add(APIC(encoding=3, mime='image/png', type=3, desc='Cover', data=_cover_bytes('#d75345')))
+    tags.save(track_path)
+    manual = tmp_path / 'alternative.png'
+    other = QPixmap(120, 96)
+    other.fill(QColor('#3776b5'))
+    assert other.save(str(manual))
+    bar = PlayerBar()
+    track = TrackRecord(path=track_path, cover_choice='source', manual_cover_path=str(manual))
+    try:
+        bar.load_track(track, autoplay=False)
+        editor = MetadataEditorDialog(track, player_bar=bar)
+        try:
+            assert bar.surface.cover_pixmap.toImage().pixelColor(10, 10) == QColor('#d75345')
+            assert editor.compact_player.surface.cover_pixmap.toImage().pixelColor(10, 10) == QColor('#d75345')
+            assert editor.compact_player.surface.ambient_source.toImage() == editor.compact_player.surface.cover_pixmap.toImage()
+        finally:
+            _close(editor)
+    finally:
+        bar.close()
+
+
+def test_editor_switches_between_two_covers_without_reopening(tmp_path):
+    _app()
+    bar = PlayerBar()
+    editor = MetadataEditorDialog(TrackRecord(path=tmp_path / 'song.mp3'), player_bar=bar)
+    try:
+        covers = (('manual', '#da4433'), ('manual:1', '#376ee0'))
+        for key, color in covers:
+            pix = QPixmap(120, 96)
+            pix.fill(QColor(color))
+            editor._manual_cover_paths[key] = str(tmp_path / f'{key}.png')
+            editor._cover_candidate_pixmaps[key] = pix
+            editor._cover_candidate_states[key] = 'ready'
+        editor._rebuild_cover_proposals()
+        for key, color in (covers[0], covers[1], covers[0]):
+            editor._cover_proposal_labels[key].clicked.emit()
+            assert editor.compact_player.surface.cover_pixmap.toImage().pixelColor(10, 10) == QColor(color)
+            assert editor.compact_player.surface.ambient_source.toImage() == editor.compact_player.surface.cover_pixmap.toImage()
+    finally:
+        _close(editor)
+        bar.close()
+
+
+def test_variant_d_cover_is_larger_without_moving_play_or_changing_player_height(tmp_path):
+    app = _app()
+    bar = PlayerBar()
+    compact = CompactPlayerBar(bar, TrackRecord(path=tmp_path / 'track.mp3'))
+    try:
+        for widget, width, height in ((bar, 1450, 114), (compact, 1300, 74)):
+            widget.resize(width, height)
+            widget.show()
+            app.processEvents()
+            surface = widget.surface
+            assert 60 <= surface.cover.width() <= 64
+            assert surface.cover.width() == surface.cover.height()
+            assert surface.cover.height() < surface.height()
+            landscape = QPixmap(120, 60)
+            landscape.fill(QColor('#395689'))
+            surface.set_cover_pixmap(landscape)
+            assert surface.cover.pixmap().width() == 60
+            assert surface.cover.pixmap().height() == 30
+            assert surface.play.mapTo(surface, QPoint(0, 0)).x() <= 432
+            assert surface.seek.mapTo(surface, QPoint(0, 0)).x() <= 540
+            if widget is bar:
+                assert widget.minimumHeight() == 114
+            else:
+                assert widget.height() == 74
+    finally:
+        compact.close()
+        bar.close()

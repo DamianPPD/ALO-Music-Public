@@ -1180,6 +1180,8 @@ class MetadataEditorDialog(QDialog):
         root.addLayout(buttons)
 
         self._load_cover_gallery()
+        if self.compact_player is not None:
+            self.compact_player.player_bar.cover_ready.connect(self._playing_cover_ready)
         self._refresh_source_comparison()
         self._connect_edit_tracking()
         self.discogs_url.textChanged.connect(self._refresh_url_action)
@@ -2295,6 +2297,15 @@ class MetadataEditorDialog(QDialog):
             mb_url = f'https://coverartarchive.org/release/{self.track.musicbrainz_release_id}/front-500'
             raw_covers.setdefault('MusicBrainz', mb_url)
 
+        playing_cover_url = None
+        playing_cover_pixmap = QPixmap()
+        if self.compact_player is not None:
+            bar = self.compact_player.player_bar
+            if (bar.current_track is not None
+                    and Path(bar.current_track.path).resolve() == Path(self.track.path).resolve()):
+                playing_cover_url = bar._cover_loaded_url
+                playing_cover_pixmap = bar._cover_pixmap
+
         online_slots = 5 - int(not source_pix.isNull()) - int(not manual.isNull())
         online_covers = [(source, url) for source, url in raw_covers.items() if url]
         if self.cover_choice == 'external' and self._selected_external_url:
@@ -2304,14 +2315,16 @@ class MetadataEditorDialog(QDialog):
         for source, url in online_covers[:online_slots]:
             key = f'external:{source}'
             self._cover_candidate_urls[key] = str(url)
-            self._cover_candidate_pixmaps[key] = QPixmap()
-            self._cover_candidate_states[key] = 'loading'
+            cached = playing_cover_pixmap if playing_cover_url == str(url) else QPixmap()
+            self._cover_candidate_pixmaps[key] = cached
+            self._cover_candidate_states[key] = 'ready' if not cached.isNull() else 'loading'
             self._cover_notes[key] = f'Okładka online — {source}.'
 
         self._rebuild_cover_proposals()
 
         for key, url in self._cover_candidate_urls.items():
-            self._load_candidate_cover(key, url, serial)
+            if self._cover_candidate_states[key] == 'loading':
+                self._load_candidate_cover(key, url, serial)
 
         explicit = (self.cover_choice or 'auto').casefold()
         selected = 'placeholder'
@@ -2336,6 +2349,17 @@ class MetadataEditorDialog(QDialog):
             elif not source_pix.isNull():
                 selected = 'source'
         self._select_cover_choice(selected, allow_unavailable=True, record_undo=False)
+
+    def _playing_cover_ready(self, path: Path, url: str, pix: QPixmap) -> None:
+        if Path(path).resolve() != Path(self.track.path).resolve() or pix.isNull():
+            return
+        key = getattr(self, '_selected_cover_key', '')
+        if not key.startswith('external:') or self._cover_candidate_urls.get(key) != url:
+            return
+        self._cover_candidate_pixmaps[key] = pix
+        self._cover_candidate_states[key] = 'ready'
+        self._refresh_cover_proposal_widget(key)
+        self._update_cover_main_preview()
 
     def _rebuild_cover_proposals(self) -> None:
         self._clear_cover_proposals()
@@ -2435,6 +2459,9 @@ class MetadataEditorDialog(QDialog):
     def _cover_request_timed_out(self, reply: QNetworkReply, key: str, serial: int) -> None:
         if serial != self._cover_request_serial or reply not in self._cover_pending_replies:
             return
+        if self._cover_candidate_states.get(key) == 'ready' and not self._cover_candidate_pixmaps.get(key, QPixmap()).isNull():
+            reply.abort()
+            return
         self._cover_candidate_states[key] = 'error'
         self._cover_candidate_pixmaps[key] = QPixmap()
         self._cover_details.pop(key, None)
@@ -2458,6 +2485,8 @@ class MetadataEditorDialog(QDialog):
                 if not pix.isNull():
                     self._cover_details[key] = {'bytes': len(data), 'format': self._cover_image_format(data),
                                                 'type': 'Okładka główna (Front)'}
+            if pix.isNull() and self._cover_candidate_states.get(key) == 'ready' and not self._cover_candidate_pixmaps.get(key, QPixmap()).isNull():
+                return
             self._cover_candidate_pixmaps[key] = pix
             self._cover_candidate_states[key] = 'ready' if not pix.isNull() else 'error'
             if pix.isNull():

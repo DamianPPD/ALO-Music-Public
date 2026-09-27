@@ -6,11 +6,13 @@ from threading import Event
 from PySide6.QtCore import Qt, QUrl, Signal, QTimer, QSize, QThreadPool, Slot, QPoint, QRect
 from PySide6.QtGui import QPixmap, QColor, QPainter, QLinearGradient
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QMediaDevices
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from PySide6.QtWidgets import (
     QWidget, QFrame, QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout,
     QSizePolicy, QComboBox,
 )
 
+from audio_library_organizer import __version__
 from audio_library_organizer.domain.models import TrackRecord
 from audio_library_organizer.metadata.artwork import extract_embedded_cover
 from audio_library_organizer.ui.widgets import ClickableCoverLabel, ElidedLabel, show_cover_preview
@@ -75,14 +77,14 @@ class VariantDPlayerSurface(QFrame):
 
         self.cover = ClickableCoverLabel('')
         self.cover.setObjectName('VariantDCover')
-        self.cover.setFixedSize(52, 52)
+        self.cover.setFixedSize(62, 62)
         self.cover.setAlignment(Qt.AlignmentFlag.AlignCenter)
         row.addWidget(self.cover, 0, Qt.AlignmentFlag.AlignVCenter)
 
         info = QWidget(self)
         info.setObjectName('VariantDIdentity')
         info.setMinimumWidth(0)
-        info.setMaximumWidth(350)
+        info.setMaximumWidth(340)
         info.setMaximumHeight(52)
         labels = QVBoxLayout(info)
         labels.setContentsMargins(0, 0, 0, 0)
@@ -157,7 +159,7 @@ class VariantDPlayerSurface(QFrame):
         self._ambient_cache = QPixmap()
         self._ambient_cache_size = (0, 0)
         self.cover.setText('' if not pixmap.isNull() else '—')
-        self.cover.setPixmap(pixmap.scaled(50, 50, Qt.AspectRatioMode.KeepAspectRatio,
+        self.cover.setPixmap(pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio,
                                          Qt.TransformationMode.SmoothTransformation) if not pixmap.isNull() else QPixmap())
         self.update()
 
@@ -181,22 +183,22 @@ class VariantDPlayerSurface(QFrame):
             left = max(0, (enlarged.width() - end) // 2)
             top = max(0, (enlarged.height() - self.height()) // 2)
             self._ambient_cache = enlarged.copy(left, top, end, self.height()).scaled(
-                max(32, end // 3), max(20, self.height() // 2), Qt.AspectRatioMode.IgnoreAspectRatio,
+                max(40, end // 2), max(24, self.height() * 2 // 3), Qt.AspectRatioMode.IgnoreAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
             self._ambient_cache_size = (end, self.height())
         painter.drawPixmap(QRect(0, 0, end, self.height()), self._ambient_cache)
         fade = QLinearGradient(0, 0, end, 0)
-        fade.setColorAt(0, QColor(9, 16, 20, 140))
-        fade.setColorAt(.35, QColor(9, 16, 20, 150))
-        fade.setColorAt(.68, QColor(9, 16, 20, 195))
+        fade.setColorAt(0, QColor(9, 16, 20, 120))
+        fade.setColorAt(.35, QColor(9, 16, 20, 130))
+        fade.setColorAt(.68, QColor(9, 16, 20, 185))
         fade.setColorAt(1, QColor(15, 21, 29, 255))
         painter.fillRect(QRect(0, 0, end, self.height()), fade)
         # Keep title and artist legible even when the enlarged cover is bright.
         text_shade = QLinearGradient(0, 0, 0, self.height())
         text_shade.setColorAt(0, QColor(9, 16, 20, 0))
-        text_shade.setColorAt(.25, QColor(9, 16, 20, 75))
-        text_shade.setColorAt(.60, QColor(9, 16, 20, 75))
+        text_shade.setColorAt(.25, QColor(9, 16, 20, 95))
+        text_shade.setColorAt(.60, QColor(9, 16, 20, 95))
         text_shade.setColorAt(.75, QColor(9, 16, 20, 0))
         painter.fillRect(QRect(self.cover.x() + self.cover.width(), 0,
                                max(0, end - self.cover.x() - self.cover.width()), self.height()), text_shade)
@@ -207,6 +209,7 @@ class PlayerBar(QWidget):
     track_activated = Signal(object)
     track_changed = Signal(object)
     waveform_changed = Signal(object)
+    cover_ready = Signal(object, str, object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -223,6 +226,10 @@ class PlayerBar(QWidget):
         self._playback_error_text = ''
         self._cover_pixmap = QPixmap()
         self._cover_note = ''
+        self._cover_loaded_url: str | None = None
+        self._cover_request_serial = 0
+        self._cover_reply: QNetworkReply | None = None
+        self._cover_network = QNetworkAccessManager(self)
         self._pending_seek = PendingPlaybackPosition(end_margin_ms=250)
         self._pending_seek_generation: int | None = None
         self._pending_source_url: QUrl | None = None
@@ -415,6 +422,8 @@ class PlayerBar(QWidget):
         source_url = QUrl.fromLocalFile(str(self.current_path.resolve()))
         self._pending_source_url = source_url
         if not keep_display:
+            self._cancel_cover_request()
+            self._cover_loaded_url = None
             self.current_track = None
             self.current_source_label = 'Plik lokalny'
             self.artist.setText(ui_text(self, 'Plik lokalny'))
@@ -525,21 +534,70 @@ class PlayerBar(QWidget):
                 self.clear_queue()
                 self.load_track(track, autoplay=True, source_label=source)
 
+    def _cancel_cover_request(self) -> int:
+        self._cover_request_serial += 1
+        reply, self._cover_reply = self._cover_reply, None
+        if reply is not None:
+            reply.abort()
+        return self._cover_request_serial
+
+    def _set_cover_image(self, pix: QPixmap, note: str = '') -> None:
+        if pix.isNull():
+            pix = QPixmap(str(asset_path(localized_no_cover_name(self))))
+            note = 'Brak potwierdzonej okładki — grafika zastępcza ALO Music.'
+        self._cover_pixmap = pix
+        self._cover_note = note
+        self.surface.set_cover_pixmap(pix)
+
     def _load_cover(self, track: TrackRecord):
+        serial = self._cancel_cover_request()
+        self._cover_loaded_url = None
+        choice = (track.cover_choice or 'auto').casefold()
+        if choice == 'placeholder':
+            self._set_cover_image(QPixmap())
+            return
         pix = QPixmap()
-        if track.manual_cover_path:
+        if choice in {'auto', 'manual'} and track.manual_cover_path:
             pix = QPixmap(track.manual_cover_path)
+        manual_ready = not pix.isNull()
         if pix.isNull():
             embedded = extract_embedded_cover(track.path)
             if embedded:
                 pix.loadFromData(embedded[0])
-        if pix.isNull():
-            pix = QPixmap(str(asset_path(localized_no_cover_name(self))))
-            self._cover_note = 'Brak potwierdzonej okładki — grafika zastępcza ALO Music.'
-        else:
-            self._cover_note = ''
-        self._cover_pixmap = pix
-        self.surface.set_cover_pixmap(pix)
+        self._set_cover_image(pix)
+        if choice == 'source' or (choice == 'auto' and manual_ready):
+            return
+        url = track.cover_art_url or (
+            f'https://coverartarchive.org/release/{track.musicbrainz_release_id}/front-500'
+            if track.musicbrainz_release_id else None
+        )
+        if choice not in {'auto', 'external'} or not url:
+            return
+        request = QNetworkRequest(QUrl(url))
+        request.setHeader(QNetworkRequest.KnownHeaders.UserAgentHeader, f'ALO Music/{__version__}')
+        reply = self._cover_network.get(request)
+        self._cover_reply = reply
+        reply.finished.connect(lambda r=reply, s=serial, p=Path(track.path), u=url:
+                               self._remote_cover_finished(r, s, p, u))
+
+    def _remote_cover_finished(self, reply: QNetworkReply, serial: int, path: Path, url: str) -> None:
+        try:
+            if serial != self._cover_request_serial or self.current_track is None:
+                return
+            if Path(self.current_track.path).resolve() != path.resolve():
+                return
+            if reply.error() != QNetworkReply.NetworkError.NoError:
+                return
+            pix = QPixmap()
+            if not pix.loadFromData(bytes(reply.readAll())) or pix.isNull():
+                return
+            self._cover_loaded_url = url
+            self._set_cover_image(pix)
+            self.cover_ready.emit(path, url, pix)
+        finally:
+            if reply is self._cover_reply:
+                self._cover_reply = None
+            reply.deleteLater()
 
     def _state(self, state):
         playing = state == QMediaPlayer.PlaybackState.PlayingState
@@ -646,8 +704,13 @@ class CompactPlayerBar(QFrame):
         self.speaker.clicked.connect(self.player_bar._toggle_mute)
         self.player_bar.audio.mutedChanged.connect(self.surface.set_muted)
         self.volume.valueChanged.connect(self.player_bar.volume.setValue)
-        selected = QPixmap(track.manual_cover_path) if track.manual_cover_path else QPixmap()
-        if selected.isNull():
+        choice = (track.cover_choice or 'auto').casefold()
+        selected = QPixmap(track.manual_cover_path) if choice in {'auto', 'manual'} and track.manual_cover_path else QPixmap()
+        if choice in {'external', 'auto'} and self.player_bar.current_track is not None:
+            loaded_url = self.player_bar._cover_loaded_url
+            if loaded_url and loaded_url == track.cover_art_url and Path(self.player_bar.current_track.path).resolve() == Path(track.path).resolve():
+                selected = self.player_bar._cover_pixmap
+        if choice != 'placeholder' and selected.isNull():
             embedded = extract_embedded_cover(track.path)
             if embedded:
                 selected.loadFromData(embedded[0])
