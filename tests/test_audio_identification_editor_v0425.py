@@ -63,6 +63,57 @@ def test_candidates_are_compact_columns_and_approval_collapses_to_summary(tmp_pa
         editor.close()
 
 
+def test_approved_candidate_cannot_be_confirmed_twice_and_another_can_replace_it(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    editor = MetadataEditorDialog(TrackRecord(path=tmp_path / 'song.mp3'))
+    confirmed = []
+    editor.audio_source_confirmed.connect(lambda _editor, previous: confirmed.append(previous))
+    try:
+        editor.show_audio_candidates([
+            AcoustIDHit('first', .94, 'First mix', 'Artist', 'Single', '2006', 'ac-first'),
+            AcoustIDHit('second', .88, 'Second mix', 'Artist', 'Album', '2007', 'ac-second'),
+        ])
+        editor.show()
+        app.processEvents()
+        editor.audio_candidates.setCurrentCell(0, 1)
+        editor.audio_confirm_button.click()
+        assert len(confirmed) == 1
+
+        editor.audio_show_candidates_button.click()
+        editor.audio_candidates.setCurrentCell(0, 2)
+        assert not editor.audio_candidates.item(0, 0).icon().isNull()
+        assert editor.audio_confirm_button.text() == 'Aktualnie wybrane'
+        assert not editor.audio_confirm_button.icon().isNull()
+        assert not editor.audio_confirm_button.isEnabled()
+        editor._approve_audio_candidate()  # Even a direct repeat cannot write the source again.
+        assert len(confirmed) == 1
+
+        apply_static_language(editor, 'en')
+        editor.refresh_audio_language()
+        assert editor.audio_confirm_button.text() == 'Currently selected'
+        assert not editor.audio_confirm_button.isEnabled()
+        editor.audio_candidates.setCurrentCell(1, 1)
+        assert editor.audio_confirm_button.text() == 'Confirm as audio source'
+        assert editor.audio_confirm_button.isEnabled()
+        apply_static_language(editor, 'pl')
+        editor.refresh_audio_language()
+        assert editor.audio_confirm_button.text() == 'Zatwierdź jako źródło audio'
+        editor.audio_confirm_button.click()
+        assert len(confirmed) == 2
+        assert editor.track.audio_recognition['recording_id'] == 'second'
+        assert editor._source_values['title'][SOURCE] == 'Second mix'
+        assert editor.recognition_values['audio_status'].text() == 'Zatwierdzone'
+        assert editor.audio_summary.isVisible()
+        editor.audio_show_candidates_button.click()
+        assert editor.audio_candidates.item(0, 0).icon().isNull()
+        assert not editor.audio_candidates.item(1, 0).icon().isNull()
+        assert editor.audio_confirm_button.text() == 'Aktualnie wybrane'
+        assert not editor.audio_confirm_button.isEnabled()
+    finally:
+        editor._force_closing = True
+        editor.close()
+
+
 def test_candidate_hover_and_selection_keep_whole_row_without_focus_frame(tmp_path):
     app = QApplication.instance() or QApplication([])
     old_style = app.styleSheet()
@@ -184,7 +235,8 @@ def test_editor_candidate_approval_is_explicit_and_shows_full_source(tmp_path):
         apply_static_language(editor, 'en')
         editor.refresh_audio_language()
         assert editor.audio_scan_button.text() == 'Identify by audio'
-        assert editor.audio_confirm_button.text() == 'Confirm as audio source'
+        assert editor.audio_confirm_button.text() == 'Currently selected'
+        assert not editor.audio_confirm_button.isEnabled()
         assert editor.audio_summary_heading.text() == 'Audio source confirmed'
         assert editor.recognition_values['audio_status'].text() == 'Approved'
         assert 'AUDIO RECOGNITION' in [editor.source_table.item(row, 0).text() for row in range(editor.source_table.rowCount())]

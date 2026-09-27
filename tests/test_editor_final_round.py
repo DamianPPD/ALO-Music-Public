@@ -3,7 +3,7 @@ from pathlib import Path
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QRect, QSettings
 from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 
@@ -199,6 +199,55 @@ def test_source_comparison_refresh_removes_stale_first_column_button(tmp_path: P
             assert table.columnViewportPosition(5) > table.columnViewportPosition(0) + table.columnWidth(0)
     finally:
         _close(dialog)
+
+
+def test_editor_initial_geometry_fits_work_area_and_is_resizable(tmp_path: Path, monkeypatch):
+    from types import SimpleNamespace
+
+    app = _app()
+    for area, expected in (
+        (QRect(0, 0, 2000, 1200), (1520, 1020)),
+        (QRect(40, 20, 1280, 800), (1248, 736)),
+        (QRect(40, 20, 800, 600), (768, 536)),
+    ):
+        monkeypatch.setattr(MetadataEditorDialog, 'screen',
+                            lambda self, area=area: SimpleNamespace(availableGeometry=lambda: area))
+        dialog = MetadataEditorDialog(_track(tmp_path))
+        try:
+            assert (dialog.width(), dialog.height()) == expected
+            dialog.show()
+            app.processEvents()
+            assert area.contains(dialog.frameGeometry())
+            original = dialog.size()
+            dialog.resize(original.width() - 40, original.height() - 40)
+            app.processEvents()
+            assert dialog.width() == original.width() - 40
+            assert dialog.height() == original.height() - 40
+        finally:
+            _close(dialog)
+
+
+def test_editor_size_does_not_change_main_window_default(tmp_path: Path):
+    from audio_library_organizer.domain.settings import AppSettings, LibraryPaths
+    from audio_library_organizer.ui.main_window import MainWindow
+
+    app = _app()
+    previous_style = app.styleSheet()
+    window = MainWindow(AppSettings((), LibraryPaths(tmp_path / 'library')),
+                        QSettings(str(tmp_path / 'prefs.ini'), QSettings.Format.IniFormat))
+    try:
+        before = window.size()
+        dialog = MetadataEditorDialog(_track(tmp_path), window)
+        try:
+            assert window.size() == before
+            dialog.resize(1200, 850)
+            app.processEvents()
+            assert window.size() == before
+        finally:
+            _close(dialog)
+    finally:
+        window.close()
+        app.setStyleSheet(previous_style)
 
 
 def test_long_track_names_elide_but_keep_full_tooltips(tmp_path: Path):

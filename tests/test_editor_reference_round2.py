@@ -40,8 +40,9 @@ def test_editor_initial_size_fills_screen_without_exceeding_available_geometry(t
         available = dialog.screen().availableGeometry()
         assert dialog.width() <= available.width()
         assert dialog.height() <= available.height()
-        assert dialog.width() >= min(1680, int(available.width() * 0.96))
-        assert dialog.height() >= min(1040, int(available.height() * 0.90))
+        if available.width() >= 1600 and available.height() >= 1100:
+            assert 1500 <= dialog.width() <= 1550
+            assert 1000 <= dialog.height() <= 1050
     finally:
         dialog._force_closing = True
         dialog.close()

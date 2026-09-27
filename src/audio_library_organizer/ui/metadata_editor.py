@@ -444,9 +444,11 @@ class MetadataEditorDialog(QDialog):
 
         self.setWindowTitle('Edytuj metadane')
         available = self.screen().availableGeometry()
-        target_width = min(1680, max(760, round(available.width() * 0.98)))
-        target_height = min(1040, max(680, round(available.height() * 0.96)))
-        self.resize(min(target_width, available.width()), min(target_height, available.height()))
+        target_width = min(1520, max(1, available.width() - 32))
+        target_height = min(1020, max(1, available.height() - 64))
+        self.resize(target_width, target_height)
+        self.move(available.x() + (available.width() - target_width) // 2,
+                  available.y() + (available.height() - target_height) // 2)
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 14, 16, 14)
         root.setSpacing(9)
@@ -1319,7 +1321,7 @@ class MetadataEditorDialog(QDialog):
         self._audio_hits.clear()
         self.audio_candidates.setRowCount(0)
         self.audio_detail.clear()
-        self.audio_confirm_button.setEnabled(False)
+        self._update_audio_confirm_button(-1)
         self.audio_phase_header.show()
         if self.track.audio_recognition:
             self.audio_candidate_content.hide()
@@ -1335,6 +1337,7 @@ class MetadataEditorDialog(QDialog):
         self.audio_scan_button.setEnabled(not busy and not self.online_lock.isChecked())
         self.audio_retry_button.setEnabled(not busy and not self.online_lock.isChecked())
         self.audio_scan_button.setText(ui_text(self, 'Rozpoznawanie…' if busy else 'Rozpoznaj po audio'))
+        self._update_audio_confirm_button(self.audio_candidates.currentRow())
         self.previous_file_button.setEnabled(not busy and self.navigation_index > 0)
         self.next_file_button.setEnabled(not busy and self.navigation_index + 1 < self.navigation_total)
 
@@ -1372,7 +1375,7 @@ class MetadataEditorDialog(QDialog):
         self.audio_candidates.setFixedHeight(26 + max(1, len(self._audio_hits)) * 27 + 6)
         self.audio_phase.setText(ui_text(self, 'Znaleziono kandydatów' if self._audio_hits else 'Brak wyników'))
         self.audio_detail.setText('' if self._audio_hits else ui_text(self, 'Brak kandydatów z wykonawcą i tytułem.'))
-        self.audio_confirm_button.setEnabled(False)
+        self._update_audio_confirm_button(-1)
         self.set_audio_scan_busy(False)
 
     def _approved_audio_hit(self) -> AcoustIDHit | None:
@@ -1383,15 +1386,26 @@ class MetadataEditorDialog(QDialog):
                            approved['artist'], approved.get('album'), approved.get('year'), approved.get('acoustid_id'))
 
     def _refresh_audio_candidate_markers(self) -> None:
-        approved = self.track.audio_recognition or {}
         for row, hit in enumerate(self._audio_hits):
             item = self.audio_candidates.item(row, 0)
             if item:
-                is_approved = approved.get('recording_id') == hit.recording_id
+                is_approved = self._audio_hit_is_approved(hit)
                 item.setText('' if is_approved else '○')
                 item.setIcon(editor_icon('check', '#20c5c3', 13) if is_approved else QIcon())
                 item.setToolTip(ui_text(self, 'Źródło audio zatwierdzone') if is_approved else '')
                 item.setForeground(QColor('#20c5c3'))
+
+    def _audio_hit_is_approved(self, hit: AcoustIDHit) -> bool:
+        approved = self.track.audio_recognition or {}
+        return bool(approved.get('recording_id')) and approved['recording_id'] == hit.recording_id
+
+    def _update_audio_confirm_button(self, index: int) -> None:
+        valid = 0 <= index < len(self._audio_hits)
+        approved = valid and self._audio_hit_is_approved(self._audio_hits[index])
+        self.audio_confirm_button.setText(ui_text(self, 'Aktualnie wybrane' if approved else 'Zatwierdź jako źródło audio'))
+        self.audio_confirm_button.setIcon(editor_icon('check', '#20c5c3', 14) if approved else QIcon())
+        self.audio_confirm_button.setIconSize(QSize(14, 14))
+        self.audio_confirm_button.setEnabled(valid and not approved and not self._audio_scan_busy)
 
     def _refresh_audio_summary(self) -> None:
         approved = self.track.audio_recognition or {}
@@ -1415,9 +1429,10 @@ class MetadataEditorDialog(QDialog):
         self.audio_phase_header.show()
         self.audio_candidate_content.show()
         self._refresh_audio_candidate_markers()
+        self._update_audio_confirm_button(self.audio_candidates.currentRow())
 
     def _show_audio_candidate_detail(self, index: int) -> None:
-        self.audio_confirm_button.setEnabled(0 <= index < len(self._audio_hits) and not self._audio_scan_busy)
+        self._update_audio_confirm_button(index)
         if 0 <= index < len(self._audio_hits):
             hit = self._audio_hits[index]
             details = [f'{ui_text(self, "Album")}: {hit.album or "—"}',
@@ -1429,7 +1444,7 @@ class MetadataEditorDialog(QDialog):
 
     def _approve_audio_candidate(self) -> None:
         index = self.audio_candidates.currentRow()
-        if not 0 <= index < len(self._audio_hits):
+        if not 0 <= index < len(self._audio_hits) or self._audio_hit_is_approved(self._audio_hits[index]):
             return
         previous = deepcopy(self.track)
         approve_audio_source(self.track, self._audio_hits[index])
@@ -1452,8 +1467,7 @@ class MetadataEditorDialog(QDialog):
         self._refresh_source_comparison()
         self._refresh_recognition_info()
         self._refresh_audio_summary()
-        if self.audio_candidates.currentRow() >= 0:
-            self._show_audio_candidate_detail(self.audio_candidates.currentRow())
+        self._show_audio_candidate_detail(self.audio_candidates.currentRow())
 
     def apply_online_result(self, track: TrackRecord) -> None:
         """Refresh the open editor from the just-saved single-track online result."""
