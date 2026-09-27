@@ -1,17 +1,19 @@
 import os
 import time
+import pytest
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import QSettings, Qt, QThread
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLabel, QWidgetAction
 import requests
+from shiboken6 import isValid
 
 from audio_library_organizer.domain.candidates import AcoustIDHit
 from audio_library_organizer.audio.fingerprint import FingerprintResult
 from audio_library_organizer.domain.models import TrackRecord
-from audio_library_organizer.jobs.audio_identification import SOURCE
+from audio_library_organizer.jobs.audio_identification import SOURCE, approve_audio_source
 from audio_library_organizer.domain.settings import AppSettings, LibraryPaths
 from audio_library_organizer.domain.preferences import AppPreferences
 from audio_library_organizer.ui.i18n import apply_static_language
@@ -63,7 +65,7 @@ def test_candidates_are_compact_columns_and_approval_collapses_to_summary(tmp_pa
         editor.close()
 
 
-def test_approved_candidate_cannot_be_confirmed_twice_and_another_can_replace_it(tmp_path):
+def test_approved_candidate_can_be_reconfirmed_and_selected_again_after_switching(tmp_path):
     app = QApplication.instance() or QApplication([])
     editor = MetadataEditorDialog(TrackRecord(path=tmp_path / 'song.mp3'))
     confirmed = []
@@ -82,16 +84,17 @@ def test_approved_candidate_cannot_be_confirmed_twice_and_another_can_replace_it
         editor.audio_show_candidates_button.click()
         editor.audio_candidates.setCurrentCell(0, 2)
         assert not editor.audio_candidates.item(0, 0).icon().isNull()
-        assert editor.audio_confirm_button.text() == 'Aktualnie wybrane'
-        assert not editor.audio_confirm_button.icon().isNull()
-        assert not editor.audio_confirm_button.isEnabled()
-        editor._approve_audio_candidate()  # Even a direct repeat cannot write the source again.
-        assert len(confirmed) == 1
+        assert editor.audio_confirm_button.text() == 'Zatwierdź jako źródło audio'
+        assert editor.audio_confirm_button.isEnabled()
+        editor.audio_confirm_button.click()
+        assert len(confirmed) == 2
+        assert editor.track.audio_recognition['recording_id'] == 'first'
 
         apply_static_language(editor, 'en')
         editor.refresh_audio_language()
-        assert editor.audio_confirm_button.text() == 'Currently selected'
-        assert not editor.audio_confirm_button.isEnabled()
+        editor.audio_show_candidates_button.click()
+        assert editor.audio_confirm_button.text() == 'Confirm as audio source'
+        assert editor.audio_confirm_button.isEnabled()
         editor.audio_candidates.setCurrentCell(1, 1)
         assert editor.audio_confirm_button.text() == 'Confirm as audio source'
         assert editor.audio_confirm_button.isEnabled()
@@ -99,7 +102,7 @@ def test_approved_candidate_cannot_be_confirmed_twice_and_another_can_replace_it
         editor.refresh_audio_language()
         assert editor.audio_confirm_button.text() == 'Zatwierdź jako źródło audio'
         editor.audio_confirm_button.click()
-        assert len(confirmed) == 2
+        assert len(confirmed) == 3
         assert editor.track.audio_recognition['recording_id'] == 'second'
         assert editor._source_values['title'][SOURCE] == 'Second mix'
         assert editor.recognition_values['audio_status'].text() == 'Zatwierdzone'
@@ -107,11 +110,117 @@ def test_approved_candidate_cannot_be_confirmed_twice_and_another_can_replace_it
         editor.audio_show_candidates_button.click()
         assert editor.audio_candidates.item(0, 0).icon().isNull()
         assert not editor.audio_candidates.item(1, 0).icon().isNull()
-        assert editor.audio_confirm_button.text() == 'Aktualnie wybrane'
-        assert not editor.audio_confirm_button.isEnabled()
+        editor.audio_candidates.setCurrentCell(0, 1)
+        assert editor.audio_confirm_button.text() == 'Zatwierdź jako źródło audio'
+        assert editor.audio_confirm_button.isEnabled()
+        editor.audio_confirm_button.click()
+        assert len(confirmed) == 4
+        assert editor.track.audio_recognition['recording_id'] == 'first'
+        assert editor._source_values['title'][SOURCE] == 'First mix'
+        assert editor._source_rows().count(SOURCE) == 1
+        editor.audio_show_candidates_button.click()
+        assert not editor.audio_candidates.item(0, 0).icon().isNull()
+        assert editor.audio_candidates.item(1, 0).icon().isNull()
     finally:
         editor._force_closing = True
         editor.close()
+
+
+@pytest.mark.parametrize('outcome', ('success', 'no_results', 'error'))
+def test_audio_thread_completion_releases_retry_only_after_idle(tmp_path, monkeypatch, outcome):
+    from audio_library_organizer.ui import main_window as main_window_module
+
+    app = QApplication.instance() or QApplication([])
+    previous_style = app.styleSheet()
+    threads = []
+
+    class HeldThread(QThread):
+        stop_requested = False
+
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            threads.append(self)
+
+        def quit(self):
+            self.stop_requested = True
+
+        def release(self):
+            super().quit()
+
+    class LookupJob:
+        calls = 0
+
+        def lookup(self, _track, *, progress):
+            self.calls += 1
+            progress('lookup')
+            if self.calls == 1 and outcome == 'error':
+                raise requests.Timeout('timed out')
+            if self.calls == 1 and outcome == 'no_results':
+                return []
+            return [AcoustIDHit('new-recording', .93, 'New mix', 'Artist', acoustid_id='ac-new')]
+
+    def until(predicate):
+        deadline = time.monotonic() + 3
+        while not predicate() and time.monotonic() < deadline:
+            app.processEvents()
+            time.sleep(.005)
+        assert predicate()
+
+    job = LookupJob()
+    monkeypatch.setattr(main_window_module, 'QThread', HeldThread)
+    monkeypatch.setattr(main_window_module, 'AudioIdentification', lambda *_args, **_kwargs: job)
+    window = MainWindow(AppSettings((), LibraryPaths(tmp_path / 'library')),
+                        QSettings(str(tmp_path / 'prefs.ini'), QSettings.Format.IniFormat))
+    track = TrackRecord(path=tmp_path / 'song.mp3')
+    approve_audio_source(track, AcoustIDHit('old-recording', .9, 'Old mix', 'Artist', acoustid_id='ac-old'))
+    editor = MetadataEditorDialog(track, window)
+    editor.audio_scan_requested.connect(lambda e: window._start_audio_identification(track, e))
+    try:
+        editor.show()
+        editor.audio_scan_button.click()
+        first = window._thread
+        until(lambda: first.stop_requested)
+        assert window._thread is first
+        assert editor._audio_scan_busy
+        assert not editor.audio_scan_button.isEnabled()
+        assert not editor.audio_retry_button.isEnabled()
+        assert editor.track.audio_recognition['recording_id'] == 'old-recording'
+        assert 'Najpierw zakończ bieżącą operację.' not in editor.audio_detail.text()
+
+        first.release()
+        until(lambda: window._thread is None)
+        assert not editor._audio_scan_busy
+        assert editor.audio_scan_button.isEnabled()
+        if outcome == 'success':
+            editor.audio_candidates.setCurrentCell(0, 1)
+            editor.audio_confirm_button.click()
+            assert editor.track.audio_recognition['recording_id'] == 'new-recording'
+            retry = editor.audio_retry_button
+        elif outcome == 'error':
+            assert editor.audio_phase.text() == 'Błąd rozpoznawania audio'
+            retry = editor.audio_retry_button
+        else:
+            assert editor.audio_phase.text() == 'Brak wyników'
+            retry = editor.audio_scan_button
+        assert retry.isEnabled()
+        retry.click()
+        assert window._thread is not None
+        second = window._thread
+        until(lambda: second.stop_requested)
+        second.release()
+        until(lambda: window._thread is None)
+        assert job.calls == 2
+        assert 'Najpierw zakończ bieżącą operację.' not in editor.audio_detail.text()
+    finally:
+        for thread in threads:
+            if isValid(thread) and thread.isRunning():
+                thread.release()
+                thread.wait(2000)
+        app.processEvents()
+        editor._force_closing = True
+        editor.close()
+        window.close()
+        app.setStyleSheet(previous_style)
 
 
 def test_candidate_hover_and_selection_keep_whole_row_without_focus_frame(tmp_path):
@@ -235,8 +344,8 @@ def test_editor_candidate_approval_is_explicit_and_shows_full_source(tmp_path):
         apply_static_language(editor, 'en')
         editor.refresh_audio_language()
         assert editor.audio_scan_button.text() == 'Identify by audio'
-        assert editor.audio_confirm_button.text() == 'Currently selected'
-        assert not editor.audio_confirm_button.isEnabled()
+        assert editor.audio_confirm_button.text() == 'Confirm as audio source'
+        assert editor.audio_confirm_button.isEnabled()
         assert editor.audio_summary_heading.text() == 'Audio source confirmed'
         assert editor.recognition_values['audio_status'].text() == 'Approved'
         assert 'AUDIO RECOGNITION' in [editor.source_table.item(row, 0).text() for row in range(editor.source_table.rowCount())]
@@ -324,9 +433,24 @@ def test_confirm_in_real_editor_workflow_persists_without_test_upsert(tmp_path, 
     track.path.write_bytes(b'placeholder')
 
     def use_editor(editor):
-        editor.show_audio_candidates([AcoustIDHit('mb1', .94, 'Song', 'Artist', 'Album', '2012', 'ac1')])
+        editor.show_audio_candidates([
+            AcoustIDHit('mb1', .94, 'Song', 'Artist', 'Album', '2012', 'ac1'),
+            AcoustIDHit('mb2', .89, 'Other song', 'Other artist', 'Other album', '2015', 'ac2'),
+        ])
         editor.audio_candidates.setCurrentCell(0, 1)
         editor.audio_confirm_button.click()
+        editor.audio_show_candidates_button.click()
+        assert editor.audio_confirm_button.isEnabled()
+        editor.audio_confirm_button.click()  # Repeat A without creating another source.
+        editor.audio_show_candidates_button.click()
+        editor.audio_candidates.setCurrentCell(1, 1)
+        editor.audio_confirm_button.click()  # A -> B.
+        assert window.repository.list_tracks()[0].audio_recognition['recording_id'] == 'mb2'
+        editor.audio_show_candidates_button.click()
+        editor.audio_candidates.setCurrentCell(0, 1)
+        editor.audio_confirm_button.click()  # B -> A.
+        assert len(window.repository.list_tracks()) == 1
+        assert editor._source_rows().count(SOURCE) == 1
         editor._force_closing = True
         return 0
 

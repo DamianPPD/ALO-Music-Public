@@ -935,7 +935,6 @@ TEXT_MAP_EN.update({
     'Brak kandydatów z wykonawcą i tytułem.': 'No candidates with an artist and title.',
     'Wynik jest propozycją, nie gwarancją poprawności.': 'This result is a suggestion, not a guarantee.',
     'Zatwierdź jako źródło audio': 'Confirm as audio source',
-    'Aktualnie wybrane': 'Currently selected',
     'Źródło audio zatwierdzone': 'Audio source confirmed',
     'Pokaż kandydatów': 'Show candidates',
     'Rozpoznaj ponownie': 'Recognize again',

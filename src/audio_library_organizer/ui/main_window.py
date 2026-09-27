@@ -1588,7 +1588,7 @@ class MainWindow(QMainWindow):
         if self._thread is not None:
             editor.show_audio_error('Najpierw zakończ bieżącą operację.')
             return
-        editor.start_audio_lookup()
+        editor.start_audio_lookup(wait_for_thread=True)
         cfg = ProviderSettings.from_store(self.qt_settings)
         job = AudioIdentification(AcoustIDClient(cfg.acoustid_key),
                                   musicbrainz_client=MusicBrainzClient(cfg.musicbrainz_contact))
@@ -1604,6 +1604,7 @@ class MainWindow(QMainWindow):
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
         thread.finished.connect(self._thread_done)
+        thread.finished.connect(editor.finish_audio_lookup)
         self._thread = thread
         self._worker = worker
         self._set_busy(True, self._t('Rozpoznawanie po audio…'), kind='audio')

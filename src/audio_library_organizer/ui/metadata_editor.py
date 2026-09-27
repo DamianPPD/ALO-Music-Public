@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import copy, deepcopy
 from pathlib import Path
 
-from PySide6.QtCore import Property, Qt, QTimer, QUrl, Signal, QRegularExpression, QSize, QRectF
+from PySide6.QtCore import Property, Qt, QTimer, QUrl, Signal, Slot, QRegularExpression, QSize, QRectF
 from PySide6.QtGui import QAction, QPixmap, QIcon, QColor, QPainter, QPen, QRegularExpressionValidator, QDesktopServices
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
@@ -421,6 +421,7 @@ class MetadataEditorDialog(QDialog):
         self._filename_manual = bool(track.filename_override)
         self._online_scan_busy = False
         self._audio_scan_busy = False
+        self._audio_scan_waits_for_thread = False
         self._audio_hits: list[AcoustIDHit] = []
         self._undo_stack: list[dict[str, object]] = []
         self._field_widgets: dict[str, QLineEdit | QTextEdit] = {}
@@ -1316,7 +1317,8 @@ class MetadataEditorDialog(QDialog):
         self.previous_file_button.setEnabled(not busy and self.navigation_index > 0)
         self.next_file_button.setEnabled(not busy and self.navigation_index + 1 < self.navigation_total)
 
-    def start_audio_lookup(self) -> None:
+    def start_audio_lookup(self, *, wait_for_thread: bool = False) -> None:
+        self._audio_scan_waits_for_thread = wait_for_thread
         self.audio_panel.show()
         self._audio_hits.clear()
         self.audio_candidates.setRowCount(0)
@@ -1341,6 +1343,11 @@ class MetadataEditorDialog(QDialog):
         self.previous_file_button.setEnabled(not busy and self.navigation_index > 0)
         self.next_file_button.setEnabled(not busy and self.navigation_index + 1 < self.navigation_total)
 
+    @Slot()
+    def finish_audio_lookup(self) -> None:
+        self._audio_scan_waits_for_thread = False
+        self.set_audio_scan_busy(False)
+
     def set_audio_phase(self, phase: str) -> None:
         messages = {'fingerprint': 'Generowanie fingerprintu…', 'lookup': 'Wyszukiwanie w AcoustID…'}
         self.audio_phase.setText(ui_text(self, messages.get(phase, phase)))
@@ -1353,7 +1360,8 @@ class MetadataEditorDialog(QDialog):
             self.audio_summary.show()
         self.audio_phase.setText(ui_text(self, 'Błąd rozpoznawania audio'))
         self.audio_detail.setText(ui_text(self, message))
-        self.set_audio_scan_busy(False)
+        if not self._audio_scan_waits_for_thread:
+            self.set_audio_scan_busy(False)
 
     def show_audio_candidates(self, hits: list[AcoustIDHit]) -> None:
         self.audio_panel.show()
@@ -1376,7 +1384,8 @@ class MetadataEditorDialog(QDialog):
         self.audio_phase.setText(ui_text(self, 'Znaleziono kandydatów' if self._audio_hits else 'Brak wyników'))
         self.audio_detail.setText('' if self._audio_hits else ui_text(self, 'Brak kandydatów z wykonawcą i tytułem.'))
         self._update_audio_confirm_button(-1)
-        self.set_audio_scan_busy(False)
+        if not self._audio_scan_waits_for_thread:
+            self.set_audio_scan_busy(False)
 
     def _approved_audio_hit(self) -> AcoustIDHit | None:
         approved = self.track.audio_recognition or {}
@@ -1401,11 +1410,8 @@ class MetadataEditorDialog(QDialog):
 
     def _update_audio_confirm_button(self, index: int) -> None:
         valid = 0 <= index < len(self._audio_hits)
-        approved = valid and self._audio_hit_is_approved(self._audio_hits[index])
-        self.audio_confirm_button.setText(ui_text(self, 'Aktualnie wybrane' if approved else 'Zatwierdź jako źródło audio'))
-        self.audio_confirm_button.setIcon(editor_icon('check', '#20c5c3', 14) if approved else QIcon())
-        self.audio_confirm_button.setIconSize(QSize(14, 14))
-        self.audio_confirm_button.setEnabled(valid and not approved and not self._audio_scan_busy)
+        self.audio_confirm_button.setText(ui_text(self, 'Zatwierdź jako źródło audio'))
+        self.audio_confirm_button.setEnabled(valid and not self._audio_scan_busy)
 
     def _refresh_audio_summary(self) -> None:
         approved = self.track.audio_recognition or {}
@@ -1444,7 +1450,7 @@ class MetadataEditorDialog(QDialog):
 
     def _approve_audio_candidate(self) -> None:
         index = self.audio_candidates.currentRow()
-        if not 0 <= index < len(self._audio_hits) or self._audio_hit_is_approved(self._audio_hits[index]):
+        if not 0 <= index < len(self._audio_hits):
             return
         previous = deepcopy(self.track)
         approve_audio_source(self.track, self._audio_hits[index])
