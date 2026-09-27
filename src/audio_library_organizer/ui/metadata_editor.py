@@ -979,11 +979,6 @@ class MetadataEditorDialog(QDialog):
         self.cover_proposal_count.setMaximumHeight(24)
         proposals_head.addWidget(self.cover_proposal_count)
         proposals_head.addStretch(1)
-        self.show_more_covers_button = QPushButton('Pokaż więcej')
-        self.show_more_covers_button.setObjectName('CoverShowMoreAction')
-        self.show_more_covers_button.setVisible(False)
-        self.show_more_covers_button.clicked.connect(self._show_all_cover_proposals)
-        proposals_head.addWidget(self.show_more_covers_button)
         cover_side.addLayout(proposals_head)
 
         self.cover_proposals_host = QFrame()
@@ -1016,7 +1011,6 @@ class MetadataEditorDialog(QDialog):
         self._manual_cover_paths: dict[str, str] = {}
         self._cover_details: dict[str, dict[str, object]] = {}
         self._cover_proposal_labels: dict[str, ClickableCoverLabel] = {}
-        self._cover_proposals_expanded = False
         self._selected_cover_key = 'placeholder'
         self._selected_external_url = track.cover_art_url
         workspace.addWidget(gallery, 4)
@@ -2240,7 +2234,6 @@ class MetadataEditorDialog(QDialog):
         self._manual_cover_paths = {}
         self._cover_candidate_states = {}
         self._cover_details = {}
-        self._cover_proposals_expanded = False
 
         source_pix = QPixmap()
         embedded = extract_embedded_cover(self.track.path)
@@ -2277,9 +2270,13 @@ class MetadataEditorDialog(QDialog):
             mb_url = f'https://coverartarchive.org/release/{self.track.musicbrainz_release_id}/front-500'
             raw_covers.setdefault('MusicBrainz', mb_url)
 
-        for source, url in raw_covers.items():
-            if not url:
-                continue
+        online_slots = 5 - int(not source_pix.isNull()) - int(not manual.isNull())
+        online_covers = [(source, url) for source, url in raw_covers.items() if url]
+        if self.cover_choice == 'external' and self._selected_external_url:
+            selected_cover = next((item for item in online_covers if item[1] == self._selected_external_url), None)
+            if selected_cover and selected_cover not in online_covers[:online_slots]:
+                online_covers = [*online_covers[:online_slots - 1], selected_cover]
+        for source, url in online_covers[:online_slots]:
             key = f'external:{source}'
             self._cover_candidate_urls[key] = str(url)
             self._cover_candidate_pixmaps[key] = QPixmap()
@@ -2324,12 +2321,12 @@ class MetadataEditorDialog(QDialog):
         entries.extend(external_entries)
         entries.extend((key, 'WŁASNA') for key in self._manual_cover_paths)
         entries.append(('placeholder', 'BRAK OKŁADKI'))
-        total_count = len(entries) - 1
-        has_more = not self._cover_proposals_expanded and len(entries) > 6
-        if has_more:
-            entries = entries[:6]
-        self.cover_proposal_count.setText(ui_text(self, f'Propozycje ({total_count})'))
-        self.show_more_covers_button.setVisible(has_more)
+        self.cover_proposal_count.setText(ui_text(self, f'Propozycje ({len(entries)})'))
+        full = len(entries) >= 6
+        self.choose_cover_button.setEnabled(not full)
+        tooltip = 'Osiągnięto limit 6 okładek' if full else 'Wybierz własny plik okładki'
+        self.choose_cover_button.setProperty('_alo_pl_tooltip', tooltip)
+        self.choose_cover_button.setToolTip(ui_text(self, tooltip))
 
         count = len(entries)
         preview_size = 78
@@ -2363,10 +2360,6 @@ class MetadataEditorDialog(QDialog):
             row, col = divmod(index, columns)
             self.cover_proposals_grid.addWidget(card, row, col)
             self._refresh_cover_proposal_widget(key)
-
-    def _show_all_cover_proposals(self) -> None:
-        self._cover_proposals_expanded = True
-        self._rebuild_cover_proposals()
 
     def _refresh_cover_proposal_widget(self, key: str) -> None:
         label = self._cover_proposal_labels.get(key)
@@ -2486,12 +2479,18 @@ class MetadataEditorDialog(QDialog):
         details = self._cover_details.get(key, {})
         if key == 'placeholder':
             source = '—'
+            source_key = None
         elif key in self._manual_cover_paths:
             source = ui_text(self, 'Ręcznie')
+            source_key = 'Ręcznie'
         elif key == 'source':
             source = 'TAG' if not pix.isNull() else '—'
+            source_key = 'Tag' if not pix.isNull() else None
         else:
-            source = key.split(':', 1)[1] if key.startswith('external:') else '—'
+            source_key = key.split(':', 1)[1] if key.startswith('external:') else None
+            source = source_key or '—'
+        color = self.SOURCE_COLORS.get(source_key)
+        self.cover_info_values['source'].setStyleSheet(f'color:{color};' if color else '')
         size = details.get('bytes')
         values = {
             'source': source,
@@ -2515,9 +2514,6 @@ class MetadataEditorDialog(QDialog):
         if record_undo and not self._suspend_tracking:
             self._push_undo_state()
         self._selected_cover_key = key
-        if key not in self._cover_proposal_labels and not self._cover_proposals_expanded:
-            self._cover_proposals_expanded = True
-            self._rebuild_cover_proposals()
         if key.startswith('external:'):
             self.cover_choice = 'external'
             self._selected_external_url = self._cover_candidate_urls.get(key)
@@ -2573,8 +2569,7 @@ class MetadataEditorDialog(QDialog):
     def _choose_cover(self):
         real_covers = (len(self._cover_candidate_urls) + len(self._manual_cover_paths)
                        + int(not self._cover_candidate_pixmaps.get('source', QPixmap()).isNull()))
-        if real_covers >= 6:
-            QMessageBox.information(self, ui_text(self, 'Okładka'), ui_text(self, 'Maksymalnie 6 propozycji okładek.'))
+        if real_covers >= 5:
             return
         path, _ = QFileDialog.getOpenFileName(self, ui_text(self, 'Wybierz okładkę'), '', ui_text(self, 'Obrazy (*.jpg *.jpeg *.png *.webp)'))
         if not path:

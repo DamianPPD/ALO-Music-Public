@@ -2172,11 +2172,6 @@ QPushButton#OnlineLockButton {
     min-width:32px; max-width:32px; min-height:32px; max-height:32px;
     padding:0; border-radius:7px;
 }
-QPushButton#CoverShowMoreAction {
-    background:transparent; border:0; color:#75cce2; padding:2px 4px;
-    min-height:20px; font-size:7.5pt; font-weight:600;
-}
-QPushButton#CoverShowMoreAction:hover { color:#b7efff; text-decoration:underline; }
 QWidget#SourceNameCell { background:transparent; border:0; }
 QLabel#SourceNameDot, QLabel#SourceNameText { background:transparent; border:0; }
 '''
@@ -2367,6 +2362,10 @@ QLabel#CoverInformationHeading { background:transparent; color:#c5dce4; font-siz
 QLabel#CoverInformationLabel { background:transparent; color:#91aab6; font-size:7.8pt; }
 QLabel#CoverInformationValue { background:transparent; color:#e0edf1; font-size:7.8pt; }
 QFrame#CoverInformationSeparator { color:#31515f; }
+QLineEdit#ResultFilenameEdit {
+    background:#1c2b36; color:#ffffff; border:1px solid #435460; border-radius:6px;
+    font-size:10.5pt; font-weight:600; padding:3px 7px;
+}
 QLabel#AudioRecognitionSummaryHeading { color:#67dcd8; font-size:8.5pt; font-weight:740; }
 QLabel#AudioRecognitionSummaryResult { color:#f1fbfc; font-size:9pt; font-weight:670; }
 QLabel#AudioRecognitionSummaryMeta { color:#a6c5c9; font-size:8pt; }
@@ -2537,6 +2536,10 @@ QFrame#CoverInformationPanel { background:#f2f8fa; border:1px solid #b5ced6; }
 QLabel#CoverInformationHeading { color:#245563; }
 QLabel#CoverInformationLabel { color:#557581; }
 QLabel#CoverInformationValue { color:#203d48; }
+QLineEdit#ResultFilenameEdit {
+    background:#1c2b36; color:#ffffff; border:1px solid #435460; border-radius:6px;
+    font-size:10.5pt; font-weight:600; padding:3px 7px;
+}
 QLabel#AudioRecognitionSummaryHeading { color:#116e78; }
 QLabel#AudioRecognitionSummaryResult { color:#14333d; }
 QLabel#AudioRecognitionSummaryMeta { color:#486b75; }

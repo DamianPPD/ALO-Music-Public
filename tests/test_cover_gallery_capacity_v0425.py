@@ -2,13 +2,11 @@ import os
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
-import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPixmap
-from PySide6.QtWidgets import QApplication, QFileDialog, QLabel, QMessageBox, QPushButton
+from PySide6.QtWidgets import QApplication, QFileDialog, QLabel, QPushButton
 
 from audio_library_organizer.domain.models import TrackRecord
-from audio_library_organizer.ui.i18n import apply_static_language
 from audio_library_organizer.ui.metadata_editor import MetadataEditorDialog
 
 
@@ -23,43 +21,37 @@ def _cover(path, color, width=50, height=30):
     assert pixmap.save(str(path))
 
 
-@pytest.mark.parametrize('count', range(8))
-def test_online_cover_suggestions_keep_all_six_real_covers(tmp_path, monkeypatch, count):
+def test_full_online_gallery_keeps_no_cover_visible_and_selectable(tmp_path, monkeypatch):
     QApplication.instance() or QApplication([])
     monkeypatch.setattr(MetadataEditorDialog, '_load_candidate_cover', lambda *args: None)
-    sources = {f'Provider {n}': f'https://example.test/{n}.png' for n in range(count)}
+    sources = {f'Provider {n}': f'https://example.test/{n}.png' for n in range(6)}
     editor = MetadataEditorDialog(TrackRecord(path=tmp_path / 'track.mp3',
                                               field_source_values={'__cover__': sources}))
     try:
-        assert len(editor._cover_candidate_urls) == count
-        visible = [key for key in editor._cover_proposal_labels if key.startswith('external:')]
-        assert visible == [f'external:Provider {n}' for n in range(min(count, 6))]
-        assert 'placeholder' in editor._cover_candidate_pixmaps
-        if count >= 6:
-            assert editor.cover_proposals_grid.count() == 6
-            assert [editor.cover_proposals_grid.getItemPosition(n)[:2] for n in range(6)] == [
-                (0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)]
-            editor.show()
-            QApplication.instance().processEvents()
-            assert editor.show_more_covers_button.isVisible()
-            editor.show_more_covers_button.click()
-            assert 'placeholder' in editor._cover_proposal_labels
-            assert len([key for key in editor._cover_proposal_labels if key.startswith('external:')]) == count
+        assert list(editor._cover_candidate_urls) == [f'external:Provider {n}' for n in range(5)]
+        assert list(editor._cover_proposal_labels)[-1] == 'placeholder'
+        assert editor.cover_proposals_grid.count() == 6
+        assert [editor.cover_proposals_grid.getItemPosition(n)[:2] for n in range(6)] == [
+            (0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)]
+        assert editor.findChild(QPushButton, 'CoverShowMoreAction') is None
+        editor._cover_proposal_labels['placeholder'].clicked.emit()
+        assert editor._selected_cover_key == 'placeholder'
+        assert not editor.cover_save_state()['has_cover']
     finally:
         _close(editor)
 
 
-def test_add_fifth_and_sixth_cover_keeps_old_choices_and_seventh_is_rejected(tmp_path, monkeypatch):
+def test_last_two_manual_slots_keep_old_choices_and_update_selected_cover(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
     editor = MetadataEditorDialog(TrackRecord(path=tmp_path / 'track.mp3'))
-    four = {}
-    for n in range(4):
+    original = {}
+    for n in range(3):
         key = f'external:Source {n}'
-        four[key] = f'https://example.test/{n}.jpg'
+        original[key] = f'https://example.test/{n}.jpg'
         pixmap = QPixmap(40 + n, 30)
         pixmap.fill(QColor('#345678'))
         editor._cover_candidate_pixmaps[key] = pixmap
-    editor._cover_candidate_urls = four
+    editor._cover_candidate_urls = original
     editor._rebuild_cover_proposals()
     editor._select_cover_choice('external:Source 1', record_undo=False)
     first = tmp_path / 'fifth.png'
@@ -68,21 +60,19 @@ def test_add_fifth_and_sixth_cover_keeps_old_choices_and_seventh_is_rejected(tmp
     _cover(second, '#993366', 60, 35)
     files = iter((str(first), str(second)))
     monkeypatch.setattr(QFileDialog, 'getOpenFileName', lambda *args: (next(files), ''))
-    notices = []
-    monkeypatch.setattr(QMessageBox, 'information', lambda parent, title, message: notices.append((title, message)))
     try:
         editor.show()
         app.processEvents()
         editor.choose_cover_button.click()
-        assert len([key for key in editor._cover_proposal_labels if key != 'placeholder']) == 5
-        assert list(editor._cover_candidate_urls) == list(four)
+        assert len(editor._cover_proposal_labels) == 5
+        assert list(editor._cover_candidate_urls) == list(original)
         assert editor.cover_info_values['source'].text() == 'Ręcznie'
         assert editor.cover_info_values['resolution'].text() == '50 × 30 px'
         editor.choose_cover_button.click()
         manual_keys = [key for key in editor._cover_proposal_labels if key.startswith('manual')]
         assert len(manual_keys) == 2
-        assert len([key for key in editor._cover_proposal_labels if key != 'placeholder']) == 6
-        assert all(key in editor._cover_proposal_labels for key in four)
+        assert len(editor._cover_proposal_labels) == 6
+        assert all(key in editor._cover_proposal_labels for key in original)
         assert [editor.cover_proposals_grid.getItemPosition(n)[:2] for n in range(6)] == [
             (0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)]
         assert editor.cover_proposal_count.text() == 'Propozycje (6)'
@@ -96,21 +86,12 @@ def test_add_fifth_and_sixth_cover_keeps_old_choices_and_seventh_is_rejected(tmp
             card = editor._cover_proposal_labels[key].parentWidget()
             assert card.property('selected') is True
             assert not card.findChild(QLabel, 'CoverProposalSelectedBadge').isHidden()
-        original = {key: editor._cover_candidate_pixmaps[key].toImage() for key in (*four, *manual_keys)}
+        images = {key: editor._cover_candidate_pixmaps[key].toImage() for key in (*original, *manual_keys)}
+        assert not editor.choose_cover_button.isEnabled()
         editor.choose_cover_button.click()
-        assert notices == [('Okładka', 'Maksymalnie 6 propozycji okładek.')]
-        assert len([key for key in editor._cover_proposal_labels if key != 'placeholder']) == 6
-        for key, image in original.items():
+        assert len(editor._cover_proposal_labels) == 6
+        for key, image in images.items():
             assert editor._cover_candidate_pixmaps[key].toImage() == image
-        apply_static_language(editor, 'en')
-        editor.refresh_audio_language()
-        assert editor.cover_proposal_count.text() == 'Suggestions (6)'
-        editor.choose_cover_button.click()
-        assert notices[-1] == ('Cover art', 'Maximum of 6 cover suggestions.')
-        apply_static_language(editor, 'pl')
-        editor.refresh_audio_language()
-        editor.choose_cover_button.click()
-        assert notices[-1] == ('Okładka', 'Maksymalnie 6 propozycji okładek.')
     finally:
         _close(editor)
 

@@ -152,50 +152,38 @@ def test_valid_tag_query_stops_before_filename_fallback(tmp_path: Path):
     assert provider.queries == [('Tagged Artist', 'Tagged Title')]
 
 
-def test_cover_panel_has_one_online_search_and_conditional_show_more(tmp_path: Path):
+def test_cover_panel_has_one_online_search_and_six_tiles_including_no_cover(tmp_path: Path, monkeypatch):
     app = _app()
-    dialog = MetadataEditorDialog(TrackRecord(path=tmp_path / 'track.mp3'))
+    monkeypatch.setattr(MetadataEditorDialog, '_load_candidate_cover', lambda *args: None)
+    sources = {f'Source {index}': f'https://example.test/{index}.jpg' for index in range(6)}
+    dialog = MetadataEditorDialog(TrackRecord(path=tmp_path / 'track.mp3',
+                                               field_source_values={'__cover__': sources}))
     try:
-        dialog._cover_candidate_urls = {
-            f'external:Source {index}': f'https://example.test/{index}.jpg'
-            for index in range(6)
-        }
-        for key in dialog._cover_candidate_urls:
-            pixmap = QPixmap(24, 24)
-            pixmap.fill(QColor('#345678'))
-            dialog._cover_candidate_pixmaps[key] = pixmap
-        dialog._cover_proposals_expanded = False
-        dialog._rebuild_cover_proposals()
         dialog.show()
         app.processEvents()
 
         assert dialog.search_cover_button.text() == 'Szukaj okładki online'
         assert not hasattr(dialog, 'more_covers_button')
-        assert dialog.show_more_covers_button.isVisible()
-        assert len(dialog._cover_proposal_labels) == 6  # six online results; placeholder remains behind show-more
-        assert 'external:Source 5' in dialog._cover_proposal_labels
-
-        dialog.show_more_covers_button.click()
-        app.processEvents()
-
-        assert not dialog.show_more_covers_button.isVisible()
-        assert len(dialog._cover_proposal_labels) == 7
+        assert not hasattr(dialog, 'show_more_covers_button')
+        assert list(dialog._cover_candidate_urls) == [f'external:Source {n}' for n in range(5)]
+        assert list(dialog._cover_proposal_labels)[-1] == 'placeholder'
+        assert dialog.cover_proposals_grid.count() == 6
     finally:
         _close(dialog)
 
 
-def test_cover_show_more_stays_hidden_when_no_additional_results(tmp_path: Path):
+def test_fewer_online_covers_still_include_no_cover_without_extra_controls(tmp_path: Path, monkeypatch):
     app = _app()
-    dialog = MetadataEditorDialog(TrackRecord(path=tmp_path / 'track.mp3'))
+    monkeypatch.setattr(MetadataEditorDialog, '_load_candidate_cover', lambda *args: None)
+    sources = {f'Source {index}': f'https://example.test/{index}.jpg' for index in range(4)}
+    dialog = MetadataEditorDialog(TrackRecord(path=tmp_path / 'track.mp3',
+                                               field_source_values={'__cover__': sources}))
     try:
-        dialog._cover_candidate_urls = {
-            f'external:Source {index}': f'https://example.test/{index}.jpg'
-            for index in range(4)
-        }
-        dialog._rebuild_cover_proposals()
         dialog.show()
         app.processEvents()
-        assert dialog.show_more_covers_button.isHidden()
+        assert not hasattr(dialog, 'show_more_covers_button')
+        assert dialog.cover_proposals_grid.count() == 5
+        assert 'placeholder' in dialog._cover_proposal_labels
     finally:
         _close(dialog)
 

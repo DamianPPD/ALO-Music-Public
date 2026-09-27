@@ -237,8 +237,9 @@ def test_cover_timeout_replaces_loading_with_error_and_aborts_reply(tmp_path: Pa
         _close(dialog)
 
 
-def test_loading_cover_does_not_request_overwrite_of_existing_cover(tmp_path: Path):
+def test_loading_cover_does_not_request_overwrite_of_existing_cover(tmp_path: Path, monkeypatch):
     _app()
+    monkeypatch.setattr(MetadataEditorDialog, '_load_candidate_cover', lambda *args: None)
     dialog = MetadataEditorDialog(_track(tmp_path, cover_art_url='https://example.test/existing.jpg', has_cover=True))
     key = 'external:MusicBrainz'
     try:
