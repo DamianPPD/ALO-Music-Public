@@ -2350,19 +2350,36 @@ QFrame#AudioRecognitionPanel {
     background:#0b141b; border:1px solid #29414d; border-radius:9px;
 }
 QLabel#AudioRecognitionPhase { color:#88dfe1; font-weight:730; }
-QListWidget#AudioRecognitionCandidates {
+QTableWidget#AudioRecognitionCandidates {
     background:#0d1b23; border:1px solid #31515f; border-radius:6px;
-    padding:2px; color:#deedf1;
+    gridline-color:#1e3a43; color:#deedf1; selection-background-color:#125662;
 }
-QListWidget#AudioRecognitionCandidates::item { padding:4px 6px; }
-QListWidget#AudioRecognitionCandidates::item:selected { background:#125662; color:#f5ffff; }
+QTableWidget#AudioRecognitionCandidates QHeaderView::section {
+    background:#10232b; color:#9fbac4; border-right:1px solid #23404a; padding:3px 6px; font-size:8pt;
+}
+QTableWidget#AudioRecognitionCandidates::item { padding:3px 6px; border-bottom:1px solid #203742; }
+QTableWidget#AudioRecognitionCandidates::item:selected { background:#125662; color:#f5ffff; }
 QLabel#AudioRecognitionDetail { color:#a9c2cb; font-size:8.2pt; }
+QFrame#AudioRecognitionSummary { background:#0c252b; border:1px solid #286c74; border-radius:7px; }
+QLabel#AudioRecognitionSummaryHeading { color:#67dcd8; font-size:8.5pt; font-weight:740; }
+QLabel#AudioRecognitionSummaryResult { color:#f1fbfc; font-size:9pt; font-weight:670; }
+QLabel#AudioRecognitionSummaryMeta { color:#a6c5c9; font-size:8pt; }
 QPushButton#AudioRecognitionConfirmButton {
     background:#0b4b55; border:1px solid #25bed0; border-radius:7px;
     color:#edfdff; padding:5px 10px; font-weight:690;
 }
 QPushButton#AudioRecognitionConfirmButton:hover { background:#0e6571; border-color:#62deeb; }
 QPushButton#AudioRecognitionConfirmButton:disabled { background:#0c2229; border-color:#36505b; color:#91a5ae; }
+QPushButton#AudioRecognitionShowCandidates, QPushButton#AudioRecognitionRetry {
+    background:#142b33; border:1px solid #315b65; border-radius:7px;
+    color:#c6eff0; padding:3px 9px; font-size:8.5pt; font-weight:650;
+}
+QPushButton#AudioRecognitionShowCandidates:hover, QPushButton#AudioRecognitionRetry:hover {
+    background:#19404a; border-color:#53bbc4;
+}
+QPushButton#AudioRecognitionShowCandidates:disabled, QPushButton#AudioRecognitionRetry:disabled {
+    background:#0c2229; border-color:#36505b; color:#91a5ae;
+}
 '''
 DARK_STYLE = APP_STYLE
 
@@ -2498,5 +2515,27 @@ QLabel#SettingsDialogTitle { color:#17303c; font-size:13pt; font-weight:760; }
 QLabel#SafeResetNotice {
     color:#246f45; background:#edf9f1; border:1px solid #7ab691;
     border-radius:8px; padding:9px 11px; font-weight:620;
+}
+QTableWidget#AudioRecognitionCandidates {
+    background:#ffffff; border:1px solid #b5cbd3; gridline-color:#d7e6e9;
+    color:#17303c; selection-background-color:#cdecef;
+}
+QTableWidget#AudioRecognitionCandidates QHeaderView::section {
+    background:#eaf3f6; color:#365965; border-right:1px solid #cbdde3;
+}
+QTableWidget#AudioRecognitionCandidates::item:selected { background:#cdecef; color:#153640; }
+QLabel#AudioRecognitionDetail { color:#536f7a; }
+QFrame#AudioRecognitionSummary { background:#eaf8f8; border:1px solid #7dbac1; }
+QLabel#AudioRecognitionSummaryHeading { color:#116e78; }
+QLabel#AudioRecognitionSummaryResult { color:#14333d; }
+QLabel#AudioRecognitionSummaryMeta { color:#486b75; }
+QPushButton#AudioRecognitionConfirmButton {
+    background:#0d7180; border:1px solid #0795a8; color:#ffffff;
+}
+QPushButton#AudioRecognitionShowCandidates, QPushButton#AudioRecognitionRetry {
+    background:#f5f9fb; border:1px solid #92b7c3; color:#225966;
+}
+QPushButton#AudioRecognitionShowCandidates:hover, QPushButton#AudioRecognitionRetry:hover {
+    background:#e2f3f6; border-color:#3d9aaa;
 }
 '''

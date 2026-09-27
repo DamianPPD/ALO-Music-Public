@@ -58,17 +58,48 @@ def test_three_editor_columns_keep_equal_height_at_multiple_widths(tmp_path: Pat
         _close(dialog)
 
 
-def test_source_table_reserves_four_rows_and_caps_growth(tmp_path: Path):
+def test_source_table_fits_its_rows_and_grows_for_all_sources(tmp_path: Path):
     dialog = MetadataEditorDialog(_track(tmp_path))
     try:
-        minimum_height = dialog.source_table.horizontalHeader().height() + 4 * 31
-        assert dialog.source_table.height() >= minimum_height
+        initial_rows = dialog.source_table.rowCount()
+        assert dialog.source_table.height() >= dialog.source_table.horizontalHeader().height() + initial_rows * 31
+        assert dialog.source_table.height() <= dialog.source_table.horizontalHeader().height() + max(1, initial_rows) * 31 + 24
 
         sources = ('Tag', 'Discogs', 'MusicBrainz', 'Apple / iTunes', 'Nazwa pliku', 'Ręcznie', 'Testowe')
         dialog._source_values['title'] = {source: f'Tytuł {index}' for index, source in enumerate(sources)}
         dialog._refresh_source_comparison()
         assert dialog.source_table.rowCount() == 7
-        assert dialog.source_table.height() <= dialog.source_table.horizontalHeader().height() + 6 * 31 + 8
+        assert dialog.source_table.height() >= dialog.source_table.horizontalHeader().height() + 7 * 31
+        assert dialog.source_table.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        dialog.show()
+        _app().processEvents()
+        assert not dialog.source_table.verticalScrollBar().isVisible()
+        assert dialog.source_table.visualItemRect(dialog.source_table.item(6, 1)).bottom() <= dialog.source_table.viewport().height()
+    finally:
+        _close(dialog)
+
+
+def test_audio_source_row_and_legend_use_the_same_a1_icon(tmp_path: Path):
+    from audio_library_organizer.jobs.audio_identification import SOURCE
+    from PySide6.QtWidgets import QWidgetAction
+
+    app = _app()
+    dialog = MetadataEditorDialog(_track(tmp_path, field_source_values={
+        'title': {SOURCE: 'A Remix', 'Tag': 'A Remix'}, 'artist': {SOURCE: 'DJ', 'Tag': 'DJ'}
+    }))
+    try:
+        dialog.show()
+        app.processEvents()
+        row = dialog._source_rows().index(SOURCE)
+        source_item = dialog.source_table.item(row, 0)
+        assert source_item.text() == 'ROZPOZNANIE AUDIO'
+        assert not source_item.icon().isNull()
+        assert dialog.source_table.cellWidget(row, 0) is None
+        legend = [action.defaultWidget() for action in dialog.source_legend_button.menu().actions()
+                  if isinstance(action, QWidgetAction) and action.defaultWidget()]
+        audio_option = next(widget for widget in legend
+                            if widget.findChild(QLabel, 'SourceMenuProvider').text() == 'ROZPOZNANIE AUDIO')
+        assert audio_option.findChild(QLabel, 'SourceMenuDot').property('sourceKind') == 'audio_recognition'
     finally:
         _close(dialog)
 
@@ -122,10 +153,9 @@ def test_source_comparison_reserves_readable_columns_and_scrolls_when_narrow(tmp
         assert table.columnWidth(0) >= 210
         assert table.columnWidth(1) >= 250
         for row in range(table.rowCount()):
-            source_cell = table.cellWidget(row, 0)
-            name = source_cell.findChild(QLabel, 'SourceNameText')
-            assert name.width() >= name.fontMetrics().horizontalAdvance(name.text())
-            assert source_cell.x() + name.x() + name.width() < table.columnViewportPosition(1)
+            source_item = table.item(row, 0)
+            assert table.cellWidget(row, 0) is None
+            assert table.columnWidth(0) >= table.fontMetrics().horizontalAdvance(source_item.text()) + 25
             title = table.item(row, 1)
             assert table.columnWidth(1) >= table.fontMetrics().horizontalAdvance(title.text()) + 16
             action = table.cellWidget(row, 5)

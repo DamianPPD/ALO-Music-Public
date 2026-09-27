@@ -252,12 +252,10 @@ def test_source_name_text_uses_same_provider_color_as_dot(tmp_path: Path):
         for row, source in enumerate(dialog._source_rows()):
             if source not in colors:
                 continue
-            cell = dialog.source_table.cellWidget(row, 0)
-            text = cell.findChild(QLabel, 'SourceNameText')
-            dot = cell.findChild(QLabel, 'SourceNameDot')
-            assert dialog.source_table.item(row, 0).text() == ''
-            assert text.text() == display_names[source]
-            assert text.palette().color(QPalette.ColorRole.WindowText) == QColor(colors[source])
-            assert dot.property('sourceColor') == colors[source]
+            item = dialog.source_table.item(row, 0)
+            assert dialog.source_table.cellWidget(row, 0) is None
+            assert item.text() == display_names[source]
+            assert item.foreground().color() == QColor(colors[source])
+            assert not item.icon().isNull()
     finally:
         _close(dialog)

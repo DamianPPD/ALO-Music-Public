@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListWidget,
     QMenu,
     QMessageBox,
     QPushButton,
@@ -77,6 +76,7 @@ class SourceComparisonTable(QTableWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.resize_columns()
+        self.resize_to_rows()
 
     def resize_columns(self):
         header = self.horizontalHeader()
@@ -84,6 +84,14 @@ class SourceComparisonTable(QTableWidget):
         for column, width in fixed.items():
             header.resizeSection(column, width)
         header.resizeSection(1, max(280, self.viewport().width() - sum(fixed.values())))
+
+    def resize_to_rows(self):
+        overflow = sum(self.columnWidth(column) for column in range(self.columnCount())) > self.viewport().width()
+        height = self.horizontalHeader().height() + max(1, self.rowCount()) * 31 + 6
+        if overflow:
+            height += self.horizontalScrollBar().sizeHint().height()
+        if self.height() != height:
+            self.setFixedHeight(height)
 
 
 class MissingEmptyState(QWidget):
@@ -167,7 +175,7 @@ class SourceMenuOption(QWidget):
 
     activated = Signal()
 
-    def __init__(self, provider: str, value: str, color: str, parent=None):
+    def __init__(self, provider: str, value: str, color: str, parent=None, *, audio_icon: bool = False):
         super().__init__(parent)
         self.setObjectName('SourceMenuOption')
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -177,8 +185,10 @@ class SourceMenuOption(QWidget):
         row.setSpacing(6)
         dot = QLabel()
         dot.setObjectName('SourceMenuDot')
-        dot.setPixmap(_color_dot_icon(color, 10).pixmap(10, 10))
-        dot.setFixedSize(10, 10)
+        dot.setPixmap((editor_icon('audio_recognize', color, 15) if audio_icon else _color_dot_icon(color, 10)).pixmap(15 if audio_icon else 10, 15 if audio_icon else 10))
+        dot.setFixedSize(15 if audio_icon else 10, 15 if audio_icon else 10)
+        if audio_icon:
+            dot.setProperty('sourceKind', 'audio_recognition')
         name = SourceMenuTextLabel(provider, color)
         name.setObjectName('SourceMenuProvider')
         name_font = name.font()
@@ -550,21 +560,88 @@ class MetadataEditorDialog(QDialog):
         self.audio_phase = QLabel('Oczekiwanie na rozpoznanie audio')
         self.audio_phase.setObjectName('AudioRecognitionPhase')
         ap.addWidget(self.audio_phase)
-        self.audio_candidates = QListWidget()
+        self.audio_candidates = QTableWidget(0, 5)
         self.audio_candidates.setObjectName('AudioRecognitionCandidates')
-        self.audio_candidates.setMaximumHeight(108)
-        self.audio_candidates.currentRowChanged.connect(self._show_audio_candidate_detail)
-        ap.addWidget(self.audio_candidates)
+        self.audio_candidates.setHorizontalHeaderLabels(('Wybór', 'Tytuł / wersja', 'Wykonawca', 'Album / rok', 'Dopasowanie'))
+        self.audio_candidates.verticalHeader().hide()
+        self.audio_candidates.verticalHeader().setDefaultSectionSize(27)
+        self.audio_candidates.horizontalHeader().setFixedHeight(26)
+        self.audio_candidates.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.audio_candidates.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        self.audio_candidates.horizontalHeader().resizeSection(0, 56)
+        self.audio_candidates.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        self.audio_candidates.horizontalHeader().resizeSection(4, 105)
+        self.audio_candidates.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.audio_candidates.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.audio_candidates.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.audio_candidates.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.audio_candidates.currentCellChanged.connect(lambda row, _column, _old_row, _old_column: self._show_audio_candidate_detail(row))
+        self.audio_candidate_content = QWidget()
+        candidate_layout = QVBoxLayout(self.audio_candidate_content)
+        candidate_layout.setContentsMargins(0, 0, 0, 0)
+        candidate_layout.setSpacing(4)
+        candidate_layout.addWidget(self.audio_candidates)
         self.audio_detail = QLabel('')
         self.audio_detail.setObjectName('AudioRecognitionDetail')
         self.audio_detail.setWordWrap(True)
-        ap.addWidget(self.audio_detail)
+        candidate_layout.addWidget(self.audio_detail)
         self.audio_confirm_button = QPushButton('Zatwierdź jako źródło audio')
         self.audio_confirm_button.setObjectName('AudioRecognitionConfirmButton')
         self.audio_confirm_button.setEnabled(False)
         self.audio_confirm_button.clicked.connect(self._approve_audio_candidate)
-        ap.addWidget(self.audio_confirm_button, 0, Qt.AlignmentFlag.AlignRight)
-        audio_panel.hide()
+        self.audio_confirm_button.setFixedHeight(30)
+        candidate_layout.addWidget(self.audio_confirm_button, 0, Qt.AlignmentFlag.AlignRight)
+        ap.addWidget(self.audio_candidate_content)
+
+        self.audio_summary = QFrame()
+        self.audio_summary.setObjectName('AudioRecognitionSummary')
+        summary = QHBoxLayout(self.audio_summary)
+        summary.setContentsMargins(8, 5, 8, 5)
+        summary.setSpacing(8)
+        self.audio_summary_icon = QLabel()
+        self.audio_summary_icon.setObjectName('AudioRecognitionSummaryIcon')
+        self.audio_summary_icon.setPixmap(editor_icon('audio_recognize', '#20c5c3', 20).pixmap(20, 20))
+        self.audio_summary_icon.setFixedSize(23, 23)
+        summary.addWidget(self.audio_summary_icon)
+        summary_text = QVBoxLayout()
+        summary_text.setSpacing(1)
+        heading_row = QHBoxLayout()
+        heading_row.setSpacing(4)
+        summary_check = QLabel()
+        summary_check.setPixmap(editor_icon('check', '#67dcd8', 13).pixmap(13, 13))
+        summary_check.setFixedSize(13, 13)
+        heading_row.addWidget(summary_check)
+        self.audio_summary_heading = QLabel('Źródło audio zatwierdzone')
+        self.audio_summary_heading.setObjectName('AudioRecognitionSummaryHeading')
+        heading_row.addWidget(self.audio_summary_heading, 1)
+        summary_text.addLayout(heading_row)
+        self.audio_summary_result = QLabel()
+        self.audio_summary_result.setObjectName('AudioRecognitionSummaryResult')
+        self.audio_summary_meta = QLabel()
+        self.audio_summary_meta.setObjectName('AudioRecognitionSummaryMeta')
+        for label in (self.audio_summary_result, self.audio_summary_meta):
+            summary_text.addWidget(label)
+        summary.addLayout(summary_text, 1)
+        self.audio_show_candidates_button = QPushButton('Pokaż kandydatów')
+        self.audio_show_candidates_button.setObjectName('AudioRecognitionShowCandidates')
+        self.audio_show_candidates_button.setFixedHeight(30)
+        self.audio_show_candidates_button.clicked.connect(self._open_audio_candidates)
+        summary.addWidget(self.audio_show_candidates_button)
+        self.audio_retry_button = QPushButton('Rozpoznaj ponownie')
+        self.audio_retry_button.setObjectName('AudioRecognitionRetry')
+        self.audio_retry_button.setFixedHeight(30)
+        _set_editor_button_icon(self.audio_retry_button, 'audio_recognize', '#b5f3f2', 15)
+        self.audio_retry_button.clicked.connect(lambda: self.audio_scan_requested.emit(self))
+        summary.addWidget(self.audio_retry_button)
+        ap.addWidget(self.audio_summary)
+        if track.audio_recognition:
+            self._refresh_audio_summary()
+            self.audio_summary.show()
+            self.audio_candidate_content.hide()
+            self.audio_phase.hide()
+        else:
+            self.audio_summary.hide()
+            audio_panel.hide()
         content.addWidget(audio_panel)
 
         self.suspicious_warning = QLabel('Duża różnica względem danych sprzed online — sprawdź wykonawcę i tytuł przed zatwierdzeniem.')
@@ -897,6 +974,7 @@ class MetadataEditorDialog(QDialog):
                 ui_text(self, description),
                 legend_colors.get(source_key, '#8a96a8'),
                 legend_menu,
+                audio_icon=source_key == AUDIO_SOURCE,
             )
             action.setDefaultWidget(option)
             legend_menu.addAction(action)
@@ -917,7 +995,7 @@ class MetadataEditorDialog(QDialog):
         self.source_table.setAlternatingRowColors(True)
         self.source_table.setIconSize(QSize(12, 12))
         self.source_table.setWordWrap(False)
-        self.source_table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.source_table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.source_table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.source_table.verticalHeader().setDefaultSectionSize(31)
         self.source_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -1057,7 +1135,8 @@ class MetadataEditorDialog(QDialog):
                     text = text[:69] + '…'
                 action = QWidgetAction(menu)
                 color = self.SOURCE_COLORS.get(source, '#9aa8b2')
-                option = SourceMenuOption(ui_text(self, self.SOURCE_LABELS.get(source, source.upper())), text, color, menu)
+                option = SourceMenuOption(ui_text(self, self.SOURCE_LABELS.get(source, source.upper())), text, color, menu,
+                                          audio_icon=source == AUDIO_SOURCE)
                 select_source = lambda f=field_name, s=source, m=menu: (
                     self._select_source_value(f, s), m.close()
                 )
@@ -1191,15 +1270,23 @@ class MetadataEditorDialog(QDialog):
     def start_audio_lookup(self) -> None:
         self.audio_panel.show()
         self._audio_hits.clear()
-        self.audio_candidates.clear()
+        self.audio_candidates.setRowCount(0)
         self.audio_detail.clear()
         self.audio_confirm_button.setEnabled(False)
+        self.audio_phase.show()
+        if self.track.audio_recognition:
+            self.audio_candidate_content.hide()
+            self.audio_summary.show()
+        else:
+            self.audio_candidate_content.show()
+        self._refresh_audio_summary()
         self.audio_phase.setText(ui_text(self, 'Oczekiwanie na rozpoznanie audio'))
         self.set_audio_scan_busy(True)
 
     def set_audio_scan_busy(self, busy: bool) -> None:
         self._audio_scan_busy = bool(busy)
         self.audio_scan_button.setEnabled(not busy and not self.online_lock.isChecked())
+        self.audio_retry_button.setEnabled(not busy and not self.online_lock.isChecked())
         self.audio_scan_button.setText(ui_text(self, 'Rozpoznawanie…' if busy else 'Rozpoznaj po audio'))
         self.previous_file_button.setEnabled(not busy and self.navigation_index > 0)
         self.next_file_button.setEnabled(not busy and self.navigation_index + 1 < self.navigation_total)
@@ -1210,20 +1297,77 @@ class MetadataEditorDialog(QDialog):
 
     def show_audio_error(self, message: str) -> None:
         self.audio_panel.show()
+        self.audio_phase.show()
+        self.audio_candidate_content.show()
+        if self.track.audio_recognition:
+            self.audio_summary.show()
         self.audio_phase.setText(ui_text(self, 'Błąd rozpoznawania audio'))
         self.audio_detail.setText(ui_text(self, message))
         self.set_audio_scan_busy(False)
 
     def show_audio_candidates(self, hits: list[AcoustIDHit]) -> None:
         self.audio_panel.show()
+        self.audio_summary.hide()
+        self.audio_candidate_content.show()
+        self.audio_phase.show()
         self._audio_hits = [hit for hit in hits if (hit.artist or '').strip() and (hit.title or '').strip()][:5]
-        self.audio_candidates.clear()
-        for hit in self._audio_hits:
-            name = f'{hit.artist or "—"} – {hit.title or "—"}'
-            self.audio_candidates.addItem(f'{name}  ·  {round(hit.score * 100)}%')
+        self.audio_candidates.clearContents()
+        self.audio_candidates.setRowCount(len(self._audio_hits))
+        for row, hit in enumerate(self._audio_hits):
+            values = ('', hit.title, hit.artist, ' · '.join(filter(None, (hit.album, hit.year))), f'{round(hit.score * 100)}%')
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value or ('—' if column == 3 else ''))
+                if column in (0, 4):
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                item.setToolTip(value or '')
+                self.audio_candidates.setItem(row, column, item)
+        self._refresh_audio_candidate_markers()
+        self.audio_candidates.setFixedHeight(26 + max(1, len(self._audio_hits)) * 27 + 6)
         self.audio_phase.setText(ui_text(self, 'Znaleziono kandydatów' if self._audio_hits else 'Brak wyników'))
         self.audio_detail.setText('' if self._audio_hits else ui_text(self, 'Brak kandydatów z wykonawcą i tytułem.'))
+        self.audio_confirm_button.setEnabled(False)
         self.set_audio_scan_busy(False)
+
+    def _approved_audio_hit(self) -> AcoustIDHit | None:
+        approved = self.track.audio_recognition or {}
+        if not approved.get('recording_id') or not approved.get('title') or not approved.get('artist'):
+            return None
+        return AcoustIDHit(approved['recording_id'], float(approved.get('score') or 0), approved['title'],
+                           approved['artist'], approved.get('album'), approved.get('year'), approved.get('acoustid_id'))
+
+    def _refresh_audio_candidate_markers(self) -> None:
+        approved = self.track.audio_recognition or {}
+        for row, hit in enumerate(self._audio_hits):
+            item = self.audio_candidates.item(row, 0)
+            if item:
+                is_approved = approved.get('recording_id') == hit.recording_id
+                item.setText('' if is_approved else '○')
+                item.setIcon(editor_icon('check', '#20c5c3', 13) if is_approved else QIcon())
+                item.setToolTip(ui_text(self, 'Źródło audio zatwierdzone') if is_approved else '')
+                item.setForeground(QColor('#20c5c3'))
+
+    def _refresh_audio_summary(self) -> None:
+        approved = self.track.audio_recognition or {}
+        if not approved:
+            self.audio_summary.hide()
+            return
+        self.audio_summary_heading.setText(ui_text(self, 'Źródło audio zatwierdzone'))
+        self.audio_summary_result.setText(f'{approved.get("artist") or "—"} – {approved.get("title") or "—"}')
+        details = [f'{round(float(approved["score"]) * 100)}%' if approved.get('score') is not None else None,
+                   approved.get('year'), 'MusicBrainz / AcoustID']
+        self.audio_summary_meta.setText(' · '.join(str(value) for value in details if value))
+        self._refresh_audio_candidate_markers()
+
+    def _open_audio_candidates(self) -> None:
+        if not self._audio_hits:
+            approved = self._approved_audio_hit()
+            if approved:
+                self.show_audio_candidates([approved])
+                return
+        self.audio_summary.hide()
+        self.audio_phase.show()
+        self.audio_candidate_content.show()
+        self._refresh_audio_candidate_markers()
 
     def _show_audio_candidate_detail(self, index: int) -> None:
         self.audio_confirm_button.setEnabled(0 <= index < len(self._audio_hits) and not self._audio_scan_busy)
@@ -1248,6 +1392,10 @@ class MetadataEditorDialog(QDialog):
         self._refresh_source_comparison()
         self._refresh_recognition_info()
         self.audio_phase.setText(ui_text(self, 'Źródło audio zatwierdzone'))
+        self._refresh_audio_summary()
+        self.audio_summary.show()
+        self.audio_candidate_content.hide()
+        self.audio_phase.hide()
         self.audio_source_confirmed.emit(self, previous)
 
     def refresh_audio_language(self) -> None:
@@ -1256,6 +1404,7 @@ class MetadataEditorDialog(QDialog):
             self._refresh_source_badge(field_name)
         self._refresh_source_comparison()
         self._refresh_recognition_info()
+        self._refresh_audio_summary()
         if self.audio_candidates.currentRow() >= 0:
             self._show_audio_candidate_detail(self.audio_candidates.currentRow())
 
@@ -1578,30 +1727,16 @@ class MetadataEditorDialog(QDialog):
         }
         for row, source in enumerate(sources):
             source_color = colors.get(source, '#cbd6e2')
-            source_item = QTableWidgetItem('')
+            source_item = QTableWidgetItem(ui_text(self, display_names.get(source, source)))
             source_item.setData(Qt.ItemDataRole.UserRole, source)
             source_item.setForeground(QColor(source_color))
             font = source_item.font()
             font.setPointSizeF(max(7.2, font.pointSizeF() - 1.0))
             font.setBold(True)
             source_item.setFont(font)
+            source_item.setIcon(editor_icon('audio_recognize', source_color, 15) if source == AUDIO_SOURCE
+                                else _color_dot_icon(source_color, 12))
             self.source_table.setItem(row, 0, source_item)
-            source_cell = QWidget()
-            source_cell.setObjectName('SourceNameCell')
-            source_layout = QHBoxLayout(source_cell)
-            source_layout.setContentsMargins(7, 0, 4, 0)
-            source_layout.setSpacing(5)
-            source_dot = QLabel()
-            source_dot.setObjectName('SourceNameDot')
-            source_dot.setProperty('sourceColor', source_color)
-            source_dot.setPixmap(_color_dot_icon(source_color, 12).pixmap(12, 12))
-            source_dot.setFixedSize(12, 12)
-            source_name = QLabel(ui_text(self, display_names.get(source, source)))
-            source_name.setObjectName('SourceNameText')
-            source_name.setStyleSheet(f'background:transparent;color:{source_color};font-weight:700;')
-            source_layout.addWidget(source_dot)
-            source_layout.addWidget(source_name, 1)
-            self.source_table.setCellWidget(row, 0, source_cell)
             for column, field_name in ((1, 'title'), (2, 'artist'), (3, 'year'), (4, 'genre')):
                 value = self._source_values.get(field_name, {}).get(source)
                 shown = self._display_source_value(field_name, value) if value not in (None, '') else '—'
@@ -1622,9 +1757,7 @@ class MetadataEditorDialog(QDialog):
             cell_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             cell_layout.addWidget(use_button)
             self.source_table.setCellWidget(row, 5, cell)
-        visible_rows = min(max(len(sources), 4), 6)
-        table_height = 27 + visible_rows * 31 + 6
-        self.source_table.setFixedHeight(table_height)
+        self.source_table.resize_to_rows()
 
     def _apply_source_bundle(self, source: str) -> None:
         fields = ('artist', 'title', 'album', 'year', 'genre', 'bpm', 'discogs_url', 'comment')
