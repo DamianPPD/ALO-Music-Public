@@ -60,6 +60,32 @@ def test_editor_candidate_approval_is_explicit_and_shows_full_source(tmp_path):
         editor.close()
 
 
+def test_editor_does_not_offer_an_unidentified_recording_for_approval(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    editor = MetadataEditorDialog(TrackRecord(path=tmp_path / 'song.mp3'))
+    try:
+        editor.show_audio_candidates([AcoustIDHit('mb-empty', .88, acoustid_id='ac-empty'),
+                                      AcoustIDHit('mb-good', .86, 'Known song', 'Artist', acoustid_id='ac-good')])
+        assert editor.audio_candidates.count() == 1
+        assert 'Known song' in editor.audio_candidates.item(0).text()
+        assert '— – —' not in editor.audio_candidates.item(0).text()
+        editor.audio_candidates.setCurrentRow(0)
+        assert editor.audio_confirm_button.isEnabled()
+        editor.show_audio_candidates([AcoustIDHit('mb-empty', .88, acoustid_id='ac-empty')])
+        assert editor.audio_candidates.count() == 0
+        assert not editor.audio_confirm_button.isEnabled()
+        assert editor.audio_detail.text() == 'Brak kandydatów z wykonawcą i tytułem.'
+        apply_static_language(editor, 'en')
+        editor.refresh_audio_language()
+        assert editor.audio_detail.text() == 'No candidates with an artist and title.'
+        apply_static_language(editor, 'pl')
+        editor.refresh_audio_language()
+        assert editor.audio_detail.text() == 'Brak kandydatów z wykonawcą i tytułem.'
+    finally:
+        editor._force_closing = True
+        editor.close()
+
+
 def test_retry_does_not_replace_approved_source_until_second_approval(tmp_path):
     app = QApplication.instance() or QApplication([])
     track = TrackRecord(path=tmp_path / 'track.mp3')
@@ -148,7 +174,7 @@ def test_audio_button_runs_local_fingerprint_and_shows_acoustid_candidates(tmp_p
     monkeypatch.setattr(audio_identification, 'fingerprint_audio', lambda path: FingerprintResult('FP', 230))
     def lookup(_client, fingerprint, duration):
         assert (fingerprint, duration) == ('FP', 230)
-        return [AcoustIDHit('mb1', .94, 'Song', 'Artist')]
+        return [AcoustIDHit('mb1', .94, 'Song', 'Artist', 'Album', '2012')]
     monkeypatch.setattr(acoustid.AcoustIDClient, 'lookup', lookup)
 
     def use_editor(editor):

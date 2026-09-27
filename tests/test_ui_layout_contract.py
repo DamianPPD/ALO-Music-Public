@@ -210,7 +210,7 @@ def test_metadata_editor_v0416_keeps_individual_fields_compact_status_comparison
     assert "comparison.setObjectName('SourceComparisonCard')" in EDITOR
     assert "self.source_legend_button.setText('')" in EDITOR
     assert "self.source_legend_button.setIcon(editor_icon('info'" in EDITOR
-    assert "self.source_table = QTableWidget(0, 6)" in EDITOR
+    assert "self.source_table = SourceComparisonTable(0, 6)" in EDITOR
     assert "use_button = QPushButton(ui_text(self, 'Użyj danych'))" in EDITOR
     assert 'table_height = 27 + visible_rows * 31 + 6' in EDITOR
     assert "self.compact_player = CompactPlayerBar" in EDITOR

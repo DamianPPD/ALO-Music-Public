@@ -71,6 +71,21 @@ class MissingCompleteGraphic(QWidget):
         painter.drawLine(30, 35, 35, 39); painter.drawLine(35, 39, 46, 28)
 
 
+class SourceComparisonTable(QTableWidget):
+    """Keep source, title and action readable as the editor width changes."""
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.resize_columns()
+
+    def resize_columns(self):
+        header = self.horizontalHeader()
+        fixed = {0: 220, 2: 170, 3: 58, 4: 115, 5: 126}
+        for column, width in fixed.items():
+            header.resizeSection(column, width)
+        header.resizeSection(1, max(280, self.viewport().width() - sum(fixed.values())))
+
+
 class MissingEmptyState(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -891,7 +906,7 @@ class MetadataEditorDialog(QDialog):
         compare_head.addStretch(1)
         comparison_layout.addLayout(compare_head)
 
-        self.source_table = QTableWidget(0, 6)
+        self.source_table = SourceComparisonTable(0, 6)
         self.source_table.setObjectName('SourceComparisonTable')
         self.source_table.setHorizontalHeaderLabels(('Źródło', 'Tytuł / wersja', 'Wykonawca', 'Rok', 'Gatunek', 'Akcja'))
         self.source_table.verticalHeader().setVisible(False)
@@ -903,20 +918,13 @@ class MetadataEditorDialog(QDialog):
         self.source_table.setIconSize(QSize(12, 12))
         self.source_table.setWordWrap(False)
         self.source_table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.source_table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.source_table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.source_table.verticalHeader().setDefaultSectionSize(31)
         self.source_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         header = self.source_table.horizontalHeader()
         header.setFixedHeight(27)
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(0, 130)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(3, 58)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(5, 126)
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+        self.source_table.resize_columns()
         comparison_layout.addWidget(self.source_table)
         comparison.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         content.addWidget(comparison)
@@ -1208,13 +1216,13 @@ class MetadataEditorDialog(QDialog):
 
     def show_audio_candidates(self, hits: list[AcoustIDHit]) -> None:
         self.audio_panel.show()
-        self._audio_hits = list(hits[:5])
+        self._audio_hits = [hit for hit in hits if (hit.artist or '').strip() and (hit.title or '').strip()][:5]
         self.audio_candidates.clear()
         for hit in self._audio_hits:
             name = f'{hit.artist or "—"} – {hit.title or "—"}'
             self.audio_candidates.addItem(f'{name}  ·  {round(hit.score * 100)}%')
         self.audio_phase.setText(ui_text(self, 'Znaleziono kandydatów' if self._audio_hits else 'Brak wyników'))
-        self.audio_detail.setText('' if self._audio_hits else ui_text(self, 'AcoustID nie znalazł dopasowania dla tego nagrania.'))
+        self.audio_detail.setText('' if self._audio_hits else ui_text(self, 'Brak kandydatów z wykonawcą i tytułem.'))
         self.set_audio_scan_busy(False)
 
     def _show_audio_candidate_detail(self, index: int) -> None:

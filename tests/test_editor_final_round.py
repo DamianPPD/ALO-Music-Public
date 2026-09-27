@@ -102,6 +102,44 @@ def test_source_names_use_provider_colors_and_actions_stay_inside_cells(tmp_path
         app.setStyleSheet(previous_style)
 
 
+def test_source_comparison_reserves_readable_columns_and_scrolls_when_narrow(tmp_path: Path):
+    from audio_library_organizer.jobs.audio_identification import SOURCE
+
+    app = _app()
+    previous_style = app.styleSheet()
+    app.setStyleSheet(style_for_theme('dark'))
+    track = _track(tmp_path, field_source_values={
+        'title': {'Tag': 'Stepping To The Beat (Dave Mcdonald Remix)',
+                  SOURCE: 'Stepping To The Beat (Dave Mcdonald Remix)'},
+        'artist': {'Tag': 'DJ Jose', SOURCE: 'DJ Jose'},
+    })
+    dialog = MetadataEditorDialog(track)
+    try:
+        dialog.resize(1180, 920)
+        dialog.show()
+        app.processEvents()
+        table = dialog.source_table
+        assert table.columnWidth(0) >= 210
+        assert table.columnWidth(1) >= 250
+        for row in range(table.rowCount()):
+            source_cell = table.cellWidget(row, 0)
+            name = source_cell.findChild(QLabel, 'SourceNameText')
+            assert name.width() >= name.fontMetrics().horizontalAdvance(name.text())
+            assert source_cell.x() + name.x() + name.width() < table.columnViewportPosition(1)
+            title = table.item(row, 1)
+            assert table.columnWidth(1) >= table.fontMetrics().horizontalAdvance(title.text()) + 16
+            action = table.cellWidget(row, 5)
+            assert action.geometry().right() <= table.viewport().width()
+            assert table.columnViewportPosition(5) >= table.columnViewportPosition(1) + table.columnWidth(1)
+        table.setFixedWidth(750)
+        app.processEvents()
+        assert table.horizontalScrollBar().maximum() > 0
+        assert table.horizontalScrollBar().isVisible()
+    finally:
+        _close(dialog)
+        app.setStyleSheet(previous_style)
+
+
 def test_long_track_names_elide_but_keep_full_tooltips(tmp_path: Path):
     app = _app()
     track = _track(tmp_path)

@@ -70,6 +70,6 @@ def test_source_table_is_compact_and_source_marker_is_larger_than_text():
     assert "source_dot.setPixmap(_color_dot_icon" in EDITOR
     assert "self.source_table.setCellWidget(row, 0, source_cell)" in EDITOR
     assert "font.setPointSizeF(max(7.2, font.pointSizeF() - 1.0))" in EDITOR
-    assert 'header.resizeSection(5, 126)' in EDITOR
+    assert '5: 126' in EDITOR
     assert 'use_button.setFixedSize(82, 18)' in EDITOR
     assert "cell.setObjectName('UseSourceDataCell')" in EDITOR

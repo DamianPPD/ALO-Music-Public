@@ -51,7 +51,7 @@ class MusicBrainzClient:
         self.limiter.wait()
         r = self.session.get(
             f'{self.BASE_URL}/recording/{recording_id}',
-            params={'fmt':'json','inc':'artists+releases+release-groups'}, timeout=30,
+            params={'fmt':'json','inc':'artist-credits+releases+release-groups'}, timeout=30,
         )
         r.raise_for_status()
         result = parse_recording(r.json())

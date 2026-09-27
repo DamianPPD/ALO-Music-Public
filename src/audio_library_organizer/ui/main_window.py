@@ -1590,7 +1590,8 @@ class MainWindow(QMainWindow):
             return
         editor.start_audio_lookup()
         cfg = ProviderSettings.from_store(self.qt_settings)
-        job = AudioIdentification(AcoustIDClient(cfg.acoustid_key))
+        job = AudioIdentification(AcoustIDClient(cfg.acoustid_key),
+                                  musicbrainz_client=MusicBrainzClient(cfg.musicbrainz_contact))
         thread = QThread(self)
         worker = AudioIdentificationWorker(job, track)
         worker.moveToThread(thread)

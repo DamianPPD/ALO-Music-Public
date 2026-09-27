@@ -7,6 +7,7 @@ from audio_library_organizer.audio.fingerprint import FingerprintResult
 from audio_library_organizer.domain.models import TrackRecord
 from audio_library_organizer.jobs.audio_identification import AudioIdentification, approve_audio_source
 from audio_library_organizer.providers.acoustid import AcoustIDClient
+from audio_library_organizer.providers.musicbrainz import MusicBrainzClient
 from audio_library_organizer.storage.repository import LibraryRepository
 
 
@@ -40,12 +41,88 @@ class Session:
         return Response(self.payload)
 
 
+def test_id_only_acoustid_results_are_enriched_from_recording_ids(tmp_path):
+    # Synthetic ID-only payload matching the scores seen in the manual test;
+    # the original HTTP response and recording IDs were not available.
+    acoustid = Session({'status': 'ok', 'results': [
+        {'id': 'ac-88', 'score': .88, 'recordings': [{'id': 'mb-88'}]},
+        {'id': 'ac-86', 'score': .86, 'recordings': [{'id': 'mb-86'}]},
+    ]})
+
+    class RecordingSession:
+        def __init__(self):
+            self.headers = {}
+            self.requests = []
+
+        def get(self, url, **kwargs):
+            self.requests.append((url, kwargs))
+            rid = url.rsplit('/', 1)[-1]
+            return Response({
+                'id': rid, 'title': 'Stepping To The Beat (Dave Mcdonald Remix)',
+                'artist-credit': [{'name': 'DJ Jose'}],
+                'releases': [{'id': 'release-id', 'title': 'Stepping to the Beat Vinyl', 'date': '2005-03-02'}],
+            })
+
+    recordings = RecordingSession()
+    job = AudioIdentification(AcoustIDClient('key', acoustid),
+                              musicbrainz_client=MusicBrainzClient('test@example.org', recordings),
+                              fingerprinter=lambda _: FingerprintResult('FP', 354))
+    hits = job.lookup(TrackRecord(path=tmp_path / 'track.mp3'))
+    assert [(h.score, h.artist, h.title, h.album, h.year, h.recording_id, h.acoustid_id) for h in hits] == [
+        (.88, 'DJ Jose', 'Stepping To The Beat (Dave Mcdonald Remix)', 'Stepping to the Beat Vinyl', '2005', 'mb-88', 'ac-88'),
+        (.86, 'DJ Jose', 'Stepping To The Beat (Dave Mcdonald Remix)', 'Stepping to the Beat Vinyl', '2005', 'mb-86', 'ac-86'),
+    ]
+    assert [url.rsplit('/', 1)[-1] for url, _ in recordings.requests] == ['mb-88', 'mb-86']
+    assert all(options['params']['inc'] == 'artist-credits+releases+release-groups' for _, options in recordings.requests)
+
+
+def test_unresolved_recording_is_not_presented_as_a_named_candidate(tmp_path):
+    acoustid = Session({'status': 'ok', 'results': [
+        {'id': 'ac-blank', 'score': .88, 'recordings': [{'id': 'mb-blank'}]},
+        {'id': 'ac-good', 'score': .86, 'recordings': [{'id': 'mb-good', 'title': 'Known song', 'artists': [{'name': 'Artist'}]}]},
+    ]})
+
+    class EmptyRecording:
+        def get_recording(self, recording_id):
+            from audio_library_organizer.domain.candidates import MusicBrainzRecording
+            return MusicBrainzRecording(recording_id, None, None, None)
+
+    job = AudioIdentification(AcoustIDClient('key', acoustid), musicbrainz_client=EmptyRecording(),
+                              fingerprinter=lambda _: FingerprintResult('FP', 354))
+    hits = job.lookup(TrackRecord(path=tmp_path / 'track.mp3'))
+    assert [hit.recording_id for hit in hits] == ['mb-good']
+
+
+def test_musicbrainz_failure_keeps_usable_acoustid_metadata(tmp_path):
+    acoustid = Session({'status': 'ok', 'results': [
+        {'id': 'ac-good', 'score': .86, 'recordings': [{'id': 'mb-good', 'title': 'Known song',
+                                                    'artists': [{'name': 'Artist'}]}]},
+        {'id': 'ac-blank', 'score': .75, 'recordings': [{'id': 'mb-blank'}]},
+    ]})
+
+    class OfflineRecordings:
+        def get_recording(self, recording_id):
+            raise requests.Timeout('MusicBrainz offline')
+
+    job = AudioIdentification(AcoustIDClient('key', acoustid), musicbrainz_client=OfflineRecordings(),
+                              fingerprinter=lambda _: FingerprintResult('FP', 354))
+    hits = job.lookup(TrackRecord(path=tmp_path / 'track.mp3'))
+    assert [(hit.recording_id, hit.artist, hit.title) for hit in hits] == [('mb-good', 'Artist', 'Known song')]
+
+
 def test_fingerprint_is_local_and_acoustid_returns_ranked_candidates(tmp_path):
+    from audio_library_organizer.domain.candidates import MusicBrainzRecording
+
+    class RecordingStub:
+        def get_recording(self, recording_id):
+            return MusicBrainzRecording(recording_id, 'Other artist', 'Other', None)
+
     session = Session(PAYLOAD)
     client = AcoustIDClient('key', session=session)
     track = TrackRecord(path=tmp_path / 'song.mp3', artist='Original')
     states = []
-    identify = AudioIdentification(client, fingerprinter=lambda path: FingerprintResult('FP', 230))
+    identify = AudioIdentification(client, fingerprinter=lambda path: FingerprintResult('FP', 230),
+                                   musicbrainz_client=RecordingStub())
     hits = identify.lookup(track, progress=states.append)
     assert states == ['fingerprint', 'lookup']
     assert [hit.recording_id for hit in hits] == ['mb1', 'mb2']
