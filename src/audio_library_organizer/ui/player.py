@@ -159,7 +159,7 @@ class VariantDPlayerSurface(QFrame):
         self._ambient_cache = QPixmap()
         self._ambient_cache_size = (0, 0)
         self.cover.setText('' if not pixmap.isNull() else '—')
-        self.cover.setPixmap(pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio,
+        self.cover.setPixmap(pixmap.scaled(56, 56, Qt.AspectRatioMode.KeepAspectRatio,
                                          Qt.TransformationMode.SmoothTransformation) if not pixmap.isNull() else QPixmap())
         self.update()
 

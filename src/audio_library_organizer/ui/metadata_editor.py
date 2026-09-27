@@ -463,6 +463,9 @@ class MetadataEditorDialog(QDialog):
         self._cover_candidate_states: dict[str, str] = {}
         self._cover_pending_replies: set[QNetworkReply] = set()
         self._cover_reply_timers: dict[QNetworkReply, QTimer] = {}
+        self._cover_live_ready = False
+        self._cover_preview_active = False
+        self._committed_player_cover = None
         self._cover_labels: dict[str, ClickableCoverLabel] = {}
         self._cover_buttons: dict[str, QPushButton] = {}
         self._cover_pixmaps: dict[str, QPixmap] = {}
@@ -1189,6 +1192,8 @@ class MetadataEditorDialog(QDialog):
         self._refresh_all()
         self._saved_state = self._capture_editor_state()
         self._last_observed_state = deepcopy(self._saved_state)
+        self._cover_live_ready = True
+        self.finished.connect(lambda _result: self._restore_live_cover_preview())
         self._update_ready_button()
         self._refresh_url_action()
 
@@ -2045,6 +2050,7 @@ class MetadataEditorDialog(QDialog):
         if not self._validate_year():
             return False
         self.save_requested.emit(self)
+        self._commit_live_cover_preview()
         self.has_saved_changes = True
         self._saved_state = deepcopy(self._capture_editor_state())
         self._last_observed_state = deepcopy(self._saved_state)
@@ -2089,6 +2095,7 @@ class MetadataEditorDialog(QDialog):
 
     def _cancel_unsaved_changes(self):
         self._apply_editor_state(deepcopy(self._saved_state))
+        self._restore_live_cover_preview()
         self.dirty_notice.setVisible(False)
 
     def _toggle_ready(self):
@@ -2226,9 +2233,11 @@ class MetadataEditorDialog(QDialog):
 
     def closeEvent(self, event):
         if self._force_closing:
+            self._restore_live_cover_preview()
             event.accept()
             return
         if self._confirm_close():
+            self._restore_live_cover_preview()
             self._force_closing = True
             event.accept()
         else:
@@ -2360,6 +2369,58 @@ class MetadataEditorDialog(QDialog):
         self._cover_candidate_states[key] = 'ready'
         self._refresh_cover_proposal_widget(key)
         self._update_cover_main_preview()
+
+    def _current_cover_player(self):
+        if self.compact_player is None:
+            return None
+        bar = self.compact_player.player_bar
+        if bar.current_track is None:
+            return None
+        return bar if Path(bar.current_track.path).resolve() == Path(self.track.path).resolve() else None
+
+    def _sync_live_cover_preview(self, pix: QPixmap) -> None:
+        if not self._cover_live_ready or (self._suspend_tracking and not self._cover_preview_active):
+            return
+        bar = self._current_cover_player()
+        if bar is None or bar._cover_pixmap.cacheKey() == pix.cacheKey():
+            return
+        if not self._cover_preview_active:
+            self._committed_player_cover = (bar._cover_pixmap, bar._cover_loaded_url,
+                                            bar._cover_note, bar._cover_reply is not None)
+        # Any older online reply belongs to the committed cover, not to this preview.
+        bar._cancel_cover_request()
+        bar._cover_loaded_url = None
+        bar._set_cover_image(pix)
+        saved = getattr(self, '_saved_state', None)
+        same_saved_choice = saved is not None and all(
+            saved.get(field) == self._capture_editor_state().get(field)
+            for field in ('selected_cover_key', 'cover_choice', 'manual_cover_path', 'selected_external_url')
+        )
+        if same_saved_choice and not self._cover_preview_active:
+            bar._cover_loaded_url = self._selected_external_url if self.cover_choice == 'external' else None
+            self._committed_player_cover = (bar._cover_pixmap, bar._cover_loaded_url, bar._cover_note, False)
+        else:
+            self._cover_preview_active = True
+
+    def _commit_live_cover_preview(self) -> None:
+        bar = self._current_cover_player()
+        if bar is not None and self._cover_preview_active:
+            bar._cover_loaded_url = self._selected_external_url if self.cover_choice == 'external' else None
+            self._committed_player_cover = (bar._cover_pixmap, bar._cover_loaded_url, bar._cover_note, False)
+        self._cover_preview_active = False
+
+    def _restore_live_cover_preview(self) -> None:
+        if not self._cover_preview_active:
+            return
+        bar = self._current_cover_player()
+        if bar is not None and self._committed_player_cover is not None:
+            pix, url, note, was_loading = self._committed_player_cover
+            bar._cancel_cover_request()
+            bar._cover_loaded_url = url
+            bar._set_cover_image(pix, note)
+            if was_loading:
+                bar._load_cover(self.track)
+        self._cover_preview_active = False
 
     def _rebuild_cover_proposals(self) -> None:
         self._clear_cover_proposals()
@@ -2502,6 +2563,7 @@ class MetadataEditorDialog(QDialog):
         pix = self._cover_candidate_pixmaps.get(key, QPixmap())
         if self.compact_player is not None:
             self.compact_player.surface.set_cover_pixmap(pix)
+        self._sync_live_cover_preview(pix)
         if pix.isNull():
             self.cover_main_preview.setPixmap(QPixmap())
             state = self._cover_candidate_states.get(key, 'unavailable')
