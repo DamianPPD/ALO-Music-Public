@@ -3,8 +3,8 @@ from __future__ import annotations
 from copy import copy, deepcopy
 from pathlib import Path
 
-from PySide6.QtCore import Property, Qt, QTimer, QUrl, Signal, Slot, QRegularExpression, QSize, QRectF
-from PySide6.QtGui import QAction, QPixmap, QIcon, QColor, QPainter, QPen, QRegularExpressionValidator, QDesktopServices
+from PySide6.QtCore import Property, Qt, QTimer, QUrl, Signal, Slot, QRegularExpression, QSize, QRectF, QBuffer, QByteArray, QIODevice
+from PySide6.QtGui import QAction, QPixmap, QIcon, QColor, QPainter, QPen, QRegularExpressionValidator, QDesktopServices, QImageReader
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
     QDialog,
@@ -83,7 +83,7 @@ class SourceComparisonTable(QTableWidget):
 
     def resize_columns(self):
         header = self.horizontalHeader()
-        fixed = {0: 220, 2: 170, 3: 58, 4: 115, 5: 126}
+        fixed = {0: 220, 2: 152, 3: 170, 4: 58, 5: 115, 6: 126}
         for column, width in fixed.items():
             header.resizeSection(column, width)
         header.resizeSection(1, max(280, self.viewport().width() - sum(fixed.values())))
@@ -445,8 +445,8 @@ class MetadataEditorDialog(QDialog):
 
         self.setWindowTitle('Edytuj metadane')
         available = self.screen().availableGeometry()
-        target_width = min(1520, max(1, available.width() - 32))
-        target_height = min(1020, max(1, available.height() - 64))
+        target_width = min(1600, max(1, available.width() - 32))
+        target_height = min(1060, max(1, available.height() - 64))
         self.resize(target_width, target_height)
         self.move(available.x() + (available.width() - target_width) // 2,
                   available.y() + (available.height() - target_height) // 2)
@@ -684,6 +684,34 @@ class MetadataEditorDialog(QDialog):
         self.audio_retry_button.clicked.connect(lambda: self.audio_scan_requested.emit(self))
         summary.addWidget(self.audio_retry_button)
         ap.addWidget(self.audio_summary)
+        self.audio_empty_status = QFrame()
+        self.audio_empty_status.setObjectName('AudioRecognitionSummary')
+        empty_row = QHBoxLayout(self.audio_empty_status)
+        empty_row.setContentsMargins(8, 5, 8, 5)
+        empty_row.setSpacing(8)
+        empty_icon = QLabel()
+        empty_icon.setPixmap(editor_icon('audio_recognize', '#20c5c3', 17).pixmap(17, 17))
+        empty_icon.setFixedSize(23, 23)
+        empty_row.addWidget(empty_icon)
+        empty_text = QVBoxLayout()
+        empty_text.setSpacing(1)
+        self.audio_empty_heading = QLabel('Brak wyników rozpoznawania audio')
+        self.audio_empty_heading.setObjectName('AudioRecognitionSummaryHeading')
+        self.audio_empty_message = QLabel('Nie znaleziono kandydatów.')
+        self.audio_empty_message.setObjectName('AudioRecognitionSummaryResult')
+        empty_text.addWidget(self.audio_empty_heading)
+        empty_text.addWidget(self.audio_empty_message)
+        empty_row.addLayout(empty_text, 1)
+        self.audio_empty_retry = QPushButton('Rozpoznaj ponownie')
+        self.audio_empty_retry.setObjectName('AudioRecognitionRetry')
+        self.audio_empty_retry.setFixedHeight(30)
+        _set_editor_button_icon(self.audio_empty_retry, 'audio_recognize', '#b5f3f2', 15)
+        self.audio_empty_retry.clicked.connect(lambda: self.audio_scan_requested.emit(self))
+        empty_row.addWidget(self.audio_empty_retry)
+        ap.addWidget(self.audio_empty_status)
+        self.audio_empty_status.hide()
+        self._audio_empty_heading_key = 'Brak wyników rozpoznawania audio'
+        self._audio_empty_message_key = 'Nie znaleziono kandydatów.'
         if track.audio_recognition:
             self._refresh_audio_summary()
             self.audio_summary.show()
@@ -890,6 +918,40 @@ class MetadataEditorDialog(QDialog):
         self.cover_selected_badge.move(216, 216)
         cover_main_col.addWidget(self.cover_main_preview, 0, Qt.AlignmentFlag.AlignLeft)
 
+        self.cover_info = QFrame()
+        self.cover_info.setObjectName('CoverInformationPanel')
+        self.cover_info.setFixedWidth(248)
+        info_layout = QVBoxLayout(self.cover_info)
+        info_layout.setContentsMargins(8, 6, 8, 6)
+        info_layout.setSpacing(3)
+        self.cover_info_heading = QLabel('Informacje o okładce')
+        self.cover_info_heading.setObjectName('CoverInformationHeading')
+        info_layout.addWidget(self.cover_info_heading)
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setObjectName('CoverInformationSeparator')
+        info_layout.addWidget(separator)
+        info_grid = QGridLayout()
+        info_grid.setContentsMargins(0, 0, 0, 0)
+        info_grid.setHorizontalSpacing(6)
+        info_grid.setVerticalSpacing(2)
+        self.cover_info_labels = {}
+        self.cover_info_values = {}
+        for row, (key, title) in enumerate((('source', 'Źródło'), ('resolution', 'Rozdzielczość'),
+                                            ('type', 'Typ'), ('format', 'Format'), ('size', 'Rozmiar pliku'))):
+            label = QLabel(title)
+            label.setObjectName('CoverInformationLabel')
+            value = QLabel('—')
+            value.setObjectName('CoverInformationValue')
+            value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            self.cover_info_labels[key] = label
+            self.cover_info_values[key] = value
+            info_grid.addWidget(label, row, 0)
+            info_grid.addWidget(value, row, 1)
+        info_grid.setColumnStretch(1, 1)
+        info_layout.addLayout(info_grid)
+        cover_main_col.addWidget(self.cover_info, 0, Qt.AlignmentFlag.AlignLeft)
+
         self.choose_cover_button = QPushButton('Dodaj')
         self.choose_cover_button.setObjectName('CoverSmallAction')
         _set_editor_button_icon(self.choose_cover_button, 'upload', '#d9e6ee', 17)
@@ -945,6 +1007,7 @@ class MetadataEditorDialog(QDialog):
 
         self._cover_candidate_urls: dict[str, str] = {}
         self._cover_candidate_pixmaps: dict[str, QPixmap] = {}
+        self._cover_details: dict[str, dict[str, object]] = {}
         self._cover_proposal_labels: dict[str, ClickableCoverLabel] = {}
         self._cover_proposals_expanded = False
         self._selected_cover_key = 'placeholder'
@@ -1034,9 +1097,9 @@ class MetadataEditorDialog(QDialog):
         compare_head.addStretch(1)
         comparison_layout.addLayout(compare_head)
 
-        self.source_table = SourceComparisonTable(0, 6)
+        self.source_table = SourceComparisonTable(0, 7)
         self.source_table.setObjectName('SourceComparisonTable')
-        self.source_table.setHorizontalHeaderLabels(('Źródło', 'Tytuł / wersja', 'Wykonawca', 'Rok', 'Gatunek', 'Akcja'))
+        self.source_table.setHorizontalHeaderLabels(('Źródło', 'Tytuł / wersja', 'Album / Release', 'Wykonawca', 'Rok', 'Gatunek', 'Akcja'))
         self.source_table.verticalHeader().setVisible(False)
         self.source_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.source_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -1306,6 +1369,9 @@ class MetadataEditorDialog(QDialog):
             self.scan_online_button.setEnabled(not locked and not self._online_scan_busy)
         if hasattr(self, 'audio_scan_button'):
             self.audio_scan_button.setEnabled(not locked and not self._audio_scan_busy)
+        if hasattr(self, 'audio_retry_button'):
+            self.audio_retry_button.setEnabled(not locked and not self._audio_scan_busy)
+            self.audio_empty_retry.setEnabled(not locked and not self._audio_scan_busy)
 
     def set_online_scan_busy(self, busy: bool) -> None:
         self._online_scan_busy = bool(busy)
@@ -1320,6 +1386,7 @@ class MetadataEditorDialog(QDialog):
     def start_audio_lookup(self, *, wait_for_thread: bool = False) -> None:
         self._audio_scan_waits_for_thread = wait_for_thread
         self.audio_panel.show()
+        self.audio_empty_status.hide()
         self._audio_hits.clear()
         self.audio_candidates.setRowCount(0)
         self.audio_detail.clear()
@@ -1338,6 +1405,7 @@ class MetadataEditorDialog(QDialog):
         self._audio_scan_busy = bool(busy)
         self.audio_scan_button.setEnabled(not busy and not self.online_lock.isChecked())
         self.audio_retry_button.setEnabled(not busy and not self.online_lock.isChecked())
+        self.audio_empty_retry.setEnabled(not busy and not self.online_lock.isChecked())
         self.audio_scan_button.setText(ui_text(self, 'Rozpoznawanie…' if busy else 'Rozpoznaj po audio'))
         self._update_audio_confirm_button(self.audio_candidates.currentRow())
         self.previous_file_button.setEnabled(not busy and self.navigation_index > 0)
@@ -1354,21 +1422,31 @@ class MetadataEditorDialog(QDialog):
 
     def show_audio_error(self, message: str) -> None:
         self.audio_panel.show()
-        self.audio_phase_header.show()
-        self.audio_candidate_content.show()
-        if self.track.audio_recognition:
-            self.audio_summary.show()
+        self.audio_phase_header.hide()
+        self.audio_candidate_content.hide()
+        self.audio_summary.hide()
+        self._show_audio_empty('Błąd rozpoznawania audio', message)
         self.audio_phase.setText(ui_text(self, 'Błąd rozpoznawania audio'))
         self.audio_detail.setText(ui_text(self, message))
         if not self._audio_scan_waits_for_thread:
             self.set_audio_scan_busy(False)
 
+    def _show_audio_empty(self, heading: str, message: str) -> None:
+        self._audio_empty_heading_key = heading
+        self._audio_empty_message_key = message
+        self.audio_empty_heading.setText(ui_text(self, heading))
+        self.audio_empty_message.setText(ui_text(self, message))
+        self.audio_empty_status.show()
+
     def show_audio_candidates(self, hits: list[AcoustIDHit]) -> None:
         self.audio_panel.show()
         self.audio_summary.hide()
-        self.audio_candidate_content.show()
-        self.audio_phase_header.show()
+        self.audio_empty_status.hide()
         self._audio_hits = [hit for hit in hits if (hit.artist or '').strip() and (hit.title or '').strip()][:5]
+        self.audio_candidate_content.setVisible(bool(self._audio_hits))
+        self.audio_phase_header.setVisible(bool(self._audio_hits))
+        if not self._audio_hits:
+            self._show_audio_empty('Brak wyników rozpoznawania audio', 'Nie znaleziono kandydatów.')
         self.audio_candidates.clearContents()
         self.audio_candidates.setRowCount(len(self._audio_hits))
         for row, hit in enumerate(self._audio_hits):
@@ -1473,6 +1551,9 @@ class MetadataEditorDialog(QDialog):
         self._refresh_source_comparison()
         self._refresh_recognition_info()
         self._refresh_audio_summary()
+        if not self.audio_empty_status.isHidden():
+            self._show_audio_empty(self._audio_empty_heading_key, self._audio_empty_message_key)
+        self._refresh_cover_information()
         self._show_audio_candidate_detail(self.audio_candidates.currentRow())
 
     def apply_online_result(self, track: TrackRecord) -> None:
@@ -1805,13 +1886,9 @@ class MetadataEditorDialog(QDialog):
             source_item.setIcon(editor_icon('audio_recognize', source_color, 15) if source == AUDIO_SOURCE
                                 else _color_dot_icon(source_color, 12))
             self.source_table.setItem(row, 0, source_item)
-            for column, field_name in ((1, 'title'), (2, 'artist'), (3, 'year'), (4, 'genre')):
+            for column, field_name in ((1, 'title'), (2, 'album'), (3, 'artist'), (4, 'year'), (5, 'genre')):
                 value = self._source_values.get(field_name, {}).get(source)
                 shown = self._display_source_value(field_name, value) if value not in (None, '') else '—'
-                if column == 1 and source == AUDIO_SOURCE:
-                    album = self._source_values.get('album', {}).get(source)
-                    if album:
-                        shown += f'  ·  {ui_text(self, "Album")}: {album}'
                 self.source_table.setItem(row, column, QTableWidgetItem(shown))
             use_button = QPushButton(ui_text(self, 'Użyj danych'))
             use_button.setObjectName('UseSourceDataButton')
@@ -1824,7 +1901,7 @@ class MetadataEditorDialog(QDialog):
             cell_layout.setContentsMargins(7, 3, 7, 3)
             cell_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             cell_layout.addWidget(use_button)
-            self.source_table.setCellWidget(row, 5, cell)
+            self.source_table.setCellWidget(row, 6, cell)
         self.source_table.resize_to_rows()
 
     def _apply_source_bundle(self, source: str) -> None:
@@ -2154,12 +2231,17 @@ class MetadataEditorDialog(QDialog):
         self._cover_candidate_pixmaps = {}
         self._cover_candidate_urls = {}
         self._cover_candidate_states = {}
+        self._cover_details = {}
         self._cover_proposals_expanded = False
 
         source_pix = QPixmap()
         embedded = extract_embedded_cover(self.track.path)
         if embedded:
             source_pix.loadFromData(embedded[0])
+            self._cover_details['source'] = {
+                'bytes': len(embedded[0]), 'format': self._cover_image_format(embedded[0]),
+                'type': 'Okładka główna (Front)',
+            }
         self._cover_candidate_pixmaps['source'] = source_pix
         self._cover_candidate_states['source'] = 'ready' if not source_pix.isNull() else 'unavailable'
         self._cover_notes['source'] = 'Okładka osadzona w pliku źródłowym.'
@@ -2170,6 +2252,10 @@ class MetadataEditorDialog(QDialog):
         self._cover_notes['placeholder'] = 'Brak potwierdzonej okładki — grafika zastępcza ALO Music.'
 
         manual = QPixmap(self.manual_cover_path) if self.manual_cover_path and Path(self.manual_cover_path).is_file() else QPixmap()
+        if not manual.isNull():
+            path = Path(self.manual_cover_path)
+            self._cover_details['manual'] = {'bytes': path.stat().st_size,
+                                             'format': path.suffix.lstrip('.').upper().replace('JPEG', 'JPG')}
         self._cover_candidate_pixmaps['manual'] = manual
         self._cover_candidate_states['manual'] = 'ready' if not manual.isNull() else 'unavailable'
         self._cover_notes['manual'] = 'Okładka wybrana ręcznie.'
@@ -2226,22 +2312,23 @@ class MetadataEditorDialog(QDialog):
         if not self._cover_candidate_pixmaps.get('source', QPixmap()).isNull():
             entries.append(('source', 'OBECNA'))
         external_entries = [(key, key.split(':', 1)[1]) for key in self._cover_candidate_urls]
-        visible_external = external_entries if self._cover_proposals_expanded else external_entries[:4]
-        selected = getattr(self, '_selected_cover_key', '')
-        if not self._cover_proposals_expanded and selected.startswith('external:'):
-            selected_entry = next((entry for entry in external_entries if entry[0] == selected), None)
-            if selected_entry and selected_entry not in visible_external:
-                visible_external = [*visible_external[:3], selected_entry]
-        entries.extend(visible_external)
+        entries.extend(external_entries)
         if not self._cover_candidate_pixmaps.get('manual', QPixmap()).isNull():
             entries.append(('manual', 'WŁASNA'))
         entries.append(('placeholder', 'BRAK OKŁADKI'))
-        total_count = len(entries) + len(external_entries) - len(visible_external)
+        total_count = len(entries)
+        if not self._cover_proposals_expanded and len(entries) > 6:
+            visible = [*entries[:5], entries[-1]]
+            selected = getattr(self, '_selected_cover_key', '')
+            selected_entry = next((entry for entry in entries if entry[0] == selected), None)
+            if selected_entry and selected_entry not in visible:
+                visible[4] = selected_entry
+            entries = visible
         self.cover_proposal_count.setText(ui_text(self, f'Propozycje ({total_count})'))
-        self.show_more_covers_button.setVisible(len(external_entries) > len(visible_external))
+        self.show_more_covers_button.setVisible(total_count > len(entries))
 
         count = len(entries)
-        preview_size = 84
+        preview_size = 78
         columns = 2
 
         for index, (key, title) in enumerate(entries):
@@ -2265,7 +2352,7 @@ class MetadataEditorDialog(QDialog):
             selected_badge.setPixmap(editor_icon('status', '#f2fff8', 14).pixmap(14, 14))
             selected_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
             selected_badge.setFixedSize(20, 20)
-            selected_badge.move(64, 64)
+            selected_badge.move(preview_size - 20, preview_size - 20)
             selected_badge.setVisible(key == getattr(self, '_selected_cover_key', ''))
             selected_badge.raise_()
             self._cover_proposal_labels[key] = preview
@@ -2328,6 +2415,7 @@ class MetadataEditorDialog(QDialog):
             return
         self._cover_candidate_states[key] = 'error'
         self._cover_candidate_pixmaps[key] = QPixmap()
+        self._cover_details.pop(key, None)
         self._refresh_cover_proposal_widget(key)
         if key == getattr(self, '_selected_cover_key', ''):
             self._update_cover_main_preview()
@@ -2343,9 +2431,15 @@ class MetadataEditorDialog(QDialog):
                 return
             pix = QPixmap()
             if reply.error() == QNetworkReply.NetworkError.NoError:
-                pix.loadFromData(bytes(reply.readAll()))
+                data = bytes(reply.readAll())
+                pix.loadFromData(data)
+                if not pix.isNull():
+                    self._cover_details[key] = {'bytes': len(data), 'format': self._cover_image_format(data),
+                                                'type': 'Okładka główna (Front)'}
             self._cover_candidate_pixmaps[key] = pix
             self._cover_candidate_states[key] = 'ready' if not pix.isNull() else 'error'
+            if pix.isNull():
+                self._cover_details.pop(key, None)
             self._refresh_cover_proposal_widget(key)
             if key == getattr(self, '_selected_cover_key', ''):
                 self._update_cover_main_preview()
@@ -2370,7 +2464,40 @@ class MetadataEditorDialog(QDialog):
             self.cover_main_preview.setPixmap(pix.scaled(edge, edge, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         for proposal_key in list(self._cover_proposal_labels):
             self._refresh_cover_proposal_widget(proposal_key)
+        self._refresh_cover_information()
         self._refresh_status_summary()
+
+    @staticmethod
+    def _cover_image_format(data: bytes) -> str:
+        buffer = QBuffer()
+        buffer.setData(QByteArray(data))
+        buffer.open(QIODevice.OpenModeFlag.ReadOnly)
+        image_format = bytes(QImageReader(buffer).format()).decode('ascii', 'ignore').upper()
+        buffer.close()
+        return 'JPG' if image_format == 'JPEG' else image_format
+
+    def _refresh_cover_information(self) -> None:
+        key = self._selected_cover_key
+        pix = self._cover_candidate_pixmaps.get(key, QPixmap())
+        details = self._cover_details.get(key, {})
+        if key == 'placeholder':
+            source = '—'
+        elif key == 'manual':
+            source = ui_text(self, 'Ręcznie')
+        elif key == 'source':
+            source = 'TAG' if not pix.isNull() else '—'
+        else:
+            source = key.split(':', 1)[1] if key.startswith('external:') else '—'
+        size = details.get('bytes')
+        values = {
+            'source': source,
+            'resolution': f'{pix.width()} × {pix.height()} px' if not pix.isNull() and key != 'placeholder' else '—',
+            'type': ui_text(self, str(details['type'])) if details.get('type') else '—',
+            'format': str(details.get('format') or '—'),
+            'size': f'{round(int(size) / 1024)} KB' if size is not None else '—',
+        }
+        for name, value in values.items():
+            self.cover_info_values[name].setText(value)
 
     def _select_cover_choice(self, key: str, *, allow_unavailable: bool = True, record_undo: bool = True):
         if key == 'manual' and self._cover_candidate_pixmaps.get('manual', QPixmap()).isNull():
@@ -2384,6 +2511,8 @@ class MetadataEditorDialog(QDialog):
         if record_undo and not self._suspend_tracking:
             self._push_undo_state()
         self._selected_cover_key = key
+        if key not in self._cover_proposal_labels and not self._cover_proposals_expanded:
+            self._rebuild_cover_proposals()
         if key.startswith('external:'):
             self.cover_choice = 'external'
             self._selected_external_url = self._cover_candidate_urls.get(key)
@@ -2441,6 +2570,8 @@ class MetadataEditorDialog(QDialog):
             self._push_undo_state()
         self.manual_cover_path = path
         self._cover_candidate_pixmaps['manual'] = QPixmap(path)
+        self._cover_details['manual'] = {'bytes': Path(path).stat().st_size,
+                                         'format': Path(path).suffix.lstrip('.').upper().replace('JPEG', 'JPG')}
         self._cover_candidate_states['manual'] = 'ready' if not self._cover_candidate_pixmaps['manual'].isNull() else 'error'
         self._cover_notes['manual'] = 'Okładka wybrana ręcznie.'
         self.cover_choice = 'manual'

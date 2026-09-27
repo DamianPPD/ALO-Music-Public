@@ -59,8 +59,8 @@ def test_metadata_editor_status_colors_and_source_action_are_visible(tmp_path: P
     try:
         assert '#63e39a' in dialog.status_labels['artist'].styleSheet()
         assert '#f5b64f' in dialog.status_labels['year'].styleSheet()
-        assert dialog.source_table.columnWidth(5) == 126
-        assert dialog.source_table.cellWidget(0, 5).objectName() == 'UseSourceDataCell'
+        assert dialog.source_table.columnWidth(6) == 126
+        assert dialog.source_table.cellWidget(0, 6).objectName() == 'UseSourceDataCell'
         assert dialog.source_table.verticalHeader().defaultSectionSize() == 31
         assert dialog.source_table.horizontalHeader().height() == 27
         assert dialog.source_legend_button.text() == ''

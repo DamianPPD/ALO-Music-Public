@@ -167,6 +167,9 @@ def test_first_external_cover_leaves_loading_state_after_success(tmp_path: Path)
         assert not dialog._cover_candidate_pixmaps[key].isNull()
         assert not dialog.cover_main_preview.pixmap().isNull()
         assert dialog.cover_main_preview.text() == ''
+        assert dialog.cover_info_values['source'].text() == 'MusicBrainz'
+        assert dialog.cover_info_values['format'].text() == 'PNG'
+        assert dialog._cover_details[key]['bytes'] == len(_png_bytes())
     finally:
         _close(dialog)
 
@@ -188,6 +191,8 @@ def test_failed_cover_request_ends_with_neutral_error_instead_of_loading(tmp_pat
         dialog._candidate_cover_finished(reply, key, serial)
         assert dialog._cover_candidate_states[key] == 'error'
         assert dialog.cover_main_preview.text() == 'Nie udało się pobrać okładki'
+        assert dialog.cover_info_values['format'].text() == '—'
+        assert dialog.cover_info_values['size'].text() == '—'
         assert dialog._cover_proposal_labels.get(key) is None or dialog._cover_proposal_labels[key].text() != '…'
         assert dialog.status_icons['cover'].property('statusKind') == 'warning'
         assert dialog.selected_cover_available() is False

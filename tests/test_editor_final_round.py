@@ -122,7 +122,7 @@ def test_source_names_use_provider_colors_and_actions_stay_inside_cells(tmp_path
         expected = ('#5ca3ff', '#43d17d', '#b36cff', '#ff6670')
         for row, color in enumerate(expected):
             assert dialog.source_table.item(row, 0).foreground().color() == QColor(color)
-            cell = dialog.source_table.cellWidget(row, 5)
+            cell = dialog.source_table.cellWidget(row, 6)
             button = cell.findChild(QPushButton, 'UseSourceDataButton')
             assert button.geometry().left() >= 6
             assert button.geometry().right() <= cell.width() - 6
@@ -158,9 +158,9 @@ def test_source_comparison_reserves_readable_columns_and_scrolls_when_narrow(tmp
             assert table.columnWidth(0) >= table.fontMetrics().horizontalAdvance(source_item.text()) + 25
             title = table.item(row, 1)
             assert table.columnWidth(1) >= table.fontMetrics().horizontalAdvance(title.text()) + 16
-            action = table.cellWidget(row, 5)
+            action = table.cellWidget(row, 6)
             assert action.geometry().right() <= table.viewport().width()
-            assert table.columnViewportPosition(5) >= table.columnViewportPosition(1) + table.columnWidth(1)
+            assert table.columnViewportPosition(6) >= table.columnViewportPosition(1) + table.columnWidth(1)
         table.setFixedWidth(750)
         app.processEvents()
         assert table.horizontalScrollBar().maximum() > 0
@@ -188,15 +188,15 @@ def test_source_comparison_refresh_removes_stale_first_column_button(tmp_path: P
         dialog._refresh_source_comparison()
         app.processEvents()
         assert table.horizontalHeaderItem(0).text() == 'Źródło'
-        assert table.horizontalHeaderItem(5).text() == 'Akcja'
+        assert table.horizontalHeaderItem(6).text() == 'Akcja'
         assert [table.item(row, 0).text() for row in range(table.rowCount())] == [
             'TAG', 'MusicBrainz', 'ROZPOZNANIE AUDIO'
         ]
         for row in range(table.rowCount()):
             assert table.cellWidget(row, 0) is None
             assert not table.item(row, 0).icon().isNull()
-            assert table.cellWidget(row, 5).findChild(QPushButton).text() == 'Użyj danych'
-            assert table.columnViewportPosition(5) > table.columnViewportPosition(0) + table.columnWidth(0)
+            assert table.cellWidget(row, 6).findChild(QPushButton).text() == 'Użyj danych'
+            assert table.columnViewportPosition(6) > table.columnViewportPosition(0) + table.columnWidth(0)
     finally:
         _close(dialog)
 
@@ -206,7 +206,7 @@ def test_editor_initial_geometry_fits_work_area_and_is_resizable(tmp_path: Path,
 
     app = _app()
     for area, expected in (
-        (QRect(0, 0, 2000, 1200), (1520, 1020)),
+        (QRect(0, 0, 2000, 1200), (1600, 1060)),
         (QRect(40, 20, 1280, 800), (1248, 736)),
         (QRect(40, 20, 800, 600), (768, 536)),
     ):

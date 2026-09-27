@@ -33,7 +33,7 @@ def test_metadata_editor_builds_new_compact_workspace_without_network(tmp_path: 
     dialog = MetadataEditorDialog(track)
     try:
         assert dialog.artist.text() == 'RELOCATE'
-        assert dialog.source_table.columnCount() == 6
+        assert dialog.source_table.columnCount() == 7
         assert dialog.source_legend_button.text() == ''
         assert not dialog.source_legend_button.icon().isNull()
         assert dialog.source_legend_button.property('iconStyle') == 'thin'

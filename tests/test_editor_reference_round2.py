@@ -109,7 +109,7 @@ def test_source_action_is_a_small_centered_button_inside_the_cell(tmp_path: Path
     try:
         dialog.show()
         app.processEvents()
-        cell = dialog.source_table.cellWidget(0, 5)
+        cell = dialog.source_table.cellWidget(0, 6)
         button = cell.findChild(QPushButton, 'UseSourceDataButton')
         assert cell.objectName() == 'UseSourceDataCell'
         assert button is not None

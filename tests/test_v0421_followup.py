@@ -172,7 +172,7 @@ def test_cover_panel_has_one_online_search_and_conditional_show_more(tmp_path: P
         assert dialog.search_cover_button.text() == 'Szukaj okładki online'
         assert not hasattr(dialog, 'more_covers_button')
         assert dialog.show_more_covers_button.isVisible()
-        assert len(dialog._cover_proposal_labels) == 5  # four online results + placeholder
+        assert len(dialog._cover_proposal_labels) == 6  # five online results + placeholder
 
         dialog.show_more_covers_button.click()
         app.processEvents()

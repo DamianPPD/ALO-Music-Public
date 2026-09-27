@@ -198,10 +198,14 @@ def test_audio_thread_completion_releases_retry_only_after_idle(tmp_path, monkey
             retry = editor.audio_retry_button
         elif outcome == 'error':
             assert editor.audio_phase.text() == 'Błąd rozpoznawania audio'
-            retry = editor.audio_retry_button
+            assert editor.audio_empty_status.isVisible()
+            assert not editor.audio_candidate_content.isVisible()
+            retry = editor.audio_empty_retry
         else:
             assert editor.audio_phase.text() == 'Brak wyników'
-            retry = editor.audio_scan_button
+            assert editor.audio_empty_status.isVisible()
+            assert not editor.audio_candidate_content.isVisible()
+            retry = editor.audio_empty_retry
         assert retry.isEnabled()
         retry.click()
         assert window._thread is not None
