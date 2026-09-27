@@ -24,7 +24,7 @@ def _close(editor):
     editor.close()
 
 
-@pytest.mark.parametrize('count', (0, 1, 2, 4, 6))
+@pytest.mark.parametrize('count', (0, 1, 2, 3, 4, 5, 6))
 def test_cover_proposals_fit_two_columns_three_rows_without_extra_placeholders(tmp_path, count):
     editor = _editor(tmp_path)
     try:
@@ -39,7 +39,8 @@ def test_cover_proposals_fit_two_columns_three_rows_without_extra_placeholders(t
         assert len(positions) <= 6
         assert all(col in (0, 1) and row in (0, 1, 2) for row, col in positions)
         assert len(positions) == min(count + 1, 6)  # Existing "Brak okładki" option.
-        assert list(editor._cover_proposal_labels).count('placeholder') == 1
+        assert list(editor._cover_proposal_labels).count('placeholder') == (0 if count == 6 else 1)
+        assert 'placeholder' in editor._cover_candidate_pixmaps
         assert editor.cover_main_preview.size().width() == 248
         if count:
             key = next(iter(editor._cover_candidate_urls))

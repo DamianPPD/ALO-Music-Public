@@ -237,6 +237,7 @@ TEXT_MAP_EN.update({
     'Edytuj regułę normalizacji': 'Edit normalization rule', 'Zapisz': 'Save', 'Odrzuć': 'Discard', 'Wróć': 'Back',
     'Nieprawidłowy rok': 'Invalid year', 'Rok musi składać się dokładnie z 4 cyfr, np. 2009.': 'Year must contain exactly 4 digits, e.g. 2009.',
     'Brak wymaganych danych': 'Missing required data', 'Wybierz okładkę': 'Choose cover', 'Obrazy (*.jpg *.jpeg *.png *.webp)': 'Images (*.jpg *.jpeg *.png *.webp)',
+    'Maksymalnie 6 propozycji okładek.': 'Maximum of 6 cover suggestions.',
     'Brak alternatywnych danych': 'No alternative data', 'Duża różnica': 'Large difference',
     'Kliknij, aby porównać dostępne wartości z różnych źródeł.': 'Click to compare available values from different sources.',
     'Cofa ostatnią zmianę w całym edytorze, także przywrócenie danych sprzed online.': 'Undo the last change in the whole editor, including restoring pre-online data.',

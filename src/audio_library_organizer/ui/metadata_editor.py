@@ -83,10 +83,16 @@ class SourceComparisonTable(QTableWidget):
 
     def resize_columns(self):
         header = self.horizontalHeader()
-        fixed = {0: 220, 2: 152, 3: 170, 4: 58, 5: 115, 6: 126}
+        fixed = {0: 220, 4: 58, 5: 95, 6: 126}
         for column, width in fixed.items():
             header.resizeSection(column, width)
-        header.resizeSection(1, max(280, self.viewport().width() - sum(fixed.values())))
+        available = self.viewport().width() - sum(fixed.values())
+        title = max(280, round(available * 27 / 71))
+        album = max(152, round(available * 24 / 71))
+        artist = max(170, available - title - album)
+        album = max(152, album - max(0, title + album + artist - available))
+        for column, width in ((1, title), (2, album), (3, artist)):
+            header.resizeSection(column, width)
 
     def resize_to_rows(self):
         overflow = sum(self.columnWidth(column) for column in range(self.columnCount())) > self.viewport().width()
@@ -1007,6 +1013,7 @@ class MetadataEditorDialog(QDialog):
 
         self._cover_candidate_urls: dict[str, str] = {}
         self._cover_candidate_pixmaps: dict[str, QPixmap] = {}
+        self._manual_cover_paths: dict[str, str] = {}
         self._cover_details: dict[str, dict[str, object]] = {}
         self._cover_proposal_labels: dict[str, ClickableCoverLabel] = {}
         self._cover_proposals_expanded = False
@@ -2230,6 +2237,7 @@ class MetadataEditorDialog(QDialog):
         self._cancel_pending_cover_requests()
         self._cover_candidate_pixmaps = {}
         self._cover_candidate_urls = {}
+        self._manual_cover_paths = {}
         self._cover_candidate_states = {}
         self._cover_details = {}
         self._cover_proposals_expanded = False
@@ -2254,6 +2262,7 @@ class MetadataEditorDialog(QDialog):
         manual = QPixmap(self.manual_cover_path) if self.manual_cover_path and Path(self.manual_cover_path).is_file() else QPixmap()
         if not manual.isNull():
             path = Path(self.manual_cover_path)
+            self._manual_cover_paths['manual'] = str(path)
             self._cover_details['manual'] = {'bytes': path.stat().st_size,
                                              'format': path.suffix.lstrip('.').upper().replace('JPEG', 'JPG')}
         self._cover_candidate_pixmaps['manual'] = manual
@@ -2313,19 +2322,14 @@ class MetadataEditorDialog(QDialog):
             entries.append(('source', 'OBECNA'))
         external_entries = [(key, key.split(':', 1)[1]) for key in self._cover_candidate_urls]
         entries.extend(external_entries)
-        if not self._cover_candidate_pixmaps.get('manual', QPixmap()).isNull():
-            entries.append(('manual', 'WŁASNA'))
+        entries.extend((key, 'WŁASNA') for key in self._manual_cover_paths)
         entries.append(('placeholder', 'BRAK OKŁADKI'))
-        total_count = len(entries)
-        if not self._cover_proposals_expanded and len(entries) > 6:
-            visible = [*entries[:5], entries[-1]]
-            selected = getattr(self, '_selected_cover_key', '')
-            selected_entry = next((entry for entry in entries if entry[0] == selected), None)
-            if selected_entry and selected_entry not in visible:
-                visible[4] = selected_entry
-            entries = visible
+        total_count = len(entries) - 1
+        has_more = not self._cover_proposals_expanded and len(entries) > 6
+        if has_more:
+            entries = entries[:6]
         self.cover_proposal_count.setText(ui_text(self, f'Propozycje ({total_count})'))
-        self.show_more_covers_button.setVisible(total_count > len(entries))
+        self.show_more_covers_button.setVisible(has_more)
 
         count = len(entries)
         preview_size = 78
@@ -2482,7 +2486,7 @@ class MetadataEditorDialog(QDialog):
         details = self._cover_details.get(key, {})
         if key == 'placeholder':
             source = '—'
-        elif key == 'manual':
+        elif key in self._manual_cover_paths:
             source = ui_text(self, 'Ręcznie')
         elif key == 'source':
             source = 'TAG' if not pix.isNull() else '—'
@@ -2512,11 +2516,15 @@ class MetadataEditorDialog(QDialog):
             self._push_undo_state()
         self._selected_cover_key = key
         if key not in self._cover_proposal_labels and not self._cover_proposals_expanded:
+            self._cover_proposals_expanded = True
             self._rebuild_cover_proposals()
         if key.startswith('external:'):
             self.cover_choice = 'external'
             self._selected_external_url = self._cover_candidate_urls.get(key)
-        elif key in {'source', 'manual', 'placeholder'}:
+        elif key in self._manual_cover_paths:
+            self.cover_choice = 'manual'
+            self.manual_cover_path = self._manual_cover_paths[key]
+        elif key in {'source', 'placeholder'}:
             self.cover_choice = key
         self._update_cover_main_preview()
         if not self._suspend_tracking:
@@ -2563,19 +2571,33 @@ class MetadataEditorDialog(QDialog):
         show_cover_preview(self, pix, title='Podgląd wybranej okładki', note=note)
 
     def _choose_cover(self):
+        real_covers = (len(self._cover_candidate_urls) + len(self._manual_cover_paths)
+                       + int(not self._cover_candidate_pixmaps.get('source', QPixmap()).isNull()))
+        if real_covers >= 6:
+            QMessageBox.information(self, ui_text(self, 'Okładka'), ui_text(self, 'Maksymalnie 6 propozycji okładek.'))
+            return
         path, _ = QFileDialog.getOpenFileName(self, ui_text(self, 'Wybierz okładkę'), '', ui_text(self, 'Obrazy (*.jpg *.jpeg *.png *.webp)'))
         if not path:
             return
+        existing = next((key for key, existing_path in self._manual_cover_paths.items() if existing_path == path), None)
+        if existing:
+            self._select_cover_choice(existing)
+            return
+        pixmap = QPixmap(path)
+        if pixmap.isNull():
+            return
         if not self._suspend_tracking:
             self._push_undo_state()
+        key = 'manual' if 'manual' not in self._manual_cover_paths else f'manual:{len(self._manual_cover_paths)}'
+        self._manual_cover_paths[key] = path
         self.manual_cover_path = path
-        self._cover_candidate_pixmaps['manual'] = QPixmap(path)
-        self._cover_details['manual'] = {'bytes': Path(path).stat().st_size,
-                                         'format': Path(path).suffix.lstrip('.').upper().replace('JPEG', 'JPG')}
-        self._cover_candidate_states['manual'] = 'ready' if not self._cover_candidate_pixmaps['manual'].isNull() else 'error'
-        self._cover_notes['manual'] = 'Okładka wybrana ręcznie.'
+        self._cover_candidate_pixmaps[key] = pixmap
+        self._cover_details[key] = {'bytes': Path(path).stat().st_size,
+                                    'format': Path(path).suffix.lstrip('.').upper().replace('JPEG', 'JPG')}
+        self._cover_candidate_states[key] = 'ready'
+        self._cover_notes[key] = 'Okładka wybrana ręcznie.'
         self.cover_choice = 'manual'
-        self._selected_cover_key = 'manual'
+        self._selected_cover_key = key
         self._rebuild_cover_proposals()
         self._update_cover_main_preview()
         self._refresh_dirty_state()
