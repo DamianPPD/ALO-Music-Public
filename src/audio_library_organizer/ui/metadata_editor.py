@@ -27,6 +27,9 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QHeaderView,
     QAbstractItemView,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
+    QStyle,
     QVBoxLayout,
     QWidget,
     QWidgetAction,
@@ -92,6 +95,40 @@ class SourceComparisonTable(QTableWidget):
             height += self.horizontalScrollBar().sizeHint().height()
         if self.height() != height:
             self.setFixedHeight(height)
+
+
+class AudioCandidateRowDelegate(QStyledItemDelegate):
+    """Paint row hover without the platform's focused-cell frame."""
+
+    def paint(self, painter, option, index):
+        styled = QStyleOptionViewItem(option)
+        styled.state &= ~QStyle.StateFlag.State_HasFocus
+        if index.row() == self.parent().hovered_row and not styled.state & QStyle.StateFlag.State_Selected:
+            styled.state |= QStyle.StateFlag.State_MouseOver
+        else:
+            styled.state &= ~QStyle.StateFlag.State_MouseOver
+        super().paint(painter, styled, index)
+
+
+class AudioCandidatesTable(QTableWidget):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.hovered_row = -1
+        self.setMouseTracking(True)
+        self.viewport().setMouseTracking(True)
+        self.setItemDelegate(AudioCandidateRowDelegate(self))
+
+    def mouseMoveEvent(self, event):
+        row = self.indexAt(event.position().toPoint()).row()
+        if row != self.hovered_row:
+            self.hovered_row = row
+            self.viewport().update()
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event):
+        self.hovered_row = -1
+        self.viewport().update()
+        super().leaveEvent(event)
 
 
 class MissingEmptyState(QWidget):
@@ -559,8 +596,17 @@ class MetadataEditorDialog(QDialog):
         ap.setSpacing(4)
         self.audio_phase = QLabel('Oczekiwanie na rozpoznanie audio')
         self.audio_phase.setObjectName('AudioRecognitionPhase')
-        ap.addWidget(self.audio_phase)
-        self.audio_candidates = QTableWidget(0, 5)
+        self.audio_phase_header = QWidget()
+        phase_header = QHBoxLayout(self.audio_phase_header)
+        phase_header.setContentsMargins(0, 0, 0, 0)
+        phase_header.setSpacing(6)
+        self.audio_phase_icon = QLabel()
+        self.audio_phase_icon.setPixmap(editor_icon('audio_recognize', '#20c5c3', 17).pixmap(17, 17))
+        self.audio_phase_icon.setFixedSize(17, 17)
+        phase_header.addWidget(self.audio_phase_icon)
+        phase_header.addWidget(self.audio_phase, 1)
+        ap.addWidget(self.audio_phase_header)
+        self.audio_candidates = AudioCandidatesTable(0, 5)
         self.audio_candidates.setObjectName('AudioRecognitionCandidates')
         self.audio_candidates.setHorizontalHeaderLabels(('Wybór', 'Tytuł / wersja', 'Wykonawca', 'Album / rok', 'Dopasowanie'))
         self.audio_candidates.verticalHeader().hide()
@@ -573,6 +619,7 @@ class MetadataEditorDialog(QDialog):
         self.audio_candidates.horizontalHeader().resizeSection(4, 105)
         self.audio_candidates.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.audio_candidates.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.audio_candidates.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.audio_candidates.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.audio_candidates.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.audio_candidates.currentCellChanged.connect(lambda row, _column, _old_row, _old_column: self._show_audio_candidate_detail(row))
@@ -600,7 +647,7 @@ class MetadataEditorDialog(QDialog):
         summary.setSpacing(8)
         self.audio_summary_icon = QLabel()
         self.audio_summary_icon.setObjectName('AudioRecognitionSummaryIcon')
-        self.audio_summary_icon.setPixmap(editor_icon('audio_recognize', '#20c5c3', 20).pixmap(20, 20))
+        self.audio_summary_icon.setPixmap(editor_icon('audio_recognize', '#20c5c3', 17).pixmap(17, 17))
         self.audio_summary_icon.setFixedSize(23, 23)
         summary.addWidget(self.audio_summary_icon)
         summary_text = QVBoxLayout()
@@ -638,7 +685,7 @@ class MetadataEditorDialog(QDialog):
             self._refresh_audio_summary()
             self.audio_summary.show()
             self.audio_candidate_content.hide()
-            self.audio_phase.hide()
+            self.audio_phase_header.hide()
         else:
             self.audio_summary.hide()
             audio_panel.hide()
@@ -1273,7 +1320,7 @@ class MetadataEditorDialog(QDialog):
         self.audio_candidates.setRowCount(0)
         self.audio_detail.clear()
         self.audio_confirm_button.setEnabled(False)
-        self.audio_phase.show()
+        self.audio_phase_header.show()
         if self.track.audio_recognition:
             self.audio_candidate_content.hide()
             self.audio_summary.show()
@@ -1297,7 +1344,7 @@ class MetadataEditorDialog(QDialog):
 
     def show_audio_error(self, message: str) -> None:
         self.audio_panel.show()
-        self.audio_phase.show()
+        self.audio_phase_header.show()
         self.audio_candidate_content.show()
         if self.track.audio_recognition:
             self.audio_summary.show()
@@ -1309,7 +1356,7 @@ class MetadataEditorDialog(QDialog):
         self.audio_panel.show()
         self.audio_summary.hide()
         self.audio_candidate_content.show()
-        self.audio_phase.show()
+        self.audio_phase_header.show()
         self._audio_hits = [hit for hit in hits if (hit.artist or '').strip() and (hit.title or '').strip()][:5]
         self.audio_candidates.clearContents()
         self.audio_candidates.setRowCount(len(self._audio_hits))
@@ -1365,7 +1412,7 @@ class MetadataEditorDialog(QDialog):
                 self.show_audio_candidates([approved])
                 return
         self.audio_summary.hide()
-        self.audio_phase.show()
+        self.audio_phase_header.show()
         self.audio_candidate_content.show()
         self._refresh_audio_candidate_markers()
 
@@ -1395,7 +1442,7 @@ class MetadataEditorDialog(QDialog):
         self._refresh_audio_summary()
         self.audio_summary.show()
         self.audio_candidate_content.hide()
-        self.audio_phase.hide()
+        self.audio_phase_header.hide()
         self.audio_source_confirmed.emit(self, previous)
 
     def refresh_audio_language(self) -> None:
@@ -1713,6 +1760,7 @@ class MetadataEditorDialog(QDialog):
         if not hasattr(self, 'source_table'):
             return
         sources = self._source_rows()
+        self.source_table.clearContents()  # Drop any old cell widgets before inserting source labels and actions.
         self.source_table.setRowCount(len(sources))
         colors = self.SOURCE_COLORS
         display_names = {

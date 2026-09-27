@@ -170,6 +170,37 @@ def test_source_comparison_reserves_readable_columns_and_scrolls_when_narrow(tmp
         app.setStyleSheet(previous_style)
 
 
+def test_source_comparison_refresh_removes_stale_first_column_button(tmp_path: Path):
+    from audio_library_organizer.jobs.audio_identification import SOURCE
+
+    app = _app()
+    dialog = MetadataEditorDialog(_track(tmp_path, field_source_values={
+        'title': {'Tag': 'Original mix', 'MusicBrainz': 'Other mix', SOURCE: 'Audio mix'},
+    }))
+    try:
+        dialog.resize(1180, 920)
+        dialog.show()
+        app.processEvents()
+        table = dialog.source_table
+        assert table.item(0, 0).text() == 'TAG'
+        table.setCellWidget(0, 0, QPushButton('Użyj danych'))
+        assert table.cellWidget(0, 0) is not None  # This masks the real source item.
+        dialog._refresh_source_comparison()
+        app.processEvents()
+        assert table.horizontalHeaderItem(0).text() == 'Źródło'
+        assert table.horizontalHeaderItem(5).text() == 'Akcja'
+        assert [table.item(row, 0).text() for row in range(table.rowCount())] == [
+            'TAG', 'MusicBrainz', 'ROZPOZNANIE AUDIO'
+        ]
+        for row in range(table.rowCount()):
+            assert table.cellWidget(row, 0) is None
+            assert not table.item(row, 0).icon().isNull()
+            assert table.cellWidget(row, 5).findChild(QPushButton).text() == 'Użyj danych'
+            assert table.columnViewportPosition(5) > table.columnViewportPosition(0) + table.columnWidth(0)
+    finally:
+        _close(dialog)
+
+
 def test_long_track_names_elide_but_keep_full_tooltips(tmp_path: Path):
     app = _app()
     track = _track(tmp_path)

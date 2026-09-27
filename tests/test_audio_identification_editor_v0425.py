@@ -16,6 +16,7 @@ from audio_library_organizer.domain.settings import AppSettings, LibraryPaths
 from audio_library_organizer.domain.preferences import AppPreferences
 from audio_library_organizer.ui.i18n import apply_static_language
 from audio_library_organizer.ui.metadata_editor import MetadataEditorDialog
+from audio_library_organizer.ui.theme import style_for_theme
 from audio_library_organizer.ui.main_window import MainWindow
 from audio_library_organizer.ui.workers import AudioIdentificationWorker
 
@@ -57,6 +58,64 @@ def test_candidates_are_compact_columns_and_approval_collapses_to_summary(tmp_pa
         editor.audio_confirm_button.click()
         assert editor.track.audio_recognition['recording_id'] == 'recording-2'
         assert editor._source_values['title'][SOURCE] == 'Stepping to the Beat'
+    finally:
+        editor._force_closing = True
+        editor.close()
+
+
+def test_candidate_hover_and_selection_keep_whole_row_without_focus_frame(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    old_style = app.styleSheet()
+    app.setStyleSheet(style_for_theme('dark'))
+    editor = MetadataEditorDialog(TrackRecord(path=tmp_path / 'song.mp3'))
+    try:
+        editor.show_audio_candidates([
+            AcoustIDHit('r1', .9, 'Song', 'Artist'),
+            AcoustIDHit('r2', .8, 'Other', 'Artist'),
+        ])
+        editor.resize(1180, 900)
+        editor.show()
+        app.processEvents()
+        table = editor.audio_candidates
+        assert table.selectionBehavior() == table.SelectionBehavior.SelectRows
+        assert table.selectionMode() == table.SelectionMode.SingleSelection
+        before = table.viewport().grab().toImage()
+        QTest.mouseMove(table.viewport(), table.visualItemRect(table.item(0, 1)).center())
+        app.processEvents()
+        hover = table.viewport().grab().toImage()
+        for column in (0, 1, 2, 3, 4):
+            rect = table.visualItemRect(table.item(0, column))
+            x, y = rect.right() - 5, rect.center().y()
+            assert hover.pixelColor(x, y) != before.pixelColor(x, y)
+        QTest.mouseClick(table.viewport(), Qt.MouseButton.LeftButton,
+                         pos=table.visualItemRect(table.item(0, 1)).center())
+        app.processEvents()
+        assert table.currentRow() == 0
+        assert {item.row() for item in table.selectedIndexes()} == {0}
+        assert len(table.selectedIndexes()) == table.columnCount()
+        assert editor.audio_confirm_button.isEnabled()
+        assert not table.hasFocus() and not table.viewport().hasFocus()
+    finally:
+        editor._force_closing = True
+        editor.close()
+        app.setStyleSheet(old_style)
+
+
+def test_audio_phase_and_approval_share_a1_module_icon(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    editor = MetadataEditorDialog(TrackRecord(path=tmp_path / 'song.mp3'))
+    try:
+        editor.show_audio_candidates([AcoustIDHit('r1', .9, 'Song', 'Artist')])
+        editor.show()
+        app.processEvents()
+        assert editor.audio_phase.text() == 'Znaleziono kandydatów'
+        assert editor.audio_phase_icon.isVisible()
+        assert not editor.audio_phase_icon.pixmap().isNull()
+        editor.audio_candidates.setCurrentCell(0, 1)
+        editor.audio_confirm_button.click()
+        assert editor.audio_summary.isVisible()
+        assert not editor.audio_summary_icon.pixmap().isNull()
+        assert editor.audio_phase_icon.pixmap().toImage() == editor.audio_summary_icon.pixmap().toImage()
     finally:
         editor._force_closing = True
         editor.close()
