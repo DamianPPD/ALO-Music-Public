@@ -33,7 +33,7 @@ def test_top_nav_uses_libraries_action_without_duplicate_badges():
 def test_add_new_files_is_visually_separate_from_workflow():
     main_init = _slice(MAIN, 'class MainWindow', 'def _t(')
     assert 'WorkflowToolbarSeparator' in main_init
-    assert 'action.addSpacing(' in main_init
+    assert 'action.addWidget(self.operation_frame, 1)' in main_init
     assert 'QPushButton#ManageLibrariesNavAction' in THEME
     assert 'QPushButton#AddFilesAction' in THEME
 

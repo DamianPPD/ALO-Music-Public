@@ -6,14 +6,60 @@ import html
 from pathlib import Path
 import shutil
 
-from PySide6.QtCore import Qt, QSettings, QUrl, Signal
-from PySide6.QtGui import QCursor, QDesktopServices, QResizeEvent
-from PySide6.QtWidgets import QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt, QSettings, QUrl, Signal, QRectF
+from PySide6.QtGui import QBrush, QColor, QCursor, QDesktopServices, QLinearGradient, QPainter, QPixmap, QResizeEvent
+from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget
 
 from audio_library_organizer.domain.settings import AppSettings
 from audio_library_organizer.ui.icons import alo_icon
 from audio_library_organizer.ui.i18n import ui_text, language_for
 from audio_library_organizer.ui.widgets import StatCard
+from audio_library_organizer.ui.assets import asset_path
+
+
+class StudioHero(QFrame):
+    """Use the supplied studio scene, excluding the UI already in the reference."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName('StartStudioHero')
+        self.artwork_path = asset_path('start_studio.png')
+        self._artwork = QPixmap(str(self.artwork_path))
+        self.setMinimumHeight(136)
+        self.setMaximumHeight(172)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        bounds = QRectF(self.rect()).adjusted(1, 1, -1, -1)
+        painter.setClipPath(self._rounded_path(bounds))
+        painter.fillRect(bounds, QColor('#0b151c'))
+        if not self._artwork.isNull():
+            # The attached reference is a screenshot. Its studio scene is clean
+            # from x=550..1672 and y=160..445; exclude the baked interface.
+            source = QRectF(550, 160, 1120, 285)
+            target_ratio = bounds.width() / max(1.0, bounds.height())
+            source_height = min(source.height(), source.width() / target_ratio)
+            source = QRectF(source.left(), source.center().y() - source_height / 2,
+                            source.width(), source_height)
+            painter.drawPixmap(bounds, self._artwork, source)
+        gradient = QLinearGradient(bounds.topLeft(), bounds.topRight())
+        gradient.setColorAt(0, QColor(2, 10, 16, 250))
+        gradient.setColorAt(0.34, QColor(2, 10, 16, 225))
+        gradient.setColorAt(0.62, QColor(2, 10, 16, 60))
+        gradient.setColorAt(1, QColor(2, 10, 16, 0))
+        painter.fillRect(bounds, QBrush(gradient))
+        painter.setClipping(False)
+        painter.setPen(QColor('#294550'))
+        painter.drawRoundedRect(bounds, 10, 10)
+
+    @staticmethod
+    def _rounded_path(bounds):
+        from PySide6.QtGui import QPainterPath
+        path = QPainterPath()
+        path.addRoundedRect(bounds, 10, 10)
+        return path
 
 
 class DashboardStatCard(StatCard):
@@ -21,6 +67,26 @@ class DashboardStatCard(StatCard):
 
     def __init__(self, title: str, value: str = '0', parent=None, *, accent: str = '#4a91ff'):
         super().__init__(title, value, parent, accent=accent)
+        self.setObjectName('DashboardStatCard')
+        self.setStyleSheet(
+            'QFrame#DashboardStatCard { background:#0e1a22; border:1px solid #29424d; '
+            'border-radius:9px; } QLabel { background:transparent; border:0; }'
+        )
+        self.setFixedHeight(79)
+        layout = self.layout()
+        layout.setContentsMargins(12, 5, 12, 5)
+        layout.setSpacing(0)
+        layout.removeWidget(self.value_label)
+        icon_name = {'Utwory': 'add_tracks', 'Do sprawdzenia': 'warning',
+                     'Duplikaty': 'duplicates', 'Brak okładki': 'cover'}[title]
+        self.stat_icon = QLabel()
+        self.stat_icon.setPixmap(alo_icon(icon_name, accent, 27).pixmap(27, 27))
+        row = QHBoxLayout()
+        row.setSpacing(12)
+        row.addWidget(self.stat_icon)
+        row.addWidget(self.value_label, 1)
+        layout.insertLayout(0, row)
+        self.value_label.setStyleSheet(f'font-size:20pt;font-weight:800;border:0;color:{accent};')
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.setToolTip('Kliknij, aby otworzyć ten widok w Bibliotece')
 
@@ -77,50 +143,41 @@ class QuickAccessCard(QFrame):
         self.setObjectName('QuickAccessCard')
         self.setProperty('accentColor', accent)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        self.setMinimumHeight(120)
+        self.setFixedHeight(72)
         self.path = Path(path)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(7)
-        heading = QHBoxLayout()
-        heading.setSpacing(8)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 5, 10, 5)
+        layout.setSpacing(8)
         self.title_icon = QLabel()
         self.title_icon.setObjectName('QuickAccessIcon')
-        self.title_icon.setPixmap(alo_icon(icon_name, '#d9e8ef', 19).pixmap(19, 19))
-        self.title_icon.setFixedSize(23, 23)
+        self.title_icon.setPixmap(alo_icon(icon_name, '#d9e8ef', 23).pixmap(23, 23))
+        self.title_icon.setFixedSize(29, 29)
         self.title_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        heading.addWidget(self.title_icon)
+        layout.addWidget(self.title_icon)
+        text_column = QVBoxLayout()
+        text_column.setSpacing(1)
         self.title_label = QLabel(title)
         self.title_label.setObjectName('QuickAccessTitle')
-        heading.addWidget(self.title_label, 1)
+        text_column.addWidget(self.title_label)
+        self.path_label = ElidedPathLabel(self.path, accent)
+        text_column.addWidget(self.path_label)
+        layout.addLayout(text_column, 1)
+        actions = QVBoxLayout()
+        actions.setSpacing(2)
         self.availability = QLabel('')
         self.availability.setObjectName('QuickAccessAvailability')
-        heading.addWidget(self.availability)
-        layout.addLayout(heading)
-
-        self.path_label = ElidedPathLabel(self.path, accent)
-        layout.addWidget(self.path_label)
-
-        actions = QHBoxLayout()
-        actions.setSpacing(7)
+        self.availability.setAlignment(Qt.AlignmentFlag.AlignRight)
+        actions.addWidget(self.availability)
         self.open_button = QPushButton('Otwórz folder')
         self.open_button.setObjectName('QuickAccessOpen')
         self.open_button.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.open_button.setIcon(alo_icon('folder_open', '#d9e8ef', 15))
         self.open_button.setToolTip('Otwórz folder w Eksploratorze')
-        self.copy_button = QPushButton('Kopiuj ścieżkę')
-        self.copy_button.setObjectName('QuickAccessCopy')
-        self.copy_button.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.copy_button.setIcon(alo_icon('copy', '#98afbd', 14))
-        self.copy_button.setToolTip('Kopiuj ścieżkę')
         actions.addWidget(self.open_button)
-        actions.addWidget(self.copy_button)
-        actions.addStretch(1)
         layout.addLayout(actions)
 
         self.open_button.clicked.connect(self._open_folder)
-        self.copy_button.clicked.connect(self._copy_path)
         self.set_path(path)
 
     def set_path(self, path: Path) -> None:
@@ -137,10 +194,6 @@ class QuickAccessCard(QFrame):
         if self.path.is_dir():
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.path)))
 
-    def _copy_path(self) -> None:
-        QApplication.clipboard().setText(str(self.path))
-
-
 class DashboardPage(QWidget):
     refresh_requested = Signal()
     quick_view_requested = Signal(str)
@@ -151,18 +204,43 @@ class DashboardPage(QWidget):
         self._summary: dict[str, int] = {}
         self._health: dict[str, object] = {}
 
-        root = QVBoxLayout(self)
-        root.setContentsMargins(12, 10, 12, 10)
-        root.setSpacing(12)
+        viewport_layout = QVBoxLayout(self)
+        viewport_layout.setContentsMargins(0, 0, 0, 0)
+        self.scroll = QScrollArea(self)
+        self.scroll.setObjectName('StartScroll')
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+        viewport_layout.addWidget(self.scroll)
+        body = QWidget()
+        body.setObjectName('StartContent')
+        self.scroll.setWidget(body)
+        root = QVBoxLayout(body)
+        root.setContentsMargins(12, 6, 12, 8)
+        root.setSpacing(3)
+
+        self.hero = StudioHero(body)
+        hero_text = QVBoxLayout(self.hero)
+        hero_text.setContentsMargins(28, 9, 12, 10)
+        hero_text.setSpacing(0)
+        hero_brand = QLabel('ALO Music')
+        hero_brand.setObjectName('StartHeroBrand')
+        hero_text.addWidget(hero_brand)
+        self.hero_title = QLabel('Twoja muzyka.\nW Twoim stylu.')
+        self.hero_title.setObjectName('StartHeroTitle')
+        hero_text.addWidget(self.hero_title)
+        self.hero_description = QLabel('Porządkuj, uzupełniaj, analizuj\ni ciesz się swoją kolekcją.')
+        self.hero_description.setObjectName('StartHeroDescription')
+        hero_text.addWidget(self.hero_description)
+        root.addWidget(self.hero)
 
         self.dashboard_title = QLabel('Biblioteka główna')
-        self.dashboard_title.setStyleSheet('font-size:22pt;font-weight:750;')
+        self.dashboard_title.setStyleSheet('font-size:15pt;font-weight:750;')
         root.addWidget(self.dashboard_title)
 
         path_bar = QFrame()
         path_bar.setObjectName('SessionCard')
         path_layout = QHBoxLayout(path_bar)
-        path_layout.setContentsMargins(12, 8, 12, 8)
+        path_layout.setContentsMargins(10, 3, 10, 3)
         path_layout.setSpacing(8)
         folder_icon = QLabel()
         folder_icon.setPixmap(alo_icon('folder', '#62d6f5', 20).pixmap(20, 20))
@@ -184,7 +262,7 @@ class DashboardPage(QWidget):
         cards_layout.setHorizontalSpacing(10)
         cards_layout.setVerticalSpacing(0)
         self.cards = {
-            'total': DashboardStatCard('Utwory', accent='#7f8da1'),
+            'total': DashboardStatCard('Utwory', accent='#67baff'),
             'review': DashboardStatCard('Do sprawdzenia', accent='#ffb84d'),
             'duplicate': DashboardStatCard('Duplikaty', accent='#b987ff'),
             'missing_covers': DashboardStatCard('Brak okładki', accent='#63b3ed'),
@@ -200,7 +278,7 @@ class DashboardPage(QWidget):
 
         self.last_scan_label = QLabel('Ostatnie skanowanie: brak danych')
         self.last_scan_label.setObjectName('MutedText')
-        self.last_scan_label.setWordWrap(True)
+        self.last_scan_label.setWordWrap(False)
         root.addWidget(self.last_scan_label)
 
         quick_header = QHBoxLayout()
@@ -216,20 +294,19 @@ class DashboardPage(QWidget):
 
         self.quick_access_host = QWidget()
         self.quick_access_layout = QGridLayout(self.quick_access_host)
-        self.quick_access_layout.setContentsMargins(0, 0, 0, 14)
+        self.quick_access_layout.setContentsMargins(0, 0, 0, 3)
         self.quick_access_layout.setHorizontalSpacing(10)
-        self.quick_access_layout.setVerticalSpacing(10)
+        self.quick_access_layout.setVerticalSpacing(5)
         self.location_cards: dict[str, QuickAccessCard] = {}
         self._location_order = ('root', 'ready', 'review', 'not_selected', 'custom_folders', 'reports')
         self._create_location_cards(settings)
         root.addWidget(self.quick_access_host)
 
-        root.addSpacing(10)
         self.statistics_separator = QFrame()
         self.statistics_separator.setObjectName('DashboardStatisticsSeparator')
-        self.statistics_separator.setMinimumHeight(42)
+        self.statistics_separator.setMinimumHeight(27)
         separator_layout = QHBoxLayout(self.statistics_separator)
-        separator_layout.setContentsMargins(0, 9, 0, 9)
+        separator_layout.setContentsMargins(0, 3, 0, 3)
         separator_layout.setSpacing(8)
         left_line = QFrame()
         left_line.setObjectName('DashboardStatisticsLine')
@@ -253,33 +330,50 @@ class DashboardPage(QWidget):
         stats_frame = QFrame()
         stats_frame.setObjectName('LibraryHealthCard')
         stats_layout = QVBoxLayout(stats_frame)
-        stats_layout.setContentsMargins(14, 11, 14, 11)
-        stats_layout.setSpacing(8)
+        stats_layout.setContentsMargins(7, 5, 7, 5)
+        stats_layout.setSpacing(3)
 
         stats_grid = QGridLayout()
         stats_grid.setHorizontalSpacing(10)
-        stats_grid.setVerticalSpacing(8)
+        stats_grid.setVerticalSpacing(4)
         stat_labels = [
             ('covers', 'OKŁADKI'),
             ('online', 'ROZPOZNANE ONLINE'),
-            ('missing', 'BRAKUJĄCE PLIKI'),
             ('suspicious', 'PODEJRZANE DANE'),
             ('size', 'ROZMIAR BIBLIOTEKI'),
+            ('missing', 'BRAKUJĄCE PLIKI'),
             ('free_space', 'WOLNE MIEJSCE'),
         ]
         self.stats_values: dict[str, QLabel] = {}
+        self.stats_progress = {}
         for index, (key, label) in enumerate(stat_labels):
             box = QFrame()
-            box.setObjectName('WorkflowMiniStep')
+            box.setObjectName('StartLibraryMetric')
             box_layout = QVBoxLayout(box)
-            box_layout.setContentsMargins(10, 7, 10, 7)
-            box_layout.setSpacing(2)
+            box_layout.setContentsMargins(9, 3, 9, 3)
+            box_layout.setSpacing(0)
+            icon = QLabel()
+            icon_name = {'covers': 'cover', 'online': 'recognize', 'suspicious': 'warning',
+                         'size': 'library', 'missing': 'folder', 'free_space': 'report'}[key]
+            icon.setPixmap(alo_icon(icon_name, '#79dcb0', 15).pixmap(15, 15))
+            header = QHBoxLayout()
+            header.setSpacing(6)
+            header.addWidget(icon)
             heading = QLabel(label)
-            heading.setObjectName('FieldHeading')
+            heading.setObjectName('StartMetricHeading')
+            header.addWidget(heading, 1)
+            box_layout.addLayout(header)
             value = QLabel('—')
-            value.setStyleSheet('font-size:12pt;font-weight:750;')
-            box_layout.addWidget(heading)
+            value.setStyleSheet('font-size:11pt;font-weight:750;')
             box_layout.addWidget(value)
+            if key in {'covers', 'online'}:
+                from PySide6.QtWidgets import QProgressBar
+                progress = QProgressBar()
+                progress.setObjectName('StartMetricProgress')
+                progress.setRange(0, 100)
+                progress.setTextVisible(False)
+                box_layout.addWidget(progress)
+                self.stats_progress[key] = progress
             self.stats_values[key] = value
             stats_grid.addWidget(box, index // 3, index % 3)
         stats_layout.addLayout(stats_grid)
@@ -288,7 +382,7 @@ class DashboardPage(QWidget):
         self.attention_frame = QFrame()
         self.attention_frame.setObjectName('MissingFilesBanner')
         attention_layout = QHBoxLayout(self.attention_frame)
-        attention_layout.setContentsMargins(12, 9, 12, 9)
+        attention_layout.setContentsMargins(10, 4, 10, 4)
         attention_layout.setSpacing(10)
         attention_title = QLabel('Wymaga uwagi')
         attention_title.setStyleSheet('font-weight:800;')
@@ -420,12 +514,14 @@ class DashboardPage(QWidget):
         covers = max(0, available - missing_covers)
         cover_percent = (covers / available * 100.0) if available else 0.0
         self.stats_values['covers'].setText(f'{covers} / {available} ({cover_percent:.0f}%)')
+        self.stats_progress['covers'].setValue(round(cover_percent))
 
         online_checked = int(self._health.get('online_checked', 0))
         online_percent = float(self._health.get('online_percent', 0.0))
         if available and online_percent <= 0.0 and online_checked:
             online_percent = online_checked / available * 100.0
         self.stats_values['online'].setText(f'{online_checked} / {available} ({online_percent:.0f}%)')
+        self.stats_progress['online'].setValue(round(online_percent))
 
         self.stats_values['missing'].setText(str(int(self._health.get('missing', 0))))
         self.stats_values['suspicious'].setText(str(int(self._health.get('suspicious', 0))))

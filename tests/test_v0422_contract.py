@@ -6,6 +6,7 @@ from pathlib import Path
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
 from PySide6.QtGui import QDesktopServices, QIcon
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from audio_library_organizer.domain.settings import AppSettings, LibraryPaths
@@ -48,7 +49,7 @@ def test_a1_asset_pack_has_required_ultra_thin_icons():
         svg = path.read_text(encoding='utf-8')
         assert 'viewBox="0 0 24 24"' in svg
         assert 'stroke="currentColor"' in svg
-        assert 'stroke-width="1.15"' in svg
+        assert 'stroke-width="1.8"' in svg if path.stem.startswith('nav_') else 'stroke-width="1.15"' in svg
 
 
 def test_a1_loader_renders_icons_at_common_windows_scale_sizes():
@@ -99,17 +100,18 @@ def test_start_has_real_quick_access_locations_and_actions(tmp_path):
     assert {key: card.path for key, card in page.location_cards.items()} == expected
     for card in page.location_cards.values():
         assert card.open_button.toolTip() == 'Otwórz folder w Eksploratorze'
-        assert card.copy_button.toolTip() == 'Kopiuj ścieżkę'
+        assert not hasattr(card, 'copy_button')
         assert card.path_label.toolTip() == str(card.path)
 
 
-def test_start_copy_path_uses_clipboard(tmp_path):
-    app = _app()
+def test_start_path_remains_selectable_without_copy_action(tmp_path):
+    _app()
     paths = LibraryPaths(tmp_path / 'library')
     paths.ensure_created()
     page = DashboardPage(AppSettings(source_dirs=(), library=paths))
-    page.location_cards['reports'].copy_button.click()
-    assert app.clipboard().text() == str(paths.reports)
+    card = page.location_cards['reports']
+    assert not hasattr(card, 'copy_button')
+    assert card.path_label.textInteractionFlags() & Qt.TextInteractionFlag.TextSelectableByMouse
 
 
 def test_start_open_folder_uses_the_real_configured_location(tmp_path, monkeypatch):
@@ -130,7 +132,7 @@ def test_start_marks_nonexistent_location_neutral_and_disables_open(tmp_path):
     card = page.location_cards['reports']
     assert card.availability.text() == 'Niedostępna'
     assert card.open_button.isEnabled() is False
-    assert card.copy_button.isEnabled() is True
+    assert not hasattr(card, 'copy_button')
 
 
 def test_start_reflows_quick_access_for_wide_and_narrow_windows(tmp_path):

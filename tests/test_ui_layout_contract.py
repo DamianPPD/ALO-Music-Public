@@ -16,14 +16,16 @@ def test_start_keeps_central_stat_cards_without_duplicate_workflow_strip():
     assert "workflow.setObjectName('CompactWorkflow')" not in MAIN
 
 
-def test_global_operation_panel_is_prominent_and_state_colored():
+def test_operation_state_is_kept_in_the_workflow_strip():
     assert "self.operation_frame = QFrame(); self.operation_frame.setObjectName('OperationFrame')" in MAIN
+    assert 'self.operation_frame.setParent(self.action_frame)' in MAIN
+    assert 'action.addWidget(self.operation_frame, 1)' in MAIN
+    assert 'outer.addWidget(self.operation_frame)' not in MAIN
     assert "self.operation_icon = QLabel()" in MAIN
     assert "self.operation_icon.setPixmap(alo_icon('info'" in MAIN
     assert 'def _set_operation_state(' in MAIN
     assert "self.operation_frame.setProperty('operationKind', kind)" in MAIN
-    for kind in ('scan', 'online', 'review', 'export'):
-        assert f'operationKind="{kind}"' in THEME
+    assert 'QFrame#ToolbarFrame QFrame#OperationFrame' in THEME
     assert 'QPushButton#CancelScanAction' in THEME
     assert 'QPushButton#ExportAction { background:#123f46;' in THEME
 
@@ -226,7 +228,7 @@ def test_metadata_editor_inline_player_keeps_seek_and_volume():
 
 def test_navigation_buttons_use_icons_and_workflow_colors_follow_approved_reference():
     assert 'self.nav_icon_ids = (' in MAIN
-    assert "self.nav_icon_ids = ('home', 'library', 'duplicate', 'folder', 'help', 'settings')" in MAIN
+    assert "self.nav_icon_ids = ('nav_start', 'nav_library', 'nav_duplicates', 'nav_folders', 'nav_help', 'nav_settings')" in MAIN
     assert 'alo_icon(' in MAIN
     assert 'QFrame#ToolbarFrame QPushButton#IdentifyOnlineAction' in THEME
     assert 'QFrame#ToolbarFrame QPushButton#Primary {' in THEME

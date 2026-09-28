@@ -36,7 +36,7 @@ def test_navigation_and_players_do_not_depend_on_qt_standard_icons():
     assert 'QStyle.StandardPixmap' not in MAIN
     assert 'QStyle.StandardPixmap' not in PLAYER
     assert 'QStyle.StandardPixmap' not in EDITOR
-    assert "self.nav_icon_ids = ('home', 'library', 'duplicate', 'folder', 'help', 'settings')" in MAIN
+    assert "self.nav_icon_ids = ('nav_start', 'nav_library', 'nav_duplicates', 'nav_folders', 'nav_help', 'nav_settings')" in MAIN
     assert "(self.scan_btn, 'scan')" in MAIN
     assert "(self.identify_btn, 'search')" in MAIN
     assert "alo_icon('pause' if playing else 'play', '#4ce5cf'" in PLAYER

@@ -6,8 +6,8 @@ EDITOR = (ROOT / 'src/audio_library_organizer/ui/metadata_editor.py').read_text(
 THEME = (ROOT / 'src/audio_library_organizer/ui/theme.py').read_text(encoding='utf-8')
 
 
-def test_top_toolbar_keeps_exact_reference_palette_and_custom_icons():
-    assert "self.nav_icon_ids = ('home', 'library', 'duplicate', 'folder', 'help', 'settings')" in MAIN
+def test_top_toolbar_keeps_workflow_actions_with_single_start_accent():
+    assert "self.nav_icon_ids = ('nav_start', 'nav_library', 'nav_duplicates', 'nav_folders', 'nav_help', 'nav_settings')" in MAIN
     for pair in (
         "(self.scan_btn, 'scan')",
         "(self.identify_btn, 'search')",
@@ -16,12 +16,12 @@ def test_top_toolbar_keeps_exact_reference_palette_and_custom_icons():
         "(self.new_files_btn, 'plus')",
     ):
         assert pair in MAIN
-    assert "self.scan_btn: '#43e59a'" in MAIN
-    assert "self.export_btn: '#58cfff'" in MAIN
-    assert "self.new_files_btn: '#9bd2ff'" in MAIN
-    assert 'background:#116b45;' in THEME
-    assert 'background:#0b2330;' in THEME
-    assert 'background:#0a1e35;' in THEME
+    assert "self.scan_btn: '#dbe8e2'" in MAIN
+    assert "self.export_btn: '#dbe8e2'" in MAIN
+    assert "self.new_files_btn: '#dbe8e2'" in MAIN
+    assert "bg = '#102b21' if active else '#0c1920'" in MAIN
+    assert 'QPushButton#TopNavButton:checked' in THEME
+    assert 'border-bottom:2px solid #4cde96' in THEME
 
 
 def test_editor_section_headers_match_reference_wording_and_icons():

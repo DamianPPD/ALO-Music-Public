@@ -342,10 +342,10 @@ def test_start_cards_keep_neutral_headers_and_color_only_final_path_segment(tmp_
     assert page.statistics_separator_icon.pixmap() is not None
     assert not page.statistics_separator_icon.pixmap().isNull()
     assert page.statistics_separator_title.text() == 'Statystyki biblioteki'
-    assert page.statistics_separator.minimumHeight() >= 42
-    assert page.statistics_separator.layout().contentsMargins().top() >= 8
-    assert page.statistics_separator.layout().contentsMargins().bottom() >= 8
-    assert page.quick_access_layout.contentsMargins().bottom() >= 12
+    assert 25 <= page.statistics_separator.minimumHeight() <= 32
+    assert page.statistics_separator.layout().contentsMargins().top() >= 2
+    assert page.statistics_separator.layout().contentsMargins().bottom() >= 2
+    assert page.quick_access_layout.contentsMargins().bottom() >= 2
     page.close()
 
 

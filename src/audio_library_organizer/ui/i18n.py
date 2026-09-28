@@ -35,6 +35,9 @@ def tr(key: str, language: str = 'pl') -> str:
 
 
 TEXT_MAP_EN: dict[str, str] = {
+    'Twoja muzyka.\nW Twoim stylu.': 'Your music.\nYour way.',
+    'Porządkuj, uzupełniaj, analizuj\ni ciesz się swoją kolekcją.': 'Organize, complete, analyze\nand enjoy your collection.',
+    'Wybierz etap pracy': 'Choose a workflow step',
     'Wyjście audio': 'Audio output',
     'Brak wyjścia audio': 'No audio output',
     # navigation / main workflow

@@ -8,14 +8,14 @@ import html
 import json
 import sqlite3
 
-from PySide6.QtCore import Qt, QThread, QSettings, Signal, QUrl, QTimer, QSize
-from PySide6.QtGui import QPixmap, QDesktopServices, QIcon
+from PySide6.QtCore import Qt, QThread, QSettings, Signal, QUrl, QTimer, QSize, QVariantAnimation
+from PySide6.QtGui import QPixmap, QDesktopServices, QIcon, QColor
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QStackedWidget, QMessageBox, QProgressBar, QGridLayout, QGroupBox,
     QLineEdit, QCheckBox, QScrollArea, QRadioButton, QButtonGroup, QFileDialog, QInputDialog,
     QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QApplication,
-    QDialog, QFormLayout, QDialogButtonBox
+    QDialog, QFormLayout, QDialogButtonBox, QSizePolicy
 )
 
 from audio_library_organizer import __version__
@@ -790,6 +790,46 @@ class SettingsPage(QWidget):
         QTimer.singleShot(3500, lambda: self.saved_label.setVisible(False)); self.provider_saved.emit(); self.preferences_saved.emit(prefs)
 
 
+class StartNavButton(QPushButton):
+    """One icon family and a short colour transition, without moving tabs."""
+
+    def __init__(self, label: str, icon_name: str, parent=None):
+        super().__init__(label, parent)
+        self._icon_name = icon_name
+        self._icon_color = QColor('#d8e1e5')
+        self._hovered = False
+        self.setIconSize(QSize(20, 20))
+        self.setIcon(alo_icon(icon_name, self._icon_color.name(), 20))
+        self._fade = QVariantAnimation(self)
+        self._fade.setDuration(150)
+        self._fade.valueChanged.connect(self._paint_icon_color)
+        self.toggled.connect(self._refresh_color)
+
+    def _paint_icon_color(self, color):
+        self._icon_color = QColor(color)
+        self.setIcon(alo_icon(self._icon_name, self._icon_color.name(), 20))
+
+    def _refresh_color(self, *_):
+        target = QColor('#4cde96' if self.isChecked() or self._hovered else '#d8e1e5')
+        self._fade.stop()
+        if self.isChecked():
+            self._paint_icon_color(target)
+            return
+        self._fade.setStartValue(self._icon_color)
+        self._fade.setEndValue(target)
+        self._fade.start()
+
+    def enterEvent(self, event):
+        self._hovered = True
+        self._refresh_color()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._hovered = False
+        self._refresh_color()
+        super().leaveEvent(event)
+
+
 class MainWindow(QMainWindow):
     def __init__(self, app_settings: AppSettings, qt_settings: QSettings, parent=None):
         super().__init__(parent)
@@ -825,12 +865,9 @@ class MainWindow(QMainWindow):
         brand_text.addWidget(brand_name); brand_text.addWidget(brand_ver); brand_lay.addLayout(brand_text)
         brand_wrap.setFixedWidth(205); nav.addWidget(brand_wrap)
         self.nav_buttons = []
-        self.nav_icon_ids = ('home', 'library', 'duplicate', 'folder', 'help', 'settings')
+        self.nav_icon_ids = ('nav_start', 'nav_library', 'nav_duplicates', 'nav_folders', 'nav_help', 'nav_settings')
         for icon_name, (label, index) in zip(self.nav_icon_ids, [('Start', 0), ('Biblioteka', 1), ('Duplikaty', 2), ('Moje foldery MP3', 3), ('Pomoc', 4), ('Ustawienia', 5)]):
-            btn = QPushButton(label); btn.setObjectName('TopNavButton'); btn.setCheckable(True)
-            btn.setIcon(alo_icon(icon_name, '#aeb9c4', 18))
-            btn.setIconSize(QSize(18, 18))
-            btn.toggled.connect(lambda checked, b=btn, name=icon_name: b.setIcon(alo_icon(name, '#42e49a' if checked else '#aeb9c4', 18)))
+            btn = StartNavButton(label, icon_name); btn.setObjectName('TopNavButton'); btn.setCheckable(True)
             btn.clicked.connect(lambda _=False, i=index: self._navigate(i)); self.nav_buttons.append(btn)
             nav.addWidget(btn)
         nav.addStretch(1)
@@ -840,11 +877,11 @@ class MainWindow(QMainWindow):
         self.manage_libraries_nav.setToolTip('Zarządzaj bibliotekami ALO'); self.manage_libraries_nav.clicked.connect(self._open_library_manager); nav.addWidget(self.manage_libraries_nav)
         outer.addWidget(top_nav)
 
-        action_frame = QFrame(); action_frame.setObjectName('ToolbarFrame')
-        action = QHBoxLayout(action_frame); action.setContentsMargins(18, 10, 18, 10); action.setSpacing(14)
+        self.action_frame = QFrame(); self.action_frame.setObjectName('ToolbarFrame')
+        action = QHBoxLayout(self.action_frame); action.setContentsMargins(10, 7, 10, 7); action.setSpacing(6)
 
         workflow_group = QFrame(); workflow_group.setObjectName('WorkflowToolbarGroup')
-        workflow = QHBoxLayout(workflow_group); workflow.setContentsMargins(5, 4, 5, 4); workflow.setSpacing(8)
+        workflow = QHBoxLayout(workflow_group); workflow.setContentsMargins(4, 3, 4, 3); workflow.setSpacing(4)
         self.scan_btn = QPushButton('1. Skanuj foldery'); self.scan_btn.setObjectName('Primary'); self.scan_btn.clicked.connect(self._scan_button_clicked)
         self.identify_btn = QPushButton('2. Rozpoznaj utwory online'); self.identify_btn.setObjectName('IdentifyOnlineAction'); self.identify_btn.clicked.connect(self._identify_button_clicked)
         self.review_btn = QPushButton('3. Sprawdź w Bibliotece'); self.review_btn.setObjectName('ReviewAction'); self.review_btn.clicked.connect(self._open_review)
@@ -854,13 +891,13 @@ class MainWindow(QMainWindow):
         step_arrow_3 = _icon_label('chevron-right', '#6d7c88', 15); step_arrow_3.setObjectName('WorkflowStepArrow')
         workflow.addWidget(self.scan_btn); workflow.addWidget(step_arrow_1); workflow.addWidget(self.identify_btn); workflow.addWidget(step_arrow_2); workflow.addWidget(self.review_btn); workflow.addWidget(step_arrow_3); workflow.addWidget(self.export_btn)
         action.addWidget(workflow_group)
-        action.addSpacing(18)
 
         workflow_separator = QFrame(); workflow_separator.setObjectName('WorkflowToolbarSeparator'); workflow_separator.setFixedWidth(1); workflow_separator.setMinimumHeight(32)
         action.addWidget(workflow_separator)
-        action.addSpacing(10)
         self.new_files_btn = QPushButton('Dodaj utwory do biblioteki'); self.new_files_btn.setObjectName('AddFilesAction'); self.new_files_btn.clicked.connect(self._add_new_files)
-        action.addWidget(self.new_files_btn); action.addStretch(1)
+        self.new_files_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        action.addWidget(self.new_files_btn)
+        action.addStretch(1)
 
         self.action_icon_ids = [
             (self.scan_btn, 'scan'),
@@ -870,11 +907,11 @@ class MainWindow(QMainWindow):
             (self.new_files_btn, 'plus'),
         ]
         self.action_icon_colors = {
-            self.scan_btn: '#43e59a',
-            self.identify_btn: '#32e3a1',
-            self.review_btn: '#35e3a0',
-            self.export_btn: '#58cfff',
-            self.new_files_btn: '#9bd2ff',
+            self.scan_btn: '#dbe8e2',
+            self.identify_btn: '#dbe8e2',
+            self.review_btn: '#dbe8e2',
+            self.export_btn: '#dbe8e2',
+            self.new_files_btn: '#dbe8e2',
         }
         self.action_visual_roles = {
             self.scan_btn: 'scan',
@@ -884,8 +921,8 @@ class MainWindow(QMainWindow):
             self.new_files_btn: 'add',
         }
         for button, icon_name in self.action_icon_ids:
-            button.setIcon(alo_icon(icon_name, self.action_icon_colors[button], 20))
-            button.setIconSize(QSize(20, 20))
+            button.setIcon(alo_icon(icon_name, self.action_icon_colors[button], 23))
+            button.setIconSize(QSize(23, 23))
             self._apply_workflow_button_style(button, active=False)
 
         self.scan_btn.setToolTip('Odczytaj tagi, długość, jakość, BPM i fingerprint')
@@ -894,19 +931,21 @@ class MainWindow(QMainWindow):
         self.export_btn.setToolTip('Utwórz kopie w bibliotece docelowej i wykonaj techniczną kontrolę kopii')
         self.new_files_btn.setToolTip('Dodaj pliki audio do biblioteki ALO Music')
         self.action_buttons = [self.scan_btn, self.identify_btn, self.review_btn, self.export_btn, self.new_files_btn]
-        outer.addWidget(action_frame)
-
         self.operation_frame = QFrame(); self.operation_frame.setObjectName('OperationFrame'); self.operation_frame.setProperty('operationKind', 'idle')
-        op = QVBoxLayout(self.operation_frame); op.setContentsMargins(18, 12, 18, 13); op.setSpacing(6)
-        op_head = QHBoxLayout(); op_head.setSpacing(8)
-        self.operation_icon = QLabel(); self.operation_icon.setObjectName('OperationIcon'); self.operation_icon.setFixedSize(26, 26); self.operation_icon.setAlignment(Qt.AlignmentFlag.AlignCenter); self.operation_icon.setPixmap(alo_icon('info', '#8fa1b3', 20).pixmap(20, 20)); op_head.addWidget(self.operation_icon)
+        self.operation_frame.setParent(self.action_frame)
+        self.operation_frame.setMinimumWidth(225)
+        self.operation_frame.setMaximumWidth(320)
+        op = QVBoxLayout(self.operation_frame); op.setContentsMargins(8, 4, 8, 4); op.setSpacing(1)
+        op_head = QHBoxLayout(); op_head.setSpacing(3)
+        self.operation_icon = QLabel(); self.operation_icon.setObjectName('OperationIcon'); self.operation_icon.setFixedSize(19, 19); self.operation_icon.setAlignment(Qt.AlignmentFlag.AlignCenter); self.operation_icon.setPixmap(alo_icon('info', '#8fa1b3', 17).pixmap(17, 17)); op_head.addWidget(self.operation_icon)
         op_title = QLabel('BIEŻĄCA OPERACJA'); op_title.setObjectName('OperationHeading'); op_head.addWidget(op_title)
         self.operation_title = QLabel('GOTOWY'); self.operation_title.setObjectName('OperationKindTitle'); op_head.addWidget(self.operation_title)
         op_head.addStretch(1); op.addLayout(op_head)
-        self.operation_status = QLabel('Wybierz etap pracy powyżej.'); self.operation_status.setObjectName('OperationStatus')
-        self.operation_status.setWordWrap(True); op.addWidget(self.operation_status)
-        self.progress = QProgressBar(); self.progress.setRange(0, 1); self.progress.setValue(1); self.progress.setVisible(False); op.addWidget(self.progress)
-        outer.addWidget(self.operation_frame)
+        self.operation_status = QLabel('Wybierz etap pracy'); self.operation_status.setObjectName('OperationStatus')
+        self.operation_status.setWordWrap(False); self.operation_status.setToolTip(self.operation_status.text()); op.addWidget(self.operation_status)
+        self.progress = QProgressBar(); self.progress.setObjectName('StartOperationProgress'); self.progress.setRange(0, 1); self.progress.setValue(1); self.progress.setVisible(False); op.addWidget(self.progress)
+        action.addWidget(self.operation_frame, 1)
+        outer.addWidget(self.action_frame)
 
         content = QFrame(); content.setObjectName('ContentArea')
         content_lay = QVBoxLayout(content); content_lay.setContentsMargins(16, 12, 16, 8)
@@ -1265,18 +1304,19 @@ class MainWindow(QMainWindow):
     def _set_operation_state(self, kind: str, title: str, detail: str = ''):
         self._operation_source = (kind, title, detail)
         icons = {
-            'idle': ('info', '#8fa1b3'), 'scan': ('scan', '#5ca3ff'),
-            'online': ('recognize', '#b987ff'), 'review': ('edit', '#ffb84d'),
-            'export': ('export', '#49d6cf'), 'done': ('status', '#67e495'),
+            'idle': ('info', '#8fa1b3'), 'scan': ('scan', '#55dca0'),
+            'online': ('recognize', '#55dca0'), 'review': ('edit', '#55dca0'),
+            'export': ('export', '#55dca0'), 'done': ('status', '#67e495'),
             'error': ('warning', '#ff6b6b'),
         }
         self._operation_kind = kind
         icon_name, icon_color = icons.get(kind, icons['idle'])
-        self.operation_icon.setPixmap(alo_icon(icon_name, icon_color, 20).pixmap(20, 20))
+        self.operation_icon.setPixmap(alo_icon(icon_name, icon_color, 17).pixmap(17, 17))
         self.operation_title.setText(self._t(title))
         if detail:
             self._operation_status_source = detail
             self.operation_status.setText(self._t(detail))
+            self.operation_status.setToolTip(self.operation_status.text())
         self.operation_frame.setProperty('operationKind', kind)
         self.operation_frame.style().unpolish(self.operation_frame)
         self.operation_frame.style().polish(self.operation_frame)
@@ -1335,25 +1375,18 @@ class MainWindow(QMainWindow):
             self._set_action_highlight(self.review_btn if index == 1 else None)
 
     def _workflow_button_style(self, role: str, active: bool = False) -> str:
-        palette = {
-            'scan': ('#116b45', '#18c878', '#ffffff', '#148153', '#2be294'),
-            'identify': ('#0a1b18', '#23885f', '#f3f8f5', '#0d2b22', '#2dd990'),
-            'review': ('#0b211b', '#258c67', '#f2f9f5', '#103025', '#31d995'),
-            'export': ('#0b2330', '#177ca7', '#eef8ff', '#103349', '#31a6d8'),
-            'add': ('#0a1e35', '#2385d4', '#f1f7ff', '#0f2c4c', '#4ca5ed'),
-        }
-        bg, border, text, hover_bg, hover_border = palette.get(role, palette['identify'])
-        border_width = 2 if active else 1
+        bg = '#102b21' if active else '#0c1920'
+        border = '#42d992' if active else '#315048'
         return (
             'QPushButton {'
-            f'background:{bg}; border:{border_width}px solid {border}; color:{text};'
-            'border-radius:9px; min-height:32px; padding:9px 18px; font-weight:800;'
+            f'background:{bg}; border:1px solid {border}; color:#eef7f2;'
+            'border-radius:8px; min-height:36px; padding:6px 10px; font-weight:750;'
             '}'
             'QPushButton:hover {'
-            f'background:{hover_bg}; border:{border_width}px solid {hover_border}; color:#ffffff;'
+            'background:#173428; border:1px solid #51e59e; color:#ffffff;'
             '}'
             'QPushButton:pressed {'
-            f'background:{hover_bg}; border:{border_width}px solid {hover_border};'
+            'background:#1c4530; border:1px solid #57e6a2;'
             '}'
             'QPushButton:disabled {'
             'background:#111820; border:1px solid #27343d; color:#65737d;'
@@ -1392,8 +1425,8 @@ class MainWindow(QMainWindow):
             button.setProperty('operationActive', active)
             icon_name = icon_lookup.get(button)
             if icon_name is not None:
-                base = self.action_icon_colors.get(button, '#c7d2da')
-                button.setIcon(alo_icon(icon_name, base, 20))
+                base = '#4de398' if active else self.action_icon_colors.get(button, '#c7d2da')
+                button.setIcon(alo_icon(icon_name, base, 23))
             self._apply_workflow_button_style(button, active=active)
             button.style().unpolish(button)
             button.style().polish(button)
@@ -1743,6 +1776,7 @@ class MainWindow(QMainWindow):
     def _show_operation(self, text: str):
         self._operation_status_source = text
         self.operation_status.setText(self._t(text))
+        self.operation_status.setToolTip(self.operation_status.text())
 
     def _refresh_workflow_button_texts(self):
         language = self.preferences.language
@@ -1771,7 +1805,7 @@ class MainWindow(QMainWindow):
         scan_idle = f"1. {tr('action.scan', self.preferences.language)}"
         scan_cancel = 'Cancel scan' if self.preferences.language == 'en' else 'Anuluj skanowanie'
         self.scan_btn.setText(scan_cancel if scan_running else scan_idle)
-        self.scan_btn.setIcon(alo_icon('cancel' if scan_running else 'scan', '#ff7a84' if scan_running else '#43e59a', 20))
+        self.scan_btn.setIcon(alo_icon('cancel' if scan_running else 'scan', '#ff7a84' if scan_running else '#dbe8e2', 23))
         self.scan_btn.setObjectName('CancelScanAction' if scan_running else 'Primary')
         self._apply_workflow_button_style(self.scan_btn, active=scan_running)
         self.scan_btn.style().unpolish(self.scan_btn); self.scan_btn.style().polish(self.scan_btn)
@@ -1782,7 +1816,7 @@ class MainWindow(QMainWindow):
         else:
             self.identify_btn.setText(f"2. {tr('action.identify_online', self.preferences.language)}")
         self.identify_btn.setObjectName('CancelOnlineAction' if online_running else 'IdentifyOnlineAction')
-        self.identify_btn.setIcon(alo_icon('cancel' if online_running else 'recognize', '#ff7a84' if online_running else '#55d6ff', 20))
+        self.identify_btn.setIcon(alo_icon('cancel' if online_running else 'recognize', '#ff7a84' if online_running else '#dbe8e2', 23))
         self._apply_workflow_button_style(self.identify_btn, active=online_running)
         self.identify_btn.style().unpolish(self.identify_btn); self.identify_btn.style().polish(self.identify_btn)
         export_running_text = 'Creating files…' if self.preferences.language == 'en' else 'Tworzenie plików…'

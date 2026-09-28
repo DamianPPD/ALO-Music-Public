@@ -2586,3 +2586,57 @@ QSlider#VariantDVolume::handle:horizontal {
 '''
 DARK_STYLE += VARIANT_D_STYLE
 LIGHT_STYLE += VARIANT_D_STYLE
+
+# Start studio dashboard: scoped surfaces leave the player and other pages alone.
+START_STUDIO_STYLE = r'''
+QPushButton#TopNavButton {
+    background:transparent; border:0; border-bottom:2px solid transparent;
+    border-radius:0; color:#d8e1e5; padding:7px 9px; min-height:30px;
+    font-weight:700; icon-size:20px;
+}
+QPushButton#TopNavButton:hover {
+    background:#0d1c1a; border-bottom:2px solid transparent; color:#58e3a1;
+}
+QPushButton#TopNavButton:checked {
+    background:#11241d; border:0; border-bottom:2px solid #4cde96;
+    color:#56e49e;
+}
+QPushButton#TopNavButton[hasItems="true"]:!checked {
+    background:transparent; border:0; border-bottom:2px solid transparent; color:#d8e1e5;
+}
+QFrame#ToolbarFrame { background:#0b151b; border-bottom:1px solid #243840; }
+QFrame#WorkflowToolbarGroup { background:#0c1920; border:1px solid #25473d; border-radius:9px; }
+QFrame#WorkflowToolbarSeparator { background:#34554a; }
+QLabel#WorkflowStepArrow { color:#658779; }
+QFrame#ToolbarFrame QFrame#OperationFrame {
+    background:#0e1b20; border:1px solid #315a4b; border-radius:8px;
+}
+QFrame#ToolbarFrame QFrame#OperationFrame[operationKind="error"] { border-color:#a4524f; }
+QFrame#ToolbarFrame QLabel#OperationHeading { color:#9dbbb1; font-size:7.5pt; letter-spacing:0; }
+QFrame#ToolbarFrame QLabel#OperationKindTitle { color:#65e5a5; font-size:8pt; padding-left:2px; }
+QFrame#ToolbarFrame QLabel#OperationStatus { color:#dfefe7; font-size:8.5pt; padding:0; }
+QFrame#ToolbarFrame QFrame#OperationFrame QLabel { background:transparent; }
+QFrame#ToolbarFrame QProgressBar#StartOperationProgress {
+    min-height:3px; max-height:3px; border:0; border-radius:1px; background:#26423b;
+    text-align:center;
+}
+QFrame#ToolbarFrame QProgressBar#StartOperationProgress::chunk { background:#52d997; border-radius:1px; }
+QScrollArea#StartScroll, QWidget#StartContent { background:#0b131a; border:0; }
+QLabel#StartHeroBrand { background:transparent; color:#eaf8f3; font-size:15pt; font-weight:850; }
+QLabel#StartHeroTitle { background:transparent; color:#ffffff; font-size:18pt; font-weight:730; }
+QLabel#StartHeroDescription { background:transparent; color:#b4e2df; font-size:9.5pt; }
+QFrame#QuickAccessCard { background:#0e1b22; min-height:64px; max-height:72px; border-color:#29404b; }
+QFrame#QuickAccessCard:hover { border-color:#4b9874; background:#142820; }
+QFrame#QuickAccessCard QLabel { background:transparent; border:0; }
+QFrame#QuickAccessCard QPushButton#QuickAccessOpen { min-height:20px; padding:1px 6px; }
+QFrame#DashboardStatisticsSeparator { min-height:27px; }
+QFrame#StartLibraryMetric { background:#0e1b22; border:1px solid #28414b; border-radius:7px; }
+QFrame#StartLibraryMetric QLabel { background:transparent; border:0; }
+QLabel#StartMetricHeading { background:transparent; color:#a5c2c5; font-size:7.5pt; font-weight:700; }
+QProgressBar#StartMetricProgress {
+    min-height:3px; max-height:3px; background:#243c42; border:0; border-radius:1px;
+}
+QProgressBar#StartMetricProgress::chunk { background:#50d9a4; border-radius:1px; }
+'''
+DARK_STYLE += START_STUDIO_STYLE
+LIGHT_STYLE += START_STUDIO_STYLE
