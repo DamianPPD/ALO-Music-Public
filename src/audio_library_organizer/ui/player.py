@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from threading import Event
 
-from PySide6.QtCore import Qt, QUrl, Signal, QTimer, QSize, QThreadPool, Slot, QPoint, QRect
-from PySide6.QtGui import QPixmap, QColor, QPainter, QLinearGradient
+from PySide6.QtCore import Qt, QUrl, Signal, QTimer, QSize, QThreadPool, Slot, QPoint, QRect, QRectF
+from PySide6.QtGui import QPixmap, QColor, QPainter, QPainterPath, QLinearGradient
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QMediaDevices
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from PySide6.QtWidgets import (
@@ -175,7 +175,11 @@ class VariantDPlayerSurface(QFrame):
             return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        painter.setClipRect(QRect(0, 0, end, self.height()))
+        # The surface frame is painted first; keep the ambient inside its rounded border.
+        interior = QPainterPath()
+        interior.addRoundedRect(QRectF(self.contentsRect()), 12, 12)
+        painter.setClipPath(interior)
+        painter.setClipRect(QRect(0, 0, end, self.height()), Qt.ClipOperation.IntersectClip)
         # Scale down only slightly: preserve recognizable cover shapes in the ambient.
         if self._ambient_cache_size != (end, self.height()):
             enlarged = self.ambient_source.scaled(end, self.height(), Qt.AspectRatioMode.KeepAspectRatioByExpanding,

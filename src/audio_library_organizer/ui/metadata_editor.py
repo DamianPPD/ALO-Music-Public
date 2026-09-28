@@ -80,14 +80,21 @@ class SourceNameDelegate(QStyledItemDelegate):
         styled = QStyleOptionViewItem(option)
         self.initStyleOption(styled, index)
         label = styled.text
+        icon = QIcon(styled.icon)
         styled.text = ''
+        styled.icon = QIcon()
         widget = styled.widget or self.parent()
         widget.style().drawControl(QStyle.ControlElement.CE_ItemViewItem, styled, painter, widget)
         foreground = index.data(Qt.ItemDataRole.ForegroundRole)
         painter.save()
+        icon_size = widget.iconSize()
+        icon_left = styled.rect.left() + 6
+        if not icon.isNull():
+            painter.drawPixmap(icon_left, styled.rect.center().y() - icon_size.height() // 2,
+                               icon.pixmap(icon_size))
         painter.setFont(styled.font)
         painter.setPen(foreground.color() if foreground is not None else QColor('#cbd6e2'))
-        text_rect = styled.rect.adjusted(styled.decorationSize.width() + 8, 0, -3, 0)
+        text_rect = styled.rect.adjusted(icon_left - styled.rect.left() + icon_size.width() + 8, 0, -3, 0)
         painter.setClipRect(text_rect)
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, label)
         painter.restore()

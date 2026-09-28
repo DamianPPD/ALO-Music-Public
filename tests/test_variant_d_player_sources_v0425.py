@@ -1,4 +1,6 @@
 import os
+import subprocess
+import sys
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
@@ -7,7 +9,7 @@ from PySide6.QtCore import QBuffer, QIODevice, QObject, QPoint, QSettings, Qt, S
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPixmap
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtNetwork import QNetworkReply
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication, QFrame, QPushButton
 
 from audio_library_organizer.domain.models import TrackRecord
 from audio_library_organizer.jobs.audio_identification import SOURCE as AUDIO_SOURCE
@@ -633,6 +635,133 @@ def test_cover_has_small_inset_in_both_players_without_changing_height(tmp_path)
     finally:
         compact.close()
         bar.close()
+
+
+def test_cover_and_ambient_stay_inside_both_player_frames_at_scaled_dpi(tmp_path):
+    app = _app()
+    previous = app.styleSheet()
+    app.setStyleSheet(style_for_theme('dark'))
+    bar = PlayerBar()
+    compact = CompactPlayerBar(bar, TrackRecord(path=tmp_path / 'song.mp3'))
+    cover = QPixmap(240, 240)
+    cover.setDevicePixelRatio(2.0)
+    cover.fill(QColor('#f52491'))
+    try:
+        for widget, height in ((bar, 114), (compact, 74)):
+            widget.resize(1300, height)
+            widget.show()
+            widget.surface.set_cover_pixmap(cover)
+            app.processEvents()
+            surface = widget.surface
+            label = surface.cover
+            painted = surface.grab().toImage()
+            x = label.geometry().center().x()
+            assert surface.frameWidth() == 1
+            assert surface.rect().contains(label.geometry())
+            assert label.y() + 3 >= surface.frameWidth() + 4
+            assert surface.height() - label.geometry().bottom() - 1 + 3 >= surface.frameWidth() + 4
+            assert painted.pixelColor(x, 0) == QColor('#344d55')
+            assert painted.pixelColor(x, surface.height() - 1) == QColor('#344d55')
+            if widget is bar:
+                separator = widget.findChild(QFrame, 'FooterSeparator')
+                assert separator is not None
+                assert separator.geometry().bottom() < surface.geometry().top()
+                assert surface.geometry().bottom() < widget.height()
+            else:
+                assert widget.height() == 74
+        assert bar.minimumHeight() == 114
+    finally:
+        compact.close()
+        bar.close()
+        app.setStyleSheet(previous)
+
+
+@pytest.mark.parametrize('scale', ['1.5', '2'])
+def test_player_border_remains_visible_with_fractional_and_double_ui_scale(scale):
+    script = '''
+from pathlib import Path
+from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QColor, QPixmap
+from audio_library_organizer.domain.models import TrackRecord
+from audio_library_organizer.ui.player import PlayerBar, CompactPlayerBar
+from audio_library_organizer.ui.theme import style_for_theme
+
+app = QApplication([])
+app.setStyleSheet(style_for_theme('dark'))
+bar = PlayerBar()
+compact = CompactPlayerBar(bar, TrackRecord(path=Path('/tmp/cover-dpi-check.mp3')))
+cover = QPixmap(120, 120)
+cover.fill(QColor('#f52491'))
+for widget, height in ((bar, 114), (compact, 74)):
+    widget.resize(1300, height)
+    widget.show()
+    widget.surface.set_cover_pixmap(cover)
+    app.processEvents()
+    surface = widget.surface
+    image = surface.grab().toImage()
+    x = round(surface.cover.geometry().center().x() * image.devicePixelRatio())
+    assert image.devicePixelRatio() > 1
+    assert surface.rect().contains(surface.cover.geometry())
+    assert image.pixelColor(x, 0).red() < 85
+    assert image.pixelColor(x, image.height() - 1).red() < 85
+    widget.close()
+assert bar.minimumHeight() == 114
+assert compact.height() == 74
+'''
+    result = subprocess.run([sys.executable, '-c', script],
+                            env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen', 'QT_SCALE_FACTOR': scale},
+                            capture_output=True, text=True, timeout=15)
+    assert result.returncode == 0, result.stderr
+
+
+def test_source_markers_have_real_space_before_text_in_every_provider_row(tmp_path):
+    app = _app()
+    previous = app.styleSheet()
+    app.setStyleSheet(style_for_theme('dark'))
+    sources = ('Tag', 'Discogs', 'MusicBrainz', 'Apple / iTunes', 'Ręcznie', AUDIO_SOURCE)
+    editor = MetadataEditorDialog(TrackRecord(path=tmp_path / 'song.mp3'))
+    try:
+        for field in ('artist', 'title', 'album', 'year', 'genre'):
+            editor._source_values[field] = {source: f'{field} {source}' for source in sources}
+        editor._refresh_source_comparison()
+        editor.resize(1600, 1060)
+        editor.show()
+        app.processEvents()
+        table = editor.source_table
+        painted = table.viewport().grab().toImage()
+        assert table.columnWidth(0) == 208
+        for source in sources:
+            row = editor._source_rows().index(source)
+            item = table.item(row, 0)
+            rect = table.visualItemRect(item)
+            target = QColor(editor.SOURCE_COLORS[source])
+            ink = {(x, y) for x in range(rect.left() + 4, rect.right() - 3)
+                   for y in range(rect.top() + 3, rect.bottom() - 3)
+                   if all(abs(a - b) <= 85 for a, b in zip(
+                       painted.pixelColor(x, y).getRgb()[:3], target.getRgb()[:3]
+                   ))}
+            marker = [(x, y) for x, y in ink if x < rect.left() + 20]
+            text = [(x, y) for x, y in ink if x >= rect.left() + 26]
+            assert marker and text, source
+            icon_image = item.icon().pixmap(table.iconSize()).toImage()
+            assert any(icon_image.pixelColor(x, y).alpha() >= 128
+                       and abs(icon_image.pixelColor(x, y).hsvHue() - target.hsvHue()) <= 8
+                       for x in range(icon_image.width()) for y in range(icon_image.height()))
+            assert not [(x, y) for x, y in ink if rect.left() + 20 <= x < rect.left() + 26], source
+            assert abs((min(y for _, y in marker) + max(y for _, y in marker)) / 2 - rect.center().y()) <= 4
+            assert abs((min(y for _, y in text) + max(y for _, y in text)) / 2 - rect.center().y()) <= 5
+            assert table.columnWidth(0) >= 26 + QFontMetrics(item.font()).horizontalAdvance(item.text()) + 3
+            assert table.cellWidget(row, 0) is None
+            assert table.cellWidget(row, 6).findChild(QPushButton, 'UseSourceDataButton')
+        audio_row = editor._source_rows().index(AUDIO_SOURCE)
+        assert table.item(audio_row, 0).text() == 'ROZPOZNANIE AUDIO'
+        apply_static_language(editor, 'en')
+        editor.refresh_audio_language()
+        assert table.item(audio_row, 0).text() == 'AUDIO RECOGNITION'
+        assert table.columnWidth(0) >= 26 + QFontMetrics(table.item(audio_row, 0).font()).horizontalAdvance('AUDIO RECOGNITION') + 3
+    finally:
+        _close(editor)
+        app.setStyleSheet(previous)
 
 
 def test_live_cover_preview_without_play_and_undo_a_b_a(tmp_path):
