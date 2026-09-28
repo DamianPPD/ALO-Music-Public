@@ -157,8 +157,8 @@ def test_add_tracks_copy_and_cancel_hierarchy_are_explicit():
     assert 'QPushButton#CancelScanAction:hover' in THEME
     assert 'QPushButton#CancelOnlineAction:hover' in THEME
     assert 'border:1px solid #e45f68' in THEME
-    assert "self.scan_btn.setIcon(alo_icon('cancel'" in MAIN
-    assert "self.identify_btn.setIcon(alo_icon('cancel'" in MAIN
+    assert "self.scan_btn.setIcon(start_icon('cancel'" in MAIN
+    assert "self.identify_btn.setIcon(start_icon('cancel'" in MAIN
     assert '⏳ Anulowanie' not in MAIN
 
 

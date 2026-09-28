@@ -25,4 +25,4 @@ where = ["src"]
 pythonpath = ["src"]
 
 [tool.setuptools.package-data]
-"audio_library_organizer" = ["assets/*.png", "assets/*.ico", "assets/*.svg", "assets/icons/a1/*.svg"]
+"audio_library_organizer" = ["assets/*.png", "assets/*.ico", "assets/*.svg", "assets/icons/a1/*.svg", "assets/icons/start_c/*.svg"]

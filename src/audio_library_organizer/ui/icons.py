@@ -9,6 +9,7 @@ from PySide6.QtSvg import QSvgRenderer
 
 
 _A1_ROOT = Path(__file__).resolve().parent.parent / 'assets' / 'icons' / 'a1'
+_START_C_ROOT = Path(__file__).resolve().parent.parent / 'assets' / 'icons' / 'start_c'
 
 # Public icon names used by the existing UI remain stable. Their artwork is
 # now supplied by A1 SVG, so the visual change does not alter button wiring.
@@ -79,3 +80,28 @@ def editor_icon(name: str, color: str = '#c8d4df', size: int = 20) -> QIcon:
     """Metadata-editor alias using the application-wide A1 system."""
 
     return _a1_icon(name, color, size)
+
+
+@lru_cache(maxsize=128)
+def _start_c_source(name: str, color: str) -> bytes:
+    asset_name = {'search': 'recognize'}.get(name, name).replace('-', '_')
+    path = _START_C_ROOT / f'{asset_name}.svg'
+    safe_color = QColor(color).name(QColor.NameFormat.HexRgb)
+    return path.read_text(encoding='utf-8').replace('currentColor', safe_color).encode('utf-8')
+
+
+def start_icon(name: str, color: str = '#dbe8e2', size: int = 20) -> QIcon:
+    """The approved C outline family, scoped to the Start dashboard."""
+
+    logical = max(12, int(size))
+    scale = 3
+    pixels = logical * scale
+    pixmap = QPixmap(pixels, pixels)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    renderer = QSvgRenderer(QByteArray(_start_c_source(name, color)))
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    renderer.render(painter, QRectF(0, 0, pixels, pixels))
+    painter.end()
+    pixmap.setDevicePixelRatio(float(scale))
+    return QIcon(pixmap)

@@ -11,14 +11,14 @@ from PySide6.QtGui import QBrush, QColor, QCursor, QDesktopServices, QLinearGrad
 from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget
 
 from audio_library_organizer.domain.settings import AppSettings
-from audio_library_organizer.ui.icons import alo_icon
+from audio_library_organizer.ui.icons import start_icon
 from audio_library_organizer.ui.i18n import ui_text, language_for
 from audio_library_organizer.ui.widgets import StatCard
 from audio_library_organizer.ui.assets import asset_path
 
 
 class StudioHero(QFrame):
-    """Use the supplied studio scene, excluding the UI already in the reference."""
+    """Display the approved panorama with its audio equipment in the crop."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -35,21 +35,19 @@ class StudioHero(QFrame):
         painter.setClipPath(self._rounded_path(bounds))
         painter.fillRect(bounds, QColor('#0b151c'))
         if not self._artwork.isNull():
-            # The bundled reference is a screenshot. Only the right-hand studio
-            # scene is free of baked UI; keep its aspect ratio and reveal more
-            # of the room as the hero gains height.
-            source = QRectF(550, 160, 1120, 285)
-            photo_width = max(bounds.width() * .64, bounds.height() * 4)
-            photo_height = photo_width * source.height() / source.width()
-            photo = QRectF(bounds.right() - photo_width,
-                           bounds.center().y() - photo_height / 2,
-                           photo_width, photo_height)
+            # Cover the wide, low hero without deformation. A slightly lowered
+            # vertical focal point retains the headphones, amplifier and CDs.
+            source_width = self._artwork.width()
+            source_height = min(self._artwork.height(), source_width * bounds.height() / bounds.width())
+            source_top = min(self._artwork.height() - source_height,
+                             max(0.0, self._artwork.height() * .55 - source_height / 2))
+            source = QRectF(0, source_top, source_width, source_height)
             painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-            painter.drawPixmap(photo, self._artwork, source)
+            painter.drawPixmap(bounds, self._artwork, source)
         gradient = QLinearGradient(bounds.topLeft(), bounds.topRight())
-        gradient.setColorAt(0, QColor(2, 10, 16, 245))
-        gradient.setColorAt(0.38, QColor(2, 10, 16, 250))
-        gradient.setColorAt(0.60, QColor(2, 10, 16, 32))
+        gradient.setColorAt(0, QColor(2, 10, 16, 95))
+        gradient.setColorAt(0.38, QColor(2, 10, 16, 35))
+        gradient.setColorAt(0.60, QColor(2, 10, 16, 8))
         gradient.setColorAt(1, QColor(2, 10, 16, 0))
         painter.fillRect(bounds, QBrush(gradient))
         painter.setClipping(False)
@@ -79,10 +77,10 @@ class DashboardStatCard(StatCard):
         layout.setContentsMargins(14, 9, 14, 8)
         layout.setSpacing(3)
         layout.removeWidget(self.value_label)
-        icon_name = {'Utwory': 'add_tracks', 'Do sprawdzenia': 'warning',
+        icon_name = {'Utwory': 'music_note', 'Do sprawdzenia': 'warning',
                      'Duplikaty': 'duplicates', 'Brak okładki': 'cover'}[title]
         self.stat_icon = QLabel()
-        self.stat_icon.setPixmap(alo_icon(icon_name, accent, 32).pixmap(32, 32))
+        self.stat_icon.setPixmap(start_icon(icon_name, accent, 32).pixmap(32, 32))
         row = QHBoxLayout()
         row.setSpacing(15)
         row.addWidget(self.stat_icon)
@@ -168,7 +166,7 @@ class QuickAccessCard(QFrame):
         layout.setSpacing(11)
         self.title_icon = QLabel()
         self.title_icon.setObjectName('QuickAccessIcon')
-        self.title_icon.setPixmap(alo_icon(icon_name, accent, 29).pixmap(29, 29))
+        self.title_icon.setPixmap(start_icon(icon_name, accent, 29).pixmap(29, 29))
         self.title_icon.setFixedSize(40, 40)
         self.title_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.title_icon)
@@ -189,7 +187,7 @@ class QuickAccessCard(QFrame):
         self.open_button = QPushButton('Otwórz folder')
         self.open_button.setObjectName('QuickAccessOpen')
         self.open_button.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.open_button.setIcon(alo_icon('folder_open', '#d9e8ef', 15))
+        self.open_button.setIcon(start_icon('folder_open', '#d9e8ef', 15))
         self.open_button.setToolTip('Otwórz folder w Eksploratorze')
         actions.addWidget(self.open_button)
         layout.addLayout(actions)
@@ -263,7 +261,7 @@ class DashboardPage(QWidget):
         path_layout.setContentsMargins(11, 6, 11, 6)
         path_layout.setSpacing(8)
         folder_icon = QLabel()
-        folder_icon.setPixmap(alo_icon('folder', '#62d6f5', 20).pixmap(20, 20))
+        folder_icon.setPixmap(start_icon('folder', '#62d6f5', 20).pixmap(20, 20))
         folder_icon.setFixedSize(24, 24)
         folder_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         path_layout.addWidget(folder_icon)
@@ -303,7 +301,7 @@ class DashboardPage(QWidget):
 
         quick_header = QHBoxLayout()
         quick_title_icon = QLabel()
-        quick_title_icon.setPixmap(alo_icon('folder_open', '#62d6f5', 20).pixmap(20, 20))
+        quick_title_icon.setPixmap(start_icon('folder_open', '#62d6f5', 20).pixmap(20, 20))
         quick_title_icon.setFixedSize(24, 24)
         quick_header.addWidget(quick_title_icon)
         quick_title = QLabel('Szybki dostęp')
@@ -334,7 +332,7 @@ class DashboardPage(QWidget):
         separator_layout.addWidget(left_line, 1)
         self.statistics_separator_icon = QLabel()
         self.statistics_separator_icon.setObjectName('DashboardStatisticsIcon')
-        self.statistics_separator_icon.setPixmap(alo_icon('report', '#75bfff', 17).pixmap(17, 17))
+        self.statistics_separator_icon.setPixmap(start_icon('report', '#75bfff', 17).pixmap(17, 17))
         self.statistics_separator_icon.setFixedSize(20, 20)
         self.statistics_separator_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         separator_layout.addWidget(self.statistics_separator_icon)
@@ -374,9 +372,9 @@ class DashboardPage(QWidget):
             box_layout.setContentsMargins(11, 6, 11, 6)
             box_layout.setSpacing(3)
             icon = QLabel()
-            icon_name = {'covers': 'cover', 'online': 'recognize', 'suspicious': 'warning',
-                         'size': 'library', 'missing': 'folder', 'free_space': 'report'}[key]
-            icon.setPixmap(alo_icon(icon_name, '#79dcb0', 15).pixmap(15, 15))
+            icon_name = {'covers': 'cover', 'online': 'cloud', 'suspicious': 'document_warning',
+                         'size': 'database', 'missing': 'document_x', 'free_space': 'disk'}[key]
+            icon.setPixmap(start_icon(icon_name, '#79dcb0', 15).pixmap(15, 15))
             header = QHBoxLayout()
             header.setSpacing(6)
             header.addWidget(icon)
@@ -458,11 +456,11 @@ class DashboardPage(QWidget):
     def _location_specs(settings: AppSettings) -> tuple[tuple[str, str, Path, str, str], ...]:
         library = settings.library
         return (
-            ('root', 'Biblioteka główna', library.root, 'library', '#58c9f3'),
-            ('ready', 'Pliki wynikowe / GOTOWE', library.ready, 'check_library', '#55d98b'),
+            ('root', 'Biblioteka główna', library.root, 'folder', '#58c9f3'),
+            ('ready', 'Pliki wynikowe / GOTOWE', library.ready, 'folder_check', '#55d98b'),
             ('review', 'Do sprawdzenia', library.review, 'warning', '#f0b44d'),
-            ('not_selected', 'Niewybrane', library.not_selected, 'folder', '#b987ff'),
-            ('custom_folders', 'Moje pliki MP3', library.custom_folders, 'add_tracks', '#50d1c4'),
+            ('not_selected', 'Niewybrane', library.not_selected, 'folder_x', '#b987ff'),
+            ('custom_folders', 'Moje pliki MP3', library.custom_folders, 'music_note', '#50d1c4'),
             ('reports', 'Raporty', library.reports, 'report', '#75bfff'),
         )
 

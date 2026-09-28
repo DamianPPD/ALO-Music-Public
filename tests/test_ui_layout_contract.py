@@ -22,7 +22,8 @@ def test_operation_state_is_kept_in_the_workflow_strip():
     assert 'action.addWidget(self.operation_frame, 1)' in MAIN
     assert 'outer.addWidget(self.operation_frame)' not in MAIN
     assert "self.operation_icon = QLabel()" in MAIN
-    assert "self.operation_icon.setPixmap(alo_icon('info'" in MAIN
+    assert "self.operation_icon.setPixmap(start_icon('status_ring'" in MAIN
+    assert "self.operation_state_icon.setPixmap(start_icon(icon_name" in MAIN
     assert 'def _set_operation_state(' in MAIN
     assert "self.operation_frame.setProperty('operationKind', kind)" in MAIN
     assert 'QFrame#ToolbarFrame QFrame#OperationFrame' in THEME

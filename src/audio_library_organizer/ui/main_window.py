@@ -61,7 +61,7 @@ from audio_library_organizer.ui.metadata_editor import MetadataEditorDialog
 from audio_library_organizer.ui.player import PlayerBar
 from audio_library_organizer.ui.workers import ScanWorker, IdentificationWorker, AudioIdentificationWorker, ExportWorker
 from audio_library_organizer.ui.assets import asset_path
-from audio_library_organizer.ui.icons import alo_icon
+from audio_library_organizer.ui.icons import alo_icon, start_icon
 from audio_library_organizer.ui.theme import style_for_theme
 from audio_library_organizer.ui.i18n import tr, apply_static_language, ui_text
 from audio_library_organizer.ui.widgets import StatCard
@@ -799,7 +799,7 @@ class StartNavButton(QPushButton):
         self._icon_color = QColor('#d8e1e5')
         self._hovered = False
         self.setIconSize(QSize(20, 20))
-        self.setIcon(alo_icon(icon_name, self._icon_color.name(), 20))
+        self.setIcon(start_icon(icon_name, self._icon_color.name(), 20))
         self._fade = QVariantAnimation(self)
         self._fade.setDuration(150)
         self._fade.valueChanged.connect(self._paint_icon_color)
@@ -807,7 +807,7 @@ class StartNavButton(QPushButton):
 
     def _paint_icon_color(self, color):
         self._icon_color = QColor(color)
-        self.setIcon(alo_icon(self._icon_name, self._icon_color.name(), 20))
+        self.setIcon(start_icon(self._icon_name, self._icon_color.name(), 20))
 
     def _refresh_color(self, *_):
         target = QColor('#4cde96' if self.isChecked() or self._hovered else '#d8e1e5')
@@ -872,7 +872,7 @@ class MainWindow(QMainWindow):
             nav.addWidget(btn)
         nav.addStretch(1)
         self.manage_libraries_nav = QPushButton('Biblioteki'); self.manage_libraries_nav.setObjectName('ManageLibrariesNavAction')
-        self.manage_libraries_nav.setIcon(alo_icon('folder', '#aeb9c4', 18))
+        self.manage_libraries_nav.setIcon(start_icon('folder', '#aeb9c4', 18))
         self.manage_libraries_nav.setIconSize(QSize(17, 17))
         self.manage_libraries_nav.setToolTip('Zarządzaj bibliotekami ALO'); self.manage_libraries_nav.clicked.connect(self._open_library_manager); nav.addWidget(self.manage_libraries_nav)
         outer.addWidget(top_nav)
@@ -897,7 +897,6 @@ class MainWindow(QMainWindow):
         self.new_files_btn = QPushButton('Dodaj utwory do biblioteki'); self.new_files_btn.setObjectName('AddFilesAction'); self.new_files_btn.clicked.connect(self._add_new_files)
         self.new_files_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
         action.addWidget(self.new_files_btn)
-        action.addStretch(1)
 
         self.action_icon_ids = [
             (self.scan_btn, 'scan'),
@@ -921,7 +920,7 @@ class MainWindow(QMainWindow):
             self.new_files_btn: 'add',
         }
         for button, icon_name in self.action_icon_ids:
-            button.setIcon(alo_icon(icon_name, self.action_icon_colors[button], 23))
+            button.setIcon(start_icon(icon_name, self.action_icon_colors[button], 23))
             button.setIconSize(QSize(23, 23))
             self._apply_workflow_button_style(button, active=False)
 
@@ -934,17 +933,20 @@ class MainWindow(QMainWindow):
         self.operation_frame = QFrame(); self.operation_frame.setObjectName('OperationFrame'); self.operation_frame.setProperty('operationKind', 'idle')
         self.operation_frame.setParent(self.action_frame)
         self.operation_frame.setMinimumWidth(225)
-        self.operation_frame.setMaximumWidth(320)
+        self.operation_frame.setMaximumWidth(400)
         op = QVBoxLayout(self.operation_frame); op.setContentsMargins(8, 4, 8, 4); op.setSpacing(1)
         op_head = QHBoxLayout(); op_head.setSpacing(3)
-        self.operation_icon = QLabel(); self.operation_icon.setObjectName('OperationIcon'); self.operation_icon.setFixedSize(19, 19); self.operation_icon.setAlignment(Qt.AlignmentFlag.AlignCenter); self.operation_icon.setPixmap(alo_icon('info', '#8fa1b3', 17).pixmap(17, 17)); op_head.addWidget(self.operation_icon)
+        self.operation_icon = QLabel(); self.operation_icon.setObjectName('OperationIcon'); self.operation_icon.setFixedSize(19, 19); self.operation_icon.setAlignment(Qt.AlignmentFlag.AlignCenter); self.operation_icon.setPixmap(start_icon('status_ring', '#8fa1b3', 17).pixmap(17, 17)); op_head.addWidget(self.operation_icon)
         op_title = QLabel('BIEŻĄCA OPERACJA'); op_title.setObjectName('OperationHeading'); op_head.addWidget(op_title)
+        self.operation_state_icon = QLabel(); self.operation_state_icon.setObjectName('OperationStateIcon'); self.operation_state_icon.setFixedSize(19, 19); self.operation_state_icon.setAlignment(Qt.AlignmentFlag.AlignCenter); self.operation_state_icon.setPixmap(start_icon('check_circle', '#67e495', 17).pixmap(17, 17)); op_head.addWidget(self.operation_state_icon)
         self.operation_title = QLabel('GOTOWY'); self.operation_title.setObjectName('OperationKindTitle'); op_head.addWidget(self.operation_title)
         op_head.addStretch(1); op.addLayout(op_head)
         self.operation_status = QLabel('Wybierz etap pracy'); self.operation_status.setObjectName('OperationStatus')
         self.operation_status.setWordWrap(False); self.operation_status.setToolTip(self.operation_status.text()); op.addWidget(self.operation_status)
         self.progress = QProgressBar(); self.progress.setObjectName('StartOperationProgress'); self.progress.setRange(0, 1); self.progress.setValue(1); self.progress.setVisible(False); op.addWidget(self.progress)
+        action.addSpacing(10)
         action.addWidget(self.operation_frame, 1)
+        action.addStretch(1)
         outer.addWidget(self.action_frame)
 
         content = QFrame(); content.setObjectName('ContentArea')
@@ -1304,14 +1306,14 @@ class MainWindow(QMainWindow):
     def _set_operation_state(self, kind: str, title: str, detail: str = ''):
         self._operation_source = (kind, title, detail)
         icons = {
-            'idle': ('info', '#8fa1b3'), 'scan': ('scan', '#55dca0'),
-            'online': ('recognize', '#55dca0'), 'review': ('edit', '#55dca0'),
-            'export': ('export', '#55dca0'), 'done': ('status', '#67e495'),
+            'idle': ('check_circle', '#67e495'), 'scan': ('spinner', '#55dca0'),
+            'online': ('spinner', '#55dca0'), 'review': ('spinner', '#55dca0'),
+            'export': ('spinner', '#55dca0'), 'done': ('check_circle', '#67e495'),
             'error': ('warning', '#ff6b6b'),
         }
         self._operation_kind = kind
         icon_name, icon_color = icons.get(kind, icons['idle'])
-        self.operation_icon.setPixmap(alo_icon(icon_name, icon_color, 17).pixmap(17, 17))
+        self.operation_state_icon.setPixmap(start_icon(icon_name, icon_color, 17).pixmap(17, 17))
         self.operation_title.setText(self._t(title))
         if detail:
             self._operation_status_source = detail
@@ -1426,7 +1428,7 @@ class MainWindow(QMainWindow):
             icon_name = icon_lookup.get(button)
             if icon_name is not None:
                 base = '#4de398' if active else self.action_icon_colors.get(button, '#c7d2da')
-                button.setIcon(alo_icon(icon_name, base, 23))
+                button.setIcon(start_icon(icon_name, base, 23))
             self._apply_workflow_button_style(button, active=active)
             button.style().unpolish(button)
             button.style().polish(button)
@@ -1735,12 +1737,12 @@ class MainWindow(QMainWindow):
             self._worker.cancel()
             self.identify_btn.setEnabled(False)
             self.identify_btn.setText('Anulowanie rozpoznawania…')
-            self.identify_btn.setIcon(alo_icon('cancel', '#ff7a84', 20))
+            self.identify_btn.setIcon(start_icon('cancel', '#ff7a84', 20))
             self._set_operation_state('online', 'ANULOWANIE ROZPOZNAWANIA', 'Bieżące zapytanie zostanie dokończone; kolejne nie będą wysyłane.')
 
     def cancel_current_scan(self):
         if isinstance(self._worker, ScanWorker):
-            self._worker.cancel(); self.scan_btn.setEnabled(False); self.scan_btn.setText('Anulowanie skanowania…'); self.scan_btn.setIcon(alo_icon('cancel', '#ff7a84', 20)); self.scan_btn.setObjectName('CancelScanAction'); self.scan_btn.style().unpolish(self.scan_btn); self.scan_btn.style().polish(self.scan_btn)
+            self._worker.cancel(); self.scan_btn.setEnabled(False); self.scan_btn.setText('Anulowanie skanowania…'); self.scan_btn.setIcon(start_icon('cancel', '#ff7a84', 20)); self.scan_btn.setObjectName('CancelScanAction'); self.scan_btn.style().unpolish(self.scan_btn); self.scan_btn.style().polish(self.scan_btn)
             self._set_operation_state('scan', 'ANULOWANIE SKANOWANIA', 'Zatrzymanie nastąpi bezpiecznie po zakończeniu bieżącego pliku…')
 
     def _sync_availability(self):
@@ -1805,7 +1807,7 @@ class MainWindow(QMainWindow):
         scan_idle = f"1. {tr('action.scan', self.preferences.language)}"
         scan_cancel = 'Cancel scan' if self.preferences.language == 'en' else 'Anuluj skanowanie'
         self.scan_btn.setText(scan_cancel if scan_running else scan_idle)
-        self.scan_btn.setIcon(alo_icon('cancel' if scan_running else 'scan', '#ff7a84' if scan_running else '#dbe8e2', 23))
+        self.scan_btn.setIcon(start_icon('cancel' if scan_running else 'scan', '#ff7a84' if scan_running else '#dbe8e2', 23))
         self.scan_btn.setObjectName('CancelScanAction' if scan_running else 'Primary')
         self._apply_workflow_button_style(self.scan_btn, active=scan_running)
         self.scan_btn.style().unpolish(self.scan_btn); self.scan_btn.style().polish(self.scan_btn)
@@ -1816,7 +1818,7 @@ class MainWindow(QMainWindow):
         else:
             self.identify_btn.setText(f"2. {tr('action.identify_online', self.preferences.language)}")
         self.identify_btn.setObjectName('CancelOnlineAction' if online_running else 'IdentifyOnlineAction')
-        self.identify_btn.setIcon(alo_icon('cancel' if online_running else 'recognize', '#ff7a84' if online_running else '#dbe8e2', 23))
+        self.identify_btn.setIcon(start_icon('cancel' if online_running else 'recognize', '#ff7a84' if online_running else '#dbe8e2', 23))
         self._apply_workflow_button_style(self.identify_btn, active=online_running)
         self.identify_btn.style().unpolish(self.identify_btn); self.identify_btn.style().polish(self.identify_btn)
         export_running_text = 'Creating files…' if self.preferences.language == 'en' else 'Tworzenie plików…'
