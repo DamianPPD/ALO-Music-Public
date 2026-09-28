@@ -7,7 +7,7 @@ from pathlib import Path
 import shutil
 
 from PySide6.QtCore import Qt, QSettings, QUrl, Signal, QRectF
-from PySide6.QtGui import QBrush, QColor, QCursor, QDesktopServices, QLinearGradient, QPainter, QPixmap, QResizeEvent
+from PySide6.QtGui import QBrush, QColor, QCursor, QDesktopServices, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QResizeEvent
 from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget
 
 from audio_library_organizer.domain.settings import AppSettings
@@ -25,8 +25,7 @@ class StudioHero(QFrame):
         self.setObjectName('StartStudioHero')
         self.artwork_path = asset_path('start_studio.png')
         self._artwork = QPixmap(str(self.artwork_path))
-        self.setMinimumHeight(136)
-        self.setMaximumHeight(172)
+        self.setFixedHeight(232)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     def paintEvent(self, event):
@@ -36,18 +35,21 @@ class StudioHero(QFrame):
         painter.setClipPath(self._rounded_path(bounds))
         painter.fillRect(bounds, QColor('#0b151c'))
         if not self._artwork.isNull():
-            # The attached reference is a screenshot. Its studio scene is clean
-            # from x=550..1672 and y=160..445; exclude the baked interface.
+            # The bundled reference is a screenshot. Only the right-hand studio
+            # scene is free of baked UI; keep its aspect ratio and reveal more
+            # of the room as the hero gains height.
             source = QRectF(550, 160, 1120, 285)
-            target_ratio = bounds.width() / max(1.0, bounds.height())
-            source_height = min(source.height(), source.width() / target_ratio)
-            source = QRectF(source.left(), source.center().y() - source_height / 2,
-                            source.width(), source_height)
-            painter.drawPixmap(bounds, self._artwork, source)
+            photo_width = max(bounds.width() * .64, bounds.height() * 4)
+            photo_height = photo_width * source.height() / source.width()
+            photo = QRectF(bounds.right() - photo_width,
+                           bounds.center().y() - photo_height / 2,
+                           photo_width, photo_height)
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+            painter.drawPixmap(photo, self._artwork, source)
         gradient = QLinearGradient(bounds.topLeft(), bounds.topRight())
-        gradient.setColorAt(0, QColor(2, 10, 16, 250))
-        gradient.setColorAt(0.34, QColor(2, 10, 16, 225))
-        gradient.setColorAt(0.62, QColor(2, 10, 16, 60))
+        gradient.setColorAt(0, QColor(2, 10, 16, 245))
+        gradient.setColorAt(0.38, QColor(2, 10, 16, 250))
+        gradient.setColorAt(0.60, QColor(2, 10, 16, 32))
         gradient.setColorAt(1, QColor(2, 10, 16, 0))
         painter.fillRect(bounds, QBrush(gradient))
         painter.setClipping(False)
@@ -72,21 +74,22 @@ class DashboardStatCard(StatCard):
             'QFrame#DashboardStatCard { background:#0e1a22; border:1px solid #29424d; '
             'border-radius:9px; } QLabel { background:transparent; border:0; }'
         )
-        self.setFixedHeight(79)
+        self.setFixedHeight(92)
         layout = self.layout()
-        layout.setContentsMargins(12, 5, 12, 5)
-        layout.setSpacing(0)
+        layout.setContentsMargins(14, 9, 14, 8)
+        layout.setSpacing(3)
         layout.removeWidget(self.value_label)
         icon_name = {'Utwory': 'add_tracks', 'Do sprawdzenia': 'warning',
                      'Duplikaty': 'duplicates', 'Brak okładki': 'cover'}[title]
         self.stat_icon = QLabel()
-        self.stat_icon.setPixmap(alo_icon(icon_name, accent, 27).pixmap(27, 27))
+        self.stat_icon.setPixmap(alo_icon(icon_name, accent, 32).pixmap(32, 32))
         row = QHBoxLayout()
-        row.setSpacing(12)
+        row.setSpacing(15)
         row.addWidget(self.stat_icon)
         row.addWidget(self.value_label, 1)
         layout.insertLayout(0, row)
-        self.value_label.setStyleSheet(f'font-size:20pt;font-weight:800;border:0;color:{accent};')
+        self.value_label.setStyleSheet(f'font-size:25pt;font-weight:800;border:0;color:{accent};')
+        self._accent = accent
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.setToolTip('Kliknij, aby otworzyć ten widok w Bibliotece')
 
@@ -94,6 +97,20 @@ class DashboardStatCard(StatCard):
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
         super().mousePressEvent(event)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        wave = QPainterPath()
+        wave.moveTo(self.width() * .52, self.height() * .82)
+        wave.cubicTo(self.width() * .72, self.height() * .12,
+                     self.width() * .81, self.height() * 1.2,
+                     self.width(), self.height() * .38)
+        color = QColor(self._accent)
+        color.setAlpha(38)
+        painter.setPen(QPen(color, 2))
+        painter.drawPath(wave)
 
 
 class ElidedPathLabel(QLabel):
@@ -143,20 +160,20 @@ class QuickAccessCard(QFrame):
         self.setObjectName('QuickAccessCard')
         self.setProperty('accentColor', accent)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        self.setFixedHeight(72)
+        self.setFixedHeight(86)
         self.path = Path(path)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 5, 10, 5)
-        layout.setSpacing(8)
+        layout.setContentsMargins(13, 8, 12, 8)
+        layout.setSpacing(11)
         self.title_icon = QLabel()
         self.title_icon.setObjectName('QuickAccessIcon')
-        self.title_icon.setPixmap(alo_icon(icon_name, '#d9e8ef', 23).pixmap(23, 23))
-        self.title_icon.setFixedSize(29, 29)
+        self.title_icon.setPixmap(alo_icon(icon_name, accent, 29).pixmap(29, 29))
+        self.title_icon.setFixedSize(40, 40)
         self.title_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.title_icon)
         text_column = QVBoxLayout()
-        text_column.setSpacing(1)
+        text_column.setSpacing(4)
         self.title_label = QLabel(title)
         self.title_label.setObjectName('QuickAccessTitle')
         text_column.addWidget(self.title_label)
@@ -164,7 +181,7 @@ class QuickAccessCard(QFrame):
         text_column.addWidget(self.path_label)
         layout.addLayout(text_column, 1)
         actions = QVBoxLayout()
-        actions.setSpacing(2)
+        actions.setSpacing(6)
         self.availability = QLabel('')
         self.availability.setObjectName('QuickAccessAvailability')
         self.availability.setAlignment(Qt.AlignmentFlag.AlignRight)
@@ -215,22 +232,25 @@ class DashboardPage(QWidget):
         body.setObjectName('StartContent')
         self.scroll.setWidget(body)
         root = QVBoxLayout(body)
-        root.setContentsMargins(12, 6, 12, 8)
-        root.setSpacing(3)
+        root.setContentsMargins(12, 7, 12, 12)
+        root.setSpacing(7)
 
         self.hero = StudioHero(body)
         hero_text = QVBoxLayout(self.hero)
-        hero_text.setContentsMargins(28, 9, 12, 10)
+        hero_text.setContentsMargins(36, 22, 18, 18)
         hero_text.setSpacing(0)
-        hero_brand = QLabel('ALO Music')
+        hero_brand = QLabel('<span>ALO</span> <span style="color:#40caff">Music</span>')
         hero_brand.setObjectName('StartHeroBrand')
         hero_text.addWidget(hero_brand)
+        hero_text.addSpacing(7)
         self.hero_title = QLabel('Twoja muzyka.\nW Twoim stylu.')
         self.hero_title.setObjectName('StartHeroTitle')
         hero_text.addWidget(self.hero_title)
+        hero_text.addSpacing(9)
         self.hero_description = QLabel('Porządkuj, uzupełniaj, analizuj\ni ciesz się swoją kolekcją.')
         self.hero_description.setObjectName('StartHeroDescription')
         hero_text.addWidget(self.hero_description)
+        hero_text.addStretch(1)
         root.addWidget(self.hero)
 
         self.dashboard_title = QLabel('Biblioteka główna')
@@ -240,7 +260,7 @@ class DashboardPage(QWidget):
         path_bar = QFrame()
         path_bar.setObjectName('SessionCard')
         path_layout = QHBoxLayout(path_bar)
-        path_layout.setContentsMargins(10, 3, 10, 3)
+        path_layout.setContentsMargins(11, 6, 11, 6)
         path_layout.setSpacing(8)
         folder_icon = QLabel()
         folder_icon.setPixmap(alo_icon('folder', '#62d6f5', 20).pixmap(20, 20))
@@ -350,8 +370,9 @@ class DashboardPage(QWidget):
             box = QFrame()
             box.setObjectName('StartLibraryMetric')
             box_layout = QVBoxLayout(box)
-            box_layout.setContentsMargins(9, 3, 9, 3)
-            box_layout.setSpacing(0)
+            box.setMinimumHeight(61)
+            box_layout.setContentsMargins(11, 6, 11, 6)
+            box_layout.setSpacing(3)
             icon = QLabel()
             icon_name = {'covers': 'cover', 'online': 'recognize', 'suspicious': 'warning',
                          'size': 'library', 'missing': 'folder', 'free_space': 'report'}[key]
@@ -393,7 +414,6 @@ class DashboardPage(QWidget):
         self.attention_frame.setVisible(False)
         root.addWidget(self.attention_frame)
 
-        root.addStretch(1)
         self._load_last_scan()
 
     def _library_storage_key(self) -> str:
