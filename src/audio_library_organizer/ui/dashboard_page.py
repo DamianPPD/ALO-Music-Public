@@ -235,7 +235,7 @@ class DashboardPage(QWidget):
 
         self.hero = StudioHero(body)
         hero_text = QVBoxLayout(self.hero)
-        hero_text.setContentsMargins(64, 22, 18, 18)
+        hero_text.setContentsMargins(44, 22, 18, 18)
         hero_text.setSpacing(0)
         hero_brand = QLabel('<span>ALO</span> <span style="color:#4cde96">Music</span>')
         hero_brand.setObjectName('StartHeroBrand')
