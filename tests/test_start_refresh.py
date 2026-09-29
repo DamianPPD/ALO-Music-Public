@@ -63,3 +63,53 @@ def test_refresh_keeps_quick_access_responsive(tmp_path):
                 assert card.geometry().right() <= page.quick_access_host.width()
     finally:
         page.close()
+
+
+def test_final_start_polish_adds_only_small_internal_spacing(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    paths = LibraryPaths(tmp_path / 'library')
+    paths.ensure_created()
+    page = DashboardPage(AppSettings((), paths))
+    try:
+        page.resize(1500, 1000)
+        page.set_summary({'review': 2})
+        page.show()
+        app.processEvents()
+        assert page.hero.height() == 200
+        assert page.hero.layout().contentsMargins().left() == 110
+        for card in page.location_cards.values():
+            margin = card.layout().contentsMargins()
+            assert (margin.left(), margin.top(), margin.right(), margin.bottom()) == (16, 9, 15, 9)
+            assert card.height() == 86
+        for box in page.metric_cards.values():
+            margin = box.layout().contentsMargins()
+            assert (margin.left(), margin.top(), margin.right(), margin.bottom()) == (11, 9, 11, 9)
+            assert box.minimumHeight() == 84
+        margin = page.attention_frame.layout().contentsMargins()
+        assert (margin.left(), margin.top(), margin.right(), margin.bottom()) == (10, 7, 10, 7)
+        assert set(page.stats_progress) == {'covers', 'online'}
+    finally:
+        page.close()
+
+
+def test_music_card_decoration_is_a_soft_multibar_visualization(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    page = DashboardPage(AppSettings((), LibraryPaths(tmp_path / 'library')))
+    try:
+        page.resize(1500, 900)
+        page.show()
+        app.processEvents()
+        card = page.cards['total']
+        image = card.grab().toImage()
+        scale = image.devicePixelRatio()
+        def blue_at(x, y):
+            return image.pixelColor(round(x * scale), round(y * scale)).blue()
+        baseline = blue_at(card.width() - 110, 40)
+        colored_columns = sum(
+            any(blue_at(x, y) > baseline + 10 for y in range(24, 69))
+            for x in range(card.width() - 100, card.width() - 6)
+        )
+        assert colored_columns >= 32
+        assert card.height() == 92
+    finally:
+        page.close()

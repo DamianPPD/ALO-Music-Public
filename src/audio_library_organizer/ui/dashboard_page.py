@@ -115,29 +115,47 @@ class DashboardStatCard(StatCard):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         color = QColor(self._accent)
-        color.setAlpha(65)
-        painter.setPen(QPen(color, 2))
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        x, y = self.width() - 98, 20
+        color.setAlpha(66)
+        painter.setPen(QPen(color, 1.5))
+        fill = QColor(self._accent)
+        fill.setAlpha(12)
+        painter.setBrush(fill)
+        x = self.width() - 98
         if self._decoration == 'equalizer':
-            for index, height in enumerate((14, 26, 37, 19, 31, 40, 22, 32, 17)):
-                px = x + index * 10
-                painter.drawLine(px, 46 - height // 2, px, 46 + height // 2)
+            gradient = QLinearGradient(0, 22, 0, 70)
+            bright = QColor(self._accent)
+            bright.setAlpha(88)
+            dim = QColor(self._accent)
+            dim.setAlpha(35)
+            gradient.setColorAt(0, dim)
+            gradient.setColorAt(.5, bright)
+            gradient.setColorAt(1, dim)
+            painter.setPen(Qt.PenStyle.NoPen)
+            for index, height in enumerate((13, 20, 27, 39, 28, 17, 34, 43, 29, 19, 35, 25, 15)):
+                px = x + 5 + index * 6
+                painter.setBrush(QBrush(gradient))
+                painter.drawRoundedRect(QRectF(px, 46 - height / 2, 3.5, height), 1.6, 1.6)
         elif self._decoration == 'checklist':
-            painter.drawRoundedRect(x + 13, y, 64, 59, 5, 5)
-            for offset in (13, 28, 43):
-                painter.drawLine(x + 22, y + offset, x + 28, y + offset + 4)
-                painter.drawLine(x + 28, y + offset + 4, x + 33, y + offset - 3)
-                painter.drawLine(x + 42, y + offset, x + 66, y + offset)
+            painter.drawRoundedRect(QRectF(x + 15, 19, 65, 60), 5, 5)
+            painter.drawRoundedRect(QRectF(x + 33, 15, 29, 9), 3, 3)
+            for offset in (34, 48, 62):
+                painter.drawRoundedRect(QRectF(x + 24, offset, 7, 7), 1, 1)
+                painter.drawLine(x + 25, offset + 3, x + 27, offset + 5)
+                painter.drawLine(x + 27, offset + 5, x + 31, offset)
+                painter.drawLine(x + 40, offset + 3, x + 69, offset + 3)
         elif self._decoration == 'layers':
-            for offset in (0, 12, 24):
-                painter.drawRoundedRect(x + offset, y + 28 - offset // 2, 55, 41, 4, 4)
+            for dx, dy in ((5, 37), (19, 28), (33, 19)):
+                painter.drawRoundedRect(QRectF(x + dx, dy, 53, 49), 4, 4)
+                painter.drawLine(x + dx + 10, dy + 13, x + dx + 35, dy + 13)
+                painter.drawLine(x + dx + 10, dy + 20, x + dx + 28, dy + 20)
         else:
-            for offset in (0, 12, 24):
-                painter.drawRoundedRect(x + offset, y + 27 - offset // 2, 52, 43, 4, 4)
-            painter.drawEllipse(x + 50, y + 24, 7, 7)
-            painter.drawLine(x + 37, y + 51, x + 47, y + 39)
-            painter.drawLine(x + 47, y + 39, x + 69, y + 55)
+            for dx, dy in ((5, 38), (19, 29), (33, 20)):
+                painter.drawRoundedRect(QRectF(x + dx, dy, 54, 48), 4, 4)
+            painter.drawEllipse(QRectF(x + 64, 30, 6, 6))
+            painter.drawLine(x + 42, 58, x + 53, 44)
+            painter.drawLine(x + 53, 44, x + 63, 53)
+            painter.drawLine(x + 63, 53, x + 70, 46)
+            painter.drawLine(x + 70, 46, x + 78, 58)
 
 
 class ElidedPathLabel(QLabel):
@@ -191,7 +209,7 @@ class QuickAccessCard(QFrame):
         self.path = Path(path)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(13, 8, 12, 8)
+        layout.setContentsMargins(16, 9, 15, 9)
         layout.setSpacing(11)
         self.title_icon = QLabel()
         self.title_icon.setObjectName('QuickAccessIcon')
@@ -399,8 +417,8 @@ class DashboardPage(QWidget):
             box = QFrame()
             box.setObjectName('StartLibraryMetric')
             box_layout = QVBoxLayout(box)
-            box.setMinimumHeight(78)
-            box_layout.setContentsMargins(10, 7, 10, 7)
+            box.setMinimumHeight(84)
+            box_layout.setContentsMargins(11, 9, 11, 9)
             box_layout.setSpacing(4)
             icon = QLabel()
             icon_name = {'covers': 'cover', 'online': 'cloud', 'suspicious': 'document_warning',
@@ -440,7 +458,7 @@ class DashboardPage(QWidget):
         self.attention_frame = QFrame()
         self.attention_frame.setObjectName('MissingFilesBanner')
         attention_layout = QHBoxLayout(self.attention_frame)
-        attention_layout.setContentsMargins(10, 4, 10, 4)
+        attention_layout.setContentsMargins(10, 7, 10, 7)
         attention_layout.setSpacing(10)
         attention_icon = QLabel()
         attention_icon.setObjectName('StartAttentionIcon')
