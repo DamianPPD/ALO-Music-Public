@@ -25,7 +25,7 @@ class StudioHero(QFrame):
         self.setObjectName('StartStudioHero')
         self.artwork_path = asset_path('start_studio.png')
         self._artwork = QPixmap(str(self.artwork_path))
-        self.setFixedHeight(232)
+        self.setFixedHeight(200)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     def paintEvent(self, event):
@@ -35,12 +35,12 @@ class StudioHero(QFrame):
         painter.setClipPath(self._rounded_path(bounds))
         painter.fillRect(bounds, QColor('#0b151c'))
         if not self._artwork.isNull():
-            # Cover the wide, low hero without deformation. A slightly lowered
-            # vertical focal point retains the headphones, amplifier and CDs.
+            # Crop the supplied panorama to the low hero without stretching it.
+            # The artwork strip is centred vertically in the source image.
             source_width = self._artwork.width()
             source_height = min(self._artwork.height(), source_width * bounds.height() / bounds.width())
             source_top = min(self._artwork.height() - source_height,
-                             max(0.0, self._artwork.height() * .55 - source_height / 2))
+                             max(0.0, self._artwork.height() * .46 - source_height / 2))
             source = QRectF(0, source_top, source_width, source_height)
             painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
             painter.drawPixmap(bounds, self._artwork, source)
@@ -69,25 +69,37 @@ class DashboardStatCard(StatCard):
         super().__init__(title, value, parent, accent=accent)
         self.setObjectName('DashboardStatCard')
         self.setStyleSheet(
-            'QFrame#DashboardStatCard { background:#0e1a22; border:1px solid #35535d; '
+            f'QFrame#DashboardStatCard {{ background:#0e1a22; border:1px solid {accent}; '
+            f'border-top:2px solid {accent}; '
             'border-radius:9px; } QLabel { background:transparent; border:0; }'
         )
         self.setFixedHeight(92)
         layout = self.layout()
-        layout.setContentsMargins(14, 9, 14, 8)
+        layout.setContentsMargins(14, 8, 14, 8)
         layout.setSpacing(3)
         layout.removeWidget(self.value_label)
+        caption = layout.takeAt(0).widget()
         icon_name = {'Utwory': 'music_note', 'Do sprawdzenia': 'warning',
                      'Duplikaty': 'duplicates', 'Brak okładki': 'cover'}[title]
         self.stat_icon = QLabel()
         self.stat_icon.setPixmap(start_icon(icon_name, accent, 32).pixmap(32, 32))
+        self.stat_icon.setFixedSize(52, 54)
+        self.stat_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.stat_icon.setStyleSheet(f'background:{QColor(accent).darker(500).name()}; border:1px solid {QColor(accent).darker(270).name()}; border-radius:9px;')
         row = QHBoxLayout()
-        row.setSpacing(15)
+        row.setSpacing(13)
         row.addWidget(self.stat_icon)
-        row.addWidget(self.value_label, 1)
+        text_column = QVBoxLayout()
+        text_column.setSpacing(1)
+        text_column.addWidget(self.value_label)
+        text_column.addWidget(caption)
+        row.addLayout(text_column)
+        row.addStretch(1)
         layout.insertLayout(0, row)
         self.value_label.setStyleSheet(f'font-size:25pt;font-weight:800;border:0;color:{accent};')
         self._accent = accent
+        self._decoration = {'Utwory': 'equalizer', 'Do sprawdzenia': 'checklist',
+                            'Duplikaty': 'layers', 'Brak okładki': 'covers'}[title]
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.setToolTip('Kliknij, aby otworzyć ten widok w Bibliotece')
 
@@ -98,17 +110,34 @@ class DashboardStatCard(StatCard):
 
     def paintEvent(self, event):
         super().paintEvent(event)
+        if self.width() < 300:
+            return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        wave = QPainterPath()
-        wave.moveTo(self.width() * .52, self.height() * .82)
-        wave.cubicTo(self.width() * .72, self.height() * .12,
-                     self.width() * .81, self.height() * 1.2,
-                     self.width(), self.height() * .38)
         color = QColor(self._accent)
-        color.setAlpha(18)
+        color.setAlpha(65)
         painter.setPen(QPen(color, 2))
-        painter.drawPath(wave)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        x, y = self.width() - 98, 20
+        if self._decoration == 'equalizer':
+            for index, height in enumerate((14, 26, 37, 19, 31, 40, 22, 32, 17)):
+                px = x + index * 10
+                painter.drawLine(px, 46 - height // 2, px, 46 + height // 2)
+        elif self._decoration == 'checklist':
+            painter.drawRoundedRect(x + 13, y, 64, 59, 5, 5)
+            for offset in (13, 28, 43):
+                painter.drawLine(x + 22, y + offset, x + 28, y + offset + 4)
+                painter.drawLine(x + 28, y + offset + 4, x + 33, y + offset - 3)
+                painter.drawLine(x + 42, y + offset, x + 66, y + offset)
+        elif self._decoration == 'layers':
+            for offset in (0, 12, 24):
+                painter.drawRoundedRect(x + offset, y + 28 - offset // 2, 55, 41, 4, 4)
+        else:
+            for offset in (0, 12, 24):
+                painter.drawRoundedRect(x + offset, y + 27 - offset // 2, 52, 43, 4, 4)
+            painter.drawEllipse(x + 50, y + 24, 7, 7)
+            painter.drawLine(x + 37, y + 51, x + 47, y + 39)
+            painter.drawLine(x + 47, y + 39, x + 69, y + 55)
 
 
 class ElidedPathLabel(QLabel):
@@ -166,8 +195,8 @@ class QuickAccessCard(QFrame):
         layout.setSpacing(11)
         self.title_icon = QLabel()
         self.title_icon.setObjectName('QuickAccessIcon')
-        self.title_icon.setPixmap(start_icon(icon_name, accent, 29).pixmap(29, 29))
-        self.title_icon.setFixedSize(40, 40)
+        self.title_icon.setPixmap(start_icon(icon_name, '#628fb0', 29).pixmap(29, 29))
+        self.title_icon.setFixedSize(48, 48)
         self.title_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.title_icon)
         text_column = QVBoxLayout()
@@ -183,7 +212,9 @@ class QuickAccessCard(QFrame):
         self.availability = QLabel('')
         self.availability.setObjectName('QuickAccessAvailability')
         self.availability.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.availability.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         actions.addWidget(self.availability)
+        actions.setAlignment(self.availability, Qt.AlignmentFlag.AlignRight)
         self.open_button = QPushButton('Otwórz folder')
         self.open_button.setObjectName('QuickAccessOpen')
         self.open_button.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
@@ -235,17 +266,18 @@ class DashboardPage(QWidget):
 
         self.hero = StudioHero(body)
         hero_text = QVBoxLayout(self.hero)
-        hero_text.setContentsMargins(54, 22, 18, 18)
+        hero_text.setContentsMargins(110, 32, 18, 25)
         hero_text.setSpacing(0)
         hero_brand = QLabel('<span>ALO</span> <span style="color:#4cde96">Music</span>')
         hero_brand.setObjectName('StartHeroBrand')
         hero_text.addWidget(hero_brand)
-        hero_text.addSpacing(7)
-        self.hero_title = QLabel('Twoja muzyka.\nW Twoim stylu.')
+        hero_text.addSpacing(3)
+        self.hero_title = QLabel('Twoja muzyka. Twój porządek.')
         self.hero_title.setObjectName('StartHeroTitle')
+        self.hero_title.setWordWrap(True)
         hero_text.addWidget(self.hero_title)
-        hero_text.addSpacing(9)
-        self.hero_description = QLabel('Porządkuj, uzupełniaj, analizuj\ni ciesz się swoją kolekcją.')
+        hero_text.addSpacing(5)
+        self.hero_description = QLabel('Porządkuj • uzupełniaj • analizuj')
         self.hero_description.setObjectName('StartHeroDescription')
         hero_text.addWidget(self.hero_description)
         hero_text.addStretch(1)
@@ -327,10 +359,6 @@ class DashboardPage(QWidget):
         separator_layout = QHBoxLayout(self.statistics_separator)
         separator_layout.setContentsMargins(0, 3, 0, 3)
         separator_layout.setSpacing(8)
-        left_line = QFrame()
-        left_line.setObjectName('DashboardStatisticsLine')
-        left_line.setFrameShape(QFrame.Shape.HLine)
-        separator_layout.addWidget(left_line, 1)
         self.statistics_separator_icon = QLabel()
         self.statistics_separator_icon.setObjectName('DashboardStatisticsIcon')
         self.statistics_separator_icon.setPixmap(start_icon('report', '#75bfff', 17).pixmap(17, 17))
@@ -343,49 +371,57 @@ class DashboardPage(QWidget):
         right_line = QFrame()
         right_line.setObjectName('DashboardStatisticsLine')
         right_line.setFrameShape(QFrame.Shape.HLine)
-        separator_layout.addWidget(right_line, 4)
+        separator_layout.addWidget(right_line, 1)
         root.addWidget(self.statistics_separator)
 
         stats_frame = QFrame()
         stats_frame.setObjectName('LibraryHealthCard')
         stats_layout = QVBoxLayout(stats_frame)
-        stats_layout.setContentsMargins(7, 5, 7, 5)
+        stats_layout.setContentsMargins(0, 0, 0, 0)
         stats_layout.setSpacing(3)
 
-        stats_grid = QGridLayout()
-        stats_grid.setHorizontalSpacing(10)
-        stats_grid.setVerticalSpacing(4)
+        self.stats_grid = QGridLayout()
+        self.stats_grid.setHorizontalSpacing(9)
+        self.stats_grid.setVerticalSpacing(4)
         stat_labels = [
             ('covers', 'OKŁADKI'),
             ('online', 'ROZPOZNANE ONLINE'),
-            ('suspicious', 'PODEJRZANE DANE'),
             ('size', 'ROZMIAR BIBLIOTEKI'),
             ('missing', 'BRAKUJĄCE PLIKI'),
+            ('suspicious', 'PODEJRZANE DANE'),
             ('free_space', 'WOLNE MIEJSCE'),
         ]
+        self._metric_order = tuple(key for key, _label in stat_labels)
+        self.metric_cards = {}
         self.stats_values: dict[str, QLabel] = {}
         self.stats_progress = {}
         for index, (key, label) in enumerate(stat_labels):
             box = QFrame()
             box.setObjectName('StartLibraryMetric')
             box_layout = QVBoxLayout(box)
-            box.setMinimumHeight(61)
-            box_layout.setContentsMargins(11, 6, 11, 6)
-            box_layout.setSpacing(3)
+            box.setMinimumHeight(78)
+            box_layout.setContentsMargins(10, 7, 10, 7)
+            box_layout.setSpacing(4)
             icon = QLabel()
             icon_name = {'covers': 'cover', 'online': 'cloud', 'suspicious': 'document_warning',
                          'size': 'database', 'missing': 'document_x', 'free_space': 'disk'}[key]
-            icon.setPixmap(start_icon(icon_name, '#79dcb0', 15).pixmap(15, 15))
+            icon.setObjectName('StartMetricIcon')
+            icon.setPixmap(start_icon(icon_name, '#628fb0', 22).pixmap(22, 22))
+            icon.setFixedSize(35, 35)
+            icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
             header = QHBoxLayout()
-            header.setSpacing(6)
+            header.setSpacing(8)
             header.addWidget(icon)
+            text_column = QVBoxLayout()
+            text_column.setSpacing(2)
             heading = QLabel(label)
             heading.setObjectName('StartMetricHeading')
-            header.addWidget(heading, 1)
-            box_layout.addLayout(header)
+            text_column.addWidget(heading)
             value = QLabel('—')
-            value.setStyleSheet('font-size:11pt;font-weight:750;')
-            box_layout.addWidget(value)
+            value.setStyleSheet('font-size:12pt;font-weight:750;')
+            text_column.addWidget(value)
+            header.addLayout(text_column, 1)
+            box_layout.addLayout(header)
             if key in {'covers', 'online'}:
                 from PySide6.QtWidgets import QProgressBar
                 progress = QProgressBar()
@@ -395,17 +431,23 @@ class DashboardPage(QWidget):
                 box_layout.addWidget(progress)
                 self.stats_progress[key] = progress
             self.stats_values[key] = value
-            stats_grid.addWidget(box, index // 3, index % 3)
-        stats_layout.addLayout(stats_grid)
+            self.metric_cards[key] = box
+            self.stats_grid.addWidget(box, 0, index)
+        stats_layout.addLayout(self.stats_grid)
         root.addWidget(stats_frame)
+        self._reflow_metrics()
 
         self.attention_frame = QFrame()
         self.attention_frame.setObjectName('MissingFilesBanner')
         attention_layout = QHBoxLayout(self.attention_frame)
         attention_layout.setContentsMargins(10, 4, 10, 4)
         attention_layout.setSpacing(10)
+        attention_icon = QLabel()
+        attention_icon.setObjectName('StartAttentionIcon')
+        attention_icon.setPixmap(start_icon('warning', '#ffb84d', 20).pixmap(20, 20))
+        attention_layout.addWidget(attention_icon)
         attention_title = QLabel('Wymaga uwagi')
-        attention_title.setStyleSheet('font-weight:800;')
+        attention_title.setStyleSheet('font-weight:800;color:#ffb84d;')
         attention_layout.addWidget(attention_title)
         self.attention_text = QLabel('')
         self.attention_text.setWordWrap(True)
@@ -476,14 +518,23 @@ class DashboardPage(QWidget):
 
     def _reflow_locations(self) -> None:
         width = self.width()
-        columns = 3 if width >= 1100 else 2 if width >= 720 else 1
+        columns = 3 if width >= 1250 else 2 if width >= 720 else 1
         for index, key in enumerate(self._location_order):
             self.quick_access_layout.addWidget(self.location_cards[key], index // columns, index % columns)
 
+    def _reflow_metrics(self) -> None:
+        columns = 6 if self.width() >= 1250 else 3 if self.width() >= 720 else 2
+        for index, key in enumerate(self._metric_order):
+            self.stats_grid.addWidget(self.metric_cards[key], index // columns, index % columns)
+
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
+        if hasattr(self, 'hero_title'):
+            self.hero_title.setMaximumWidth(min(600, max(330, int(self.width() * .42))))
         if hasattr(self, 'location_cards'):
             self._reflow_locations()
+        if hasattr(self, 'metric_cards'):
+            self._reflow_metrics()
 
     def set_library(self, settings: AppSettings, library_name: str | None = None):
         self._library_root = Path(settings.library.root)

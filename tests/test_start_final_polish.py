@@ -62,18 +62,18 @@ def _pixels(pixmap):
 def test_hero_uses_the_exact_approved_panorama_without_changing_height(tmp_path):
     _app()
     image = asset_path('start_studio.png')
-    assert hashlib.sha256(image.read_bytes()).hexdigest() == '9d29b815ce91a984bd6db4f8f3e4cb9a7b357fe5ef9138ddf3454df9f5453a92'
+    assert hashlib.sha256(image.read_bytes()).hexdigest() == 'bfd80c98cb01b13883e7a74ce246be8118fb8897f7d5606ffa4fd9d4ec48cdec'
     page = DashboardPage(AppSettings((), LibraryPaths(tmp_path / 'library')))
     try:
         page.resize(1500, 900)
         page.show()
         _app().processEvents()
         assert page.hero.artwork_path == image
-        assert page.hero.height() == 232
-        assert page.hero_title.text() == 'Twoja muzyka.\nW Twoim stylu.'
+        assert page.hero.height() == 200
+        assert page.hero_title.text() == 'Twoja muzyka. Twój porządek.'
         rendered = page.hero.grab().toImage()
         left = rendered.pixelColor(8, rendered.height() // 2)
-        right = rendered.pixelColor(rendered.width() * 3 // 4, rendered.height() // 2)
+        right = rendered.pixelColor(rendered.width() * 9 // 10, rendered.height() * 3 // 5)
         assert left.red() < 35 and left.green() < 35
         assert right.red() > left.red() + 30
     finally:
@@ -118,13 +118,13 @@ def test_start_sections_use_c_icons_without_changing_actions(tmp_path, monkeypat
                      'not_selected': 'folder_x', 'custom_folders': 'music_note', 'reports': 'report'}
         for key, name in locations.items():
             card = window.dashboard.location_cards[key]
-            assert _pixels(card.title_icon.pixmap()) == _pixels(icons.start_icon(name, card.property('accentColor'), 29).pixmap(29, 29))
+            assert _pixels(card.title_icon.pixmap()) == _pixels(icons.start_icon(name, '#628fb0', 29).pixmap(29, 29))
         metrics = {'covers': 'cover', 'online': 'cloud', 'suspicious': 'document_warning',
                    'size': 'database', 'missing': 'document_x', 'free_space': 'disk'}
         for key, name in metrics.items():
             box = window.dashboard.stats_values[key].parentWidget()
             icon = next(label for label in box.findChildren(QLabel) if label.pixmap() is not None)
-            assert _pixels(icon.pixmap()) == _pixels(icons.start_icon(name, '#79dcb0', 15).pixmap(15, 15))
+            assert _pixels(icon.pixmap()) == _pixels(icons.start_icon(name, '#628fb0', 22).pixmap(22, 22))
         assert len(window.dashboard.location_cards) == 6
     finally:
         window.close()
@@ -157,21 +157,21 @@ def test_start_hero_micro_spacing_and_stat_paint_keep_text_and_accents(tmp_path)
         page.show()
         _app().processEvents()
         margins = page.hero.layout().contentsMargins()
-        assert 48 <= margins.left() <= 60
-        assert margins.top() == 22
-        assert page.hero.height() == 232
+        assert 100 <= margins.left() <= 130
+        assert margins.top() >= 25
+        assert page.hero.height() == 200
         brand = page.hero.findChild(QLabel, 'StartHeroBrand')
         assert brand.text() == '<span>ALO</span> <span style="color:#4cde96">Music</span>'
-        assert page.hero_title.text() == 'Twoja muzyka.\nW Twoim stylu.'
-        assert page.hero_description.text() == 'Porządkuj, uzupełniaj, analizuj\ni ciesz się swoją kolekcją.'
+        assert page.hero_title.text() == 'Twoja muzyka. Twój porządek.'
+        assert page.hero_description.text() == 'Porządkuj • uzupełniaj • analizuj'
         apply_static_language(page, 'en')
         page.refresh_language()
-        assert page.hero_title.text() == 'Your music.\nYour way.'
-        assert page.hero_description.text() == 'Organize, complete, analyze\nand enjoy your collection.'
+        assert page.hero_title.text() == 'Your music. Your order.'
+        assert page.hero_description.text() == 'Organize • complete • analyze'
         assert brand.text() == '<span>ALO</span> <span style="color:#4cde96">Music</span>'
         apply_static_language(page, 'pl')
         page.refresh_language()
-        assert page.hero_title.text() == 'Twoja muzyka.\nW Twoim stylu.'
+        assert page.hero_title.text() == 'Twoja muzyka. Twój porządek.'
 
         accents = {'total': '#67baff', 'review': '#ffb84d',
                    'duplicate': '#b987ff', 'missing_covers': '#63b3ed'}
@@ -181,16 +181,8 @@ def test_start_hero_micro_spacing_and_stat_paint_keep_text_and_accents(tmp_path)
             assert card.height() == 92
             image = card.grab().toImage()
             x = image.width() // 2
-            assert image.pixelColor(x, 0).name() == '#35535d'
-            assert image.pixelColor(x, 1).name() == '#0e1a22'
-            base = image.pixelColor(image.width() * 55 // 100, 10)
-            strength = max(
-                max(abs(p.red() - base.red()), abs(p.green() - base.green()), abs(p.blue() - base.blue()))
-                for px in range(image.width() * 55 // 100, image.width() * 95 // 100)
-                for py in range(10, 80)
-                for p in (image.pixelColor(px, py),)
-            )
-            assert 5 <= strength <= 20
+            assert image.pixelColor(x, 1).blue() > image.pixelColor(x, 4).blue()
+            assert card.stat_icon.width() >= 45
     finally:
         page.close()
 

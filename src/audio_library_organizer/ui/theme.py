@@ -2622,22 +2622,32 @@ QFrame#ToolbarFrame QProgressBar#StartOperationProgress {
 }
 QFrame#ToolbarFrame QProgressBar#StartOperationProgress::chunk { background:#52d997; border-radius:1px; }
 QScrollArea#StartScroll, QWidget#StartContent { background:#0b131a; border:0; }
-QLabel#StartHeroBrand { background:transparent; color:#eaf8f3; font-size:32pt; font-weight:850; }
-QLabel#StartHeroTitle { background:transparent; color:#ffffff; font-size:23pt; font-weight:680; }
-QLabel#StartHeroDescription { background:transparent; color:#b4e2df; font-size:11pt; }
-QFrame#QuickAccessCard { background:#0e1b22; border-color:#29404b; min-height:84px; max-height:86px; }
-QFrame#QuickAccessCard:hover { border-color:#4b9874; background:#142820; }
+QLabel#StartHeroBrand { background:transparent; color:#eaf8f3; font-size:31pt; font-weight:850; }
+QLabel#StartHeroTitle { background:transparent; color:#ffffff; font-size:17pt; font-weight:680; }
+QLabel#StartHeroDescription { background:transparent; color:#aab8bd; font-size:10.5pt; }
+QFrame#QuickAccessCard { background:#0c1b26; border:1px solid #31546a; border-top-color:#3b8eae; min-height:84px; max-height:86px; }
+QFrame#QuickAccessCard:hover { border-color:#4f9bb7; background:#102633; }
 QFrame#QuickAccessCard QLabel { background:transparent; border:0; }
 QFrame#QuickAccessCard QLabel#QuickAccessTitle { font-size:10pt; }
+QFrame#QuickAccessCard QLabel#QuickAccessIcon,
+QFrame#StartLibraryMetric QLabel#StartMetricIcon {
+    background:#102b3b; border:1px solid #294a60; border-radius:8px;
+}
+QFrame#QuickAccessCard QLabel#QuickAccessAvailability[available="true"] {
+    color:#71d9aa; background:#15382e; border-radius:5px; padding:1px 5px;
+}
 QFrame#QuickAccessCard QPushButton#QuickAccessOpen { min-height:24px; padding:3px 8px; }
 QFrame#DashboardStatisticsSeparator { min-height:27px; }
-QFrame#StartLibraryMetric { background:#0e1b22; border:1px solid #28414b; border-radius:7px; }
+QFrame#LibraryHealthCard { background:transparent; border:0; }
+QFrame#StartLibraryMetric { background:#0b1b26; border:1px solid #244257; border-radius:7px; }
 QFrame#StartLibraryMetric QLabel { background:transparent; border:0; }
-QLabel#StartMetricHeading { background:transparent; color:#a5c2c5; font-size:8.5pt; font-weight:700; }
+QLabel#StartMetricHeading { background:transparent; color:#78a9c5; font-size:7.5pt; font-weight:700; }
 QProgressBar#StartMetricProgress {
-    min-height:3px; max-height:3px; background:#243c42; border:0; border-radius:1px;
+    min-height:3px; max-height:3px; background:#203747; border:0; border-radius:1px;
 }
-QProgressBar#StartMetricProgress::chunk { background:#50d9a4; border-radius:1px; }
+QProgressBar#StartMetricProgress::chunk { background:#39abdc; border-radius:1px; }
+QFrame#MissingFilesBanner { background:#221c18; border:1px solid #815025; border-radius:8px; }
+QFrame#MissingFilesBanner QLabel { background:transparent; border:0; }
 '''
 DARK_STYLE += START_STUDIO_STYLE
 LIGHT_STYLE += START_STUDIO_STYLE
