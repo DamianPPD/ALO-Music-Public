@@ -932,7 +932,7 @@ class MainWindow(QMainWindow):
         self.action_buttons = [self.scan_btn, self.identify_btn, self.review_btn, self.export_btn, self.new_files_btn]
         self.operation_frame = QFrame(); self.operation_frame.setObjectName('OperationFrame'); self.operation_frame.setProperty('operationKind', 'idle')
         self.operation_frame.setParent(self.action_frame)
-        self.operation_frame.setMinimumWidth(225)
+        self.operation_frame.setMinimumWidth(350)
         self.operation_frame.setMaximumWidth(400)
         op = QVBoxLayout(self.operation_frame); op.setContentsMargins(8, 4, 8, 4); op.setSpacing(1)
         op_head = QHBoxLayout(); op_head.setSpacing(3)
@@ -945,6 +945,7 @@ class MainWindow(QMainWindow):
         self.operation_status.setWordWrap(False); self.operation_status.setToolTip(self.operation_status.text()); op.addWidget(self.operation_status)
         self.progress = QProgressBar(); self.progress.setObjectName('StartOperationProgress'); self.progress.setRange(0, 1); self.progress.setValue(1); self.progress.setVisible(False); op.addWidget(self.progress)
         action.addSpacing(30)
+        action.addStretch(2)
         action.addWidget(self.operation_frame, 1)
         action.addSpacing(10)
         action.addStretch(1)

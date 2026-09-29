@@ -279,7 +279,7 @@ class DashboardPage(QWidget):
         body.setObjectName('StartContent')
         self.scroll.setWidget(body)
         root = QVBoxLayout(body)
-        root.setContentsMargins(12, 7, 12, 12)
+        root.setContentsMargins(12, 7, 12, 6)
         root.setSpacing(7)
 
         self.hero = StudioHero(body)
@@ -289,8 +289,16 @@ class DashboardPage(QWidget):
         hero_brand = QLabel('<span>ALO</span> <span style="color:#4cde96">Music</span>')
         hero_brand.setObjectName('StartHeroBrand')
         hero_text.addWidget(hero_brand)
-        hero_text.addSpacing(3)
-        self.hero_title = QLabel('Twoja muzyka. Twój porządek.')
+        hero_text.addSpacing(2)
+        self.hero_subtitle = QLabel('Audio Library Organizer')
+        self.hero_subtitle.setObjectName('StartHeroSubtitle')
+        subtitle_font = self.hero_subtitle.font()
+        subtitle_font.setPixelSize(12)
+        subtitle_font.setLetterSpacing(subtitle_font.SpacingType.AbsoluteSpacing, 1.1)
+        self.hero_subtitle.setFont(subtitle_font)
+        hero_text.addWidget(self.hero_subtitle)
+        hero_text.addSpacing(8)
+        self.hero_title = QLabel('Twoja kolekcja. Pełna kontrola.')
         self.hero_title.setObjectName('StartHeroTitle')
         self.hero_title.setWordWrap(True)
         hero_text.addWidget(self.hero_title)
@@ -339,6 +347,7 @@ class DashboardPage(QWidget):
         for column, key in enumerate(('total', 'review', 'duplicate', 'missing_covers')):
             cards_layout.addWidget(self.cards[key], 0, column)
         root.addLayout(cards_layout)
+        root.addSpacing(8)
 
         self.cards['total'].clicked.connect(lambda: self.quick_view_requested.emit('all'))
         self.cards['review'].clicked.connect(lambda: self.quick_view_requested.emit('review'))
@@ -349,6 +358,7 @@ class DashboardPage(QWidget):
         self.last_scan_label.setObjectName('MutedText')
         self.last_scan_label.setWordWrap(False)
         root.addWidget(self.last_scan_label)
+        root.addSpacing(12)
 
         quick_header = QHBoxLayout()
         quick_title_icon = QLabel()
@@ -360,6 +370,7 @@ class DashboardPage(QWidget):
         quick_header.addWidget(quick_title)
         quick_header.addStretch(1)
         root.addLayout(quick_header)
+        root.addSpacing(5)
 
         self.quick_access_host = QWidget()
         self.quick_access_layout = QGridLayout(self.quick_access_host)
@@ -370,6 +381,7 @@ class DashboardPage(QWidget):
         self._location_order = ('root', 'ready', 'review', 'not_selected', 'custom_folders', 'reports')
         self._create_location_cards(settings)
         root.addWidget(self.quick_access_host)
+        root.addSpacing(12)
 
         self.statistics_separator = QFrame()
         self.statistics_separator.setObjectName('DashboardStatisticsSeparator')
@@ -391,6 +403,7 @@ class DashboardPage(QWidget):
         right_line.setFrameShape(QFrame.Shape.HLine)
         separator_layout.addWidget(right_line, 1)
         root.addWidget(self.statistics_separator)
+        root.addSpacing(5)
 
         stats_frame = QFrame()
         stats_frame.setObjectName('LibraryHealthCard')
@@ -453,6 +466,7 @@ class DashboardPage(QWidget):
             self.stats_grid.addWidget(box, 0, index)
         stats_layout.addLayout(self.stats_grid)
         root.addWidget(stats_frame)
+        root.addSpacing(6)
         self._reflow_metrics()
 
         self.attention_frame = QFrame()

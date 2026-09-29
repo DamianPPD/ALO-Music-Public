@@ -2623,6 +2623,7 @@ QFrame#ToolbarFrame QProgressBar#StartOperationProgress {
 QFrame#ToolbarFrame QProgressBar#StartOperationProgress::chunk { background:#52d997; border-radius:1px; }
 QScrollArea#StartScroll, QWidget#StartContent { background:#0b131a; border:0; }
 QLabel#StartHeroBrand { background:transparent; color:#eaf8f3; font-size:31pt; font-weight:850; }
+QLabel#StartHeroSubtitle { background:transparent; color:#9aadb5; font-weight:400; }
 QLabel#StartHeroTitle { background:transparent; color:#ffffff; font-size:17pt; font-weight:680; }
 QLabel#StartHeroDescription { background:transparent; color:#aab8bd; font-size:10.5pt; }
 QFrame#QuickAccessCard { background:#0c1b26; border:1px solid #31546a; border-top-color:#3b8eae; min-height:84px; max-height:86px; }

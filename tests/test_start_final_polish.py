@@ -70,7 +70,7 @@ def test_hero_uses_the_exact_approved_panorama_without_changing_height(tmp_path)
         _app().processEvents()
         assert page.hero.artwork_path == image
         assert page.hero.height() == 200
-        assert page.hero_title.text() == 'Twoja muzyka. Twój porządek.'
+        assert page.hero_title.text() == 'Twoja kolekcja. Pełna kontrola.'
         rendered = page.hero.grab().toImage()
         left = rendered.pixelColor(8, rendered.height() // 2)
         right = rendered.pixelColor(rendered.width() * 9 // 10, rendered.height() * 3 // 5)
@@ -138,7 +138,7 @@ def test_operation_c_status_and_width_stay_right_of_workflow(tmp_path, monkeypat
         assert window.operation_frame.parentWidget() is window.action_frame
         assert 350 <= window.operation_frame.width() <= 360
         gap = window.operation_frame.geometry().left() - window.new_files_btn.geometry().right()
-        assert 28 <= gap <= 48
+        assert gap >= 70
         assert window.action_frame.width() - window.operation_frame.geometry().right() >= 20
         assert _pixels(window.operation_icon.pixmap()) == _pixels(icons.start_icon('status_ring', '#8fa1b3', 17).pixmap(17, 17))
         assert _pixels(window.operation_state_icon.pixmap()) == _pixels(icons.start_icon('check_circle', '#67e495', 17).pixmap(17, 17))
@@ -162,16 +162,21 @@ def test_start_hero_micro_spacing_and_stat_paint_keep_text_and_accents(tmp_path)
         assert page.hero.height() == 200
         brand = page.hero.findChild(QLabel, 'StartHeroBrand')
         assert brand.text() == '<span>ALO</span> <span style="color:#4cde96">Music</span>'
-        assert page.hero_title.text() == 'Twoja muzyka. Twój porządek.'
+        assert page.hero_subtitle.text() == 'Audio Library Organizer'
+        assert page.hero_title.text() == 'Twoja kolekcja. Pełna kontrola.'
         assert page.hero_description.text() == 'Porządkuj • uzupełniaj • analizuj'
+        lines = (brand, page.hero_subtitle, page.hero_title, page.hero_description)
+        assert all(first.geometry().bottom() < second.geometry().top() for first, second in zip(lines, lines[1:]))
+        assert lines[-1].geometry().bottom() < page.hero.height()
         apply_static_language(page, 'en')
         page.refresh_language()
-        assert page.hero_title.text() == 'Your music. Your order.'
+        assert page.hero_subtitle.text() == 'Audio Library Organizer'
+        assert page.hero_title.text() == 'Your collection. Full control.'
         assert page.hero_description.text() == 'Organize • complete • analyze'
         assert brand.text() == '<span>ALO</span> <span style="color:#4cde96">Music</span>'
         apply_static_language(page, 'pl')
         page.refresh_language()
-        assert page.hero_title.text() == 'Twoja muzyka. Twój porządek.'
+        assert page.hero_title.text() == 'Twoja kolekcja. Pełna kontrola.'
 
         accents = {'total': '#67baff', 'review': '#ffb84d',
                    'duplicate': '#b987ff', 'missing_covers': '#63b3ed'}
@@ -183,6 +188,29 @@ def test_start_hero_micro_spacing_and_stat_paint_keep_text_and_accents(tmp_path)
             x = image.width() // 2
             assert image.pixelColor(x, 1).blue() > image.pixelColor(x, 4).blue()
             assert card.stat_icon.width() >= 45
+    finally:
+        page.close()
+
+
+def test_start_sections_have_balanced_gaps_without_resizing_cards(tmp_path):
+    page = DashboardPage(AppSettings((), LibraryPaths(tmp_path / 'library')))
+    try:
+        page.resize(1500, 900)
+        page.set_summary({'review': 2})
+        page.show()
+        _app().processEvents()
+        body = page.scroll.widget()
+        quick_title = next(label for label in page.findChildren(QLabel) if label.text() == 'Szybki dostęp')
+        def gap(upper, lower):
+            return lower.mapTo(body, lower.rect().topLeft()).y() - upper.mapTo(body, upper.rect().bottomLeft()).y() - 1
+
+        assert 14 <= gap(page.cards['total'], page.last_scan_label) <= 24
+        assert 18 <= gap(page.last_scan_label, quick_title) <= 29
+        assert 11 <= gap(quick_title, page.location_cards['root']) <= 20
+        assert 12 <= gap(page.metric_cards['covers'], page.attention_frame) <= 18
+        assert page.cards['total'].height() == 92
+        assert page.location_cards['root'].height() == 86
+        assert page.metric_cards['covers'].height() == 84
     finally:
         page.close()
 

@@ -36,11 +36,12 @@ def test_refresh_keeps_actions_and_data_but_renders_six_compact_metrics(tmp_path
         assert page.stats_progress['covers'].value() == 19
         apply_static_language(page, 'en')
         page.refresh_language()
-        assert page.hero_title.text() == 'Your music. Your order.'
+        assert page.hero_subtitle.text() == 'Audio Library Organizer'
+        assert page.hero_title.text() == 'Your collection. Full control.'
         assert page.hero_description.text() == 'Organize • complete • analyze'
         apply_static_language(page, 'pl')
         page.refresh_language()
-        assert page.hero_title.text() == 'Twoja muzyka. Twój porządek.'
+        assert page.hero_title.text() == 'Twoja kolekcja. Pełna kontrola.'
     finally:
         page.close()
 

@@ -36,14 +36,14 @@ def test_studio_hero_uses_bundled_reference_and_refreshes_pl_en(tmp_path):
         assert asset_path('start_studio.png').is_file()
         assert page.hero.artwork_path == asset_path('start_studio.png')
         assert page.hero.minimumHeight() == 200
-        assert page.hero_title.text() == 'Twoja muzyka. Twój porządek.'
+        assert page.hero_title.text() == 'Twoja kolekcja. Pełna kontrola.'
         apply_static_language(page, 'en')
         page.refresh_language()
-        assert page.hero_title.text() == 'Your music. Your order.'
+        assert page.hero_title.text() == 'Your collection. Full control.'
         assert page.hero_description.text() == 'Organize • complete • analyze'
         apply_static_language(page, 'pl')
         page.refresh_language()
-        assert page.hero_title.text() == 'Twoja muzyka. Twój porządek.'
+        assert page.hero_title.text() == 'Twoja kolekcja. Pełna kontrola.'
     finally:
         page.close()
 
