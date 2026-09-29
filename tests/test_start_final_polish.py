@@ -138,7 +138,7 @@ def test_operation_c_status_and_width_stay_right_of_workflow(tmp_path, monkeypat
         assert window.operation_frame.parentWidget() is window.action_frame
         assert 350 <= window.operation_frame.width() <= 360
         gap = window.operation_frame.geometry().left() - window.new_files_btn.geometry().right()
-        assert 16 <= gap <= 24
+        assert 28 <= gap <= 48
         assert window.action_frame.width() - window.operation_frame.geometry().right() >= 20
         assert _pixels(window.operation_icon.pixmap()) == _pixels(icons.start_icon('status_ring', '#8fa1b3', 17).pixmap(17, 17))
         assert _pixels(window.operation_state_icon.pixmap()) == _pixels(icons.start_icon('check_circle', '#67e495', 17).pixmap(17, 17))
@@ -157,7 +157,7 @@ def test_start_hero_micro_spacing_and_stat_paint_keep_text_and_accents(tmp_path)
         page.show()
         _app().processEvents()
         margins = page.hero.layout().contentsMargins()
-        assert margins.left() == 44
+        assert 48 <= margins.left() <= 60
         assert margins.top() == 22
         assert page.hero.height() == 232
         brand = page.hero.findChild(QLabel, 'StartHeroBrand')

@@ -944,9 +944,9 @@ class MainWindow(QMainWindow):
         self.operation_status = QLabel('Wybierz etap pracy'); self.operation_status.setObjectName('OperationStatus')
         self.operation_status.setWordWrap(False); self.operation_status.setToolTip(self.operation_status.text()); op.addWidget(self.operation_status)
         self.progress = QProgressBar(); self.progress.setObjectName('StartOperationProgress'); self.progress.setRange(0, 1); self.progress.setValue(1); self.progress.setVisible(False); op.addWidget(self.progress)
-        action.addSpacing(10)
-        action.addWidget(self.operation_frame, 1)
         action.addSpacing(30)
+        action.addWidget(self.operation_frame, 1)
+        action.addSpacing(10)
         action.addStretch(1)
         outer.addWidget(self.action_frame)
 
