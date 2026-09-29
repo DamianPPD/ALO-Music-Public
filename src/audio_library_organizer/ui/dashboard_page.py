@@ -69,7 +69,7 @@ class DashboardStatCard(StatCard):
         super().__init__(title, value, parent, accent=accent)
         self.setObjectName('DashboardStatCard')
         self.setStyleSheet(
-            'QFrame#DashboardStatCard { background:#0e1a22; border:1px solid #29424d; '
+            'QFrame#DashboardStatCard { background:#0e1a22; border:1px solid #35535d; '
             'border-radius:9px; } QLabel { background:transparent; border:0; }'
         )
         self.setFixedHeight(92)
@@ -106,7 +106,7 @@ class DashboardStatCard(StatCard):
                      self.width() * .81, self.height() * 1.2,
                      self.width(), self.height() * .38)
         color = QColor(self._accent)
-        color.setAlpha(38)
+        color.setAlpha(18)
         painter.setPen(QPen(color, 2))
         painter.drawPath(wave)
 
@@ -235,9 +235,9 @@ class DashboardPage(QWidget):
 
         self.hero = StudioHero(body)
         hero_text = QVBoxLayout(self.hero)
-        hero_text.setContentsMargins(36, 22, 18, 18)
+        hero_text.setContentsMargins(64, 22, 18, 18)
         hero_text.setSpacing(0)
-        hero_brand = QLabel('<span>ALO</span> <span style="color:#40caff">Music</span>')
+        hero_brand = QLabel('<span>ALO</span> <span style="color:#4cde96">Music</span>')
         hero_brand.setObjectName('StartHeroBrand')
         hero_text.addWidget(hero_brand)
         hero_text.addSpacing(7)
@@ -272,6 +272,7 @@ class DashboardPage(QWidget):
         path_layout.addWidget(self.library_label, 1)
         self.open_folder_button = QPushButton('Otwórz folder')
         self.open_folder_button.setObjectName('LibrarySecondaryAction')
+        self.open_folder_button.setIcon(start_icon('folder_open', '#d9e8ef', 15))
         self.open_folder_button.clicked.connect(self._open_library_folder)
         path_layout.addWidget(self.open_folder_button)
         root.addWidget(path_bar)
