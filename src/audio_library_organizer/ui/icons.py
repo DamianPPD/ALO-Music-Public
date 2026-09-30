@@ -10,6 +10,7 @@ from PySide6.QtSvg import QSvgRenderer
 
 _A1_ROOT = Path(__file__).resolve().parent.parent / 'assets' / 'icons' / 'a1'
 _START_C_ROOT = Path(__file__).resolve().parent.parent / 'assets' / 'icons' / 'start_c'
+_LIBRARY_A_ROOT = Path(__file__).resolve().parent.parent / 'assets' / 'icons' / 'library_a'
 
 # Public icon names used by the existing UI remain stable. Their artwork is
 # now supplied by A1 SVG, so the visual change does not alter button wiring.
@@ -104,4 +105,25 @@ def start_icon(name: str, color: str = '#dbe8e2', size: int = 20) -> QIcon:
     renderer.render(painter, QRectF(0, 0, pixels, pixels))
     painter.end()
     pixmap.setDevicePixelRatio(float(scale))
+    return QIcon(pixmap)
+
+
+@lru_cache(maxsize=128)
+def _library_a_source(name: str, color: str) -> bytes:
+    path = _LIBRARY_A_ROOT / f'{name}.svg'
+    safe_color = QColor(color).name(QColor.NameFormat.HexRgb)
+    return path.read_text(encoding='utf-8').replace('currentColor', safe_color).encode('utf-8')
+
+
+def library_icon(name: str, color: str = '#cbd8df', size: int = 20) -> QIcon:
+    """Scoped Minimal Outline icons for the Library page."""
+    logical = max(12, int(size))
+    pixels = logical * 3
+    pixmap = QPixmap(pixels, pixels)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    QSvgRenderer(QByteArray(_library_a_source(name, color))).render(painter, QRectF(0, 0, pixels, pixels))
+    painter.end()
+    pixmap.setDevicePixelRatio(3.0)
     return QIcon(pixmap)

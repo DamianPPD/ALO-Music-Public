@@ -201,7 +201,7 @@ def test_library_navigation_tracks_follow_visible_sorted_rows(tmp_path: Path):
     ]
     try:
         page.set_tracks(tracks)
-        page.table.sortByColumn(2, Qt.SortOrder.AscendingOrder)
+        page.table.sortByColumn(page.HEADERS.index('Tytuł'), Qt.SortOrder.AscendingOrder)
         app.processEvents()
         assert [track.title for track in page.visible_tracks()] == ['Alpha', 'Beta', 'Charlie']
         page.search.setText('beta')

@@ -672,6 +672,8 @@ TEXT_MAP_EN.update({
     'Nazwa pliku': 'Filename',
     'Długość': 'Duration',
     'Format': 'Format',
+    'Zaznaczono:': 'Selected:', 'Filtruj według formatu pliku': 'Filter by file format',
+    'Więcej akcji': 'More actions',
     'Bitrate': 'Bitrate',
     'Hz': 'Hz',
     'Rozmiar': 'Size',

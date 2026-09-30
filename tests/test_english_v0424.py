@@ -36,12 +36,12 @@ def test_library_status_rows_update_when_language_changes(tmp_path):
     try:
         apply_static_language(page, 'en')
         page.refresh(preserve_order=True)
-        labels = [page.model.item(i, 0).text() for i in range(page.model.rowCount())]
+        labels = [page.model.item(i, 1).text() for i in range(page.model.rowCount())]
         assert set(labels) == {'READY', 'NEEDS REVIEW', 'NOT SELECTED'}
-        assert page.model.headerData(1, Qt.Orientation.Horizontal).lower() == 'artist'
+        assert page.model.headerData(2, Qt.Orientation.Horizontal).lower() == 'artist'
         apply_static_language(page, 'pl')
         page.refresh(preserve_order=True)
-        assert {page.model.item(i, 0).text() for i in range(page.model.rowCount())} == {'GOTOWE', 'DO SPRAWDZENIA', 'NIE WYBIERAM'}
+        assert {page.model.item(i, 1).text() for i in range(page.model.rowCount())} == {'GOTOWE', 'DO SPRAWDZENIA', 'NIE WYBIERAM'}
     finally:
         page.close()
 
@@ -83,13 +83,13 @@ def test_live_window_switch_rebuilds_loaded_library_and_operation_text(tmp_path,
         original_cover = window.player._cover_pixmap.toImage()
         window._show_operation('Ręcznie zatwierdzono jako GOTOWE: sample.mp3')
         window._apply_preferences(AppPreferences(language='en'))
-        assert window.library.model.item(0, 0).text() == 'NEEDS REVIEW'
+        assert window.library.model.item(0, 1).text() == 'NEEDS REVIEW'
         assert window.operation_status.text() == 'Manually marked as READY: sample.mp3'
         assert '1 needs review' in window.dashboard.attention_text.text()
         assert localized_no_cover_name(window.player) == 'no_cover_en.png'
         assert window.player._cover_pixmap.toImage() != original_cover
         window._apply_preferences(AppPreferences(language='pl'))
-        assert window.library.model.item(0, 0).text() == 'DO SPRAWDZENIA'
+        assert window.library.model.item(0, 1).text() == 'DO SPRAWDZENIA'
         assert window.operation_status.text() == 'Ręcznie zatwierdzono jako GOTOWE: sample.mp3'
         assert window.player._cover_pixmap.toImage() == original_cover
     finally:

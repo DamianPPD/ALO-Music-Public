@@ -80,6 +80,6 @@ def test_settings_and_operation_bar_v023_layout_contract():
 def test_library_keeps_status_visible_and_titles_have_tooltip():
     assert 'class StableTableView' in LIBRARY
     assert 'horizontalScrollBar().setValue(0)' in LIBRARY
-    assert "items[2].setToolTip(track.title or '')" in LIBRARY
+    assert "items[3].setToolTip(track.title or '')" in LIBRARY
     assert 'setTextElideMode(Qt.TextElideMode.ElideRight)' in LIBRARY
     assert "match_box.setProperty('lowConfidence'" in LIBRARY

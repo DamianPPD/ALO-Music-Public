@@ -52,26 +52,26 @@ def test_library_status_column_fits_full_review_label_with_icon_at_large_font(tm
 
         text_width = QFontMetrics(page.table.font()).horizontalAdvance('DO SPRAWDZENIA')
         required_width = text_width + 15 + 12 + 24
-        assert page.table.columnWidth(0) >= required_width
-        assert page.model.item(0, 0).text() == 'DO SPRAWDZENIA'
-        assert page.model.item(0, 0).toolTip() == 'DO SPRAWDZENIA'
-        assert page.model.item(0, 0).font().pointSizeF() >= scaled_font.pointSizeF()
+        assert page.table.columnWidth(1) >= required_width
+        assert page.model.item(0, 1).text() == 'DO SPRAWDZENIA'
+        assert page.model.item(0, 1).toolTip() == 'DO SPRAWDZENIA'
+        assert page.model.item(0, 1).font().pointSizeF() >= scaled_font.pointSizeF()
 
         option = QStyleOptionViewItem()
         option.initFrom(page.table)
-        index = page.model.index(0, 0)
+        index = page.model.index(0, 1)
         page.table.itemDelegate().initStyleOption(option, index)
-        assert page.table.columnWidth(0) >= page.table.itemDelegate().sizeHint(option, index).width()
+        assert page.table.columnWidth(1) >= page.table.itemDelegate().sizeHint(option, index).width()
 
         larger_font = QFont(page.table.font())
         larger_font.setPointSizeF(18.0)
         page.table.setFont(larger_font)
         app.processEvents()
         dynamic_required = QFontMetrics(larger_font).horizontalAdvance('DO SPRAWDZENIA') + 15 + 12 + 24
-        assert page.table.columnWidth(0) >= dynamic_required
+        assert page.table.columnWidth(1) >= dynamic_required
 
         page._restore_view_state({'column_widths': [80] * len(page.HEADERS)})
-        assert page.table.columnWidth(0) >= dynamic_required
+        assert page.table.columnWidth(1) >= dynamic_required
     finally:
         page.close()
         app.setFont(original_font)

@@ -77,8 +77,8 @@ def test_library_details_are_wide_dense_and_split_main_optional_technical_data()
 
 
 def test_library_status_is_the_only_colored_table_cell_and_selection_stays_stable():
-    assert 'items[0].setBackground' in LIBRARY
-    assert 'items[0].setForeground' in LIBRARY
+    assert 'items[1].setBackground' in LIBRARY
+    assert 'items[1].setForeground' in LIBRARY
     assert 'for item in items:' in LIBRARY
     assert 'self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)' in LIBRARY
     assert 'resizeColumnToContents' not in LIBRARY
@@ -88,9 +88,9 @@ def test_library_status_is_the_only_colored_table_cell_and_selection_stays_stabl
     assert 'setTextElideMode(Qt.TextElideMode.ElideRight)' in LIBRARY
 
 
-def test_library_details_button_is_last_filter_control_and_visually_separate():
+def test_library_details_button_is_in_compact_action_row():
     assert "self.details_btn.setObjectName('DetailsToggle')" in LIBRARY
-    assert LIBRARY.index('filters.addWidget(self.edit_genre)') < LIBRARY.index('filters.addWidget(self.details_btn)')
+    assert 'view_controls.addWidget(button)' in LIBRARY
     assert 'QPushButton#DetailsToggle' in THEME
 
 

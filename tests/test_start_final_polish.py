@@ -138,6 +138,12 @@ def test_operation_c_status_and_width_stay_right_of_workflow(tmp_path, monkeypat
         assert window.operation_frame.parentWidget() is window.action_frame
         assert 405 <= window.operation_frame.width() <= 420
         gap = window.operation_frame.geometry().left() - window.new_files_btn.geometry().right()
+        # The compact Library toolbar no longer forces a 1997 px minimum
+        # window. Start still has a separate status panel at the new minimum.
+        assert gap >= 30
+        window.resize(1760, window.height())
+        _app().processEvents()
+        gap = window.operation_frame.geometry().left() - window.new_files_btn.geometry().right()
         assert gap >= 70
         assert window.action_frame.width() - window.operation_frame.geometry().right() >= 20
         assert _pixels(window.operation_icon.pixmap()) == _pixels(icons.start_icon('status_ring', '#8fa1b3', 17).pixmap(17, 17))

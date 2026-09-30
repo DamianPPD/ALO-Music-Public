@@ -108,7 +108,7 @@ def test_library_removes_native_cell_focus_outline_with_delegate():
 def test_library_playlist_button_shows_m3u8_extension():
     library = Path('src/audio_library_organizer/ui/library_page.py').read_text(encoding='utf-8')
 
-    assert "QPushButton('Utwórz playlistę (.m3u8)')" in library
+    assert "QPushButton('Utwórz playlistę (.m3u8)', self)" in library
 
 
 def test_playing_track_marker_does_not_change_status_text_used_for_sorting():

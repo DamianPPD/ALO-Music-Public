@@ -101,7 +101,7 @@ def test_library_filter_starts_with_emphasized_all_tracks_then_statuses():
     all_pos = LIBRARY.index("'Wszystkie utwory', 'all'")
     ready_pos = LIBRARY.index("'Gotowe', 'ready'")
     assert all_pos < ready_pos
-    assert "self.status.model().item(all_index).setData" in LIBRARY
+    assert "library_icon('all_tracks', '#8fe9ad', 18)" in LIBRARY
 
 
 def test_technical_data_heading_is_prominent():

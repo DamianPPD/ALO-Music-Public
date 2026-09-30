@@ -2652,3 +2652,54 @@ QFrame#MissingFilesBanner QLabel { background:transparent; border:0; }
 '''
 DARK_STYLE += START_STUDIO_STYLE
 LIGHT_STYLE += START_STUDIO_STYLE
+
+# Minimal Outline Library controls are scoped to the Library page.
+LIBRARY_A_STYLE = r'''
+QWidget#LibraryPage QPushButton#LibraryPrimaryEdit {
+    min-width:155px; min-height:34px; max-height:34px;
+    background:#10251d; border:1px solid #36966b; border-radius:7px;
+    color:#ecfff3; font-weight:740; padding:0 11px; icon-size:21px;
+}
+QWidget#LibraryPage QPushButton#LibraryPrimaryEdit:hover {
+    background:#17402c; border-color:#58dea0; color:#ffffff;
+}
+QWidget#LibraryPage QPushButton#LibrarySecondaryAction,
+QWidget#LibraryPage QPushButton#LibraryCollectionAction,
+QWidget#LibraryPage QPushButton#LibraryPlaylistAction,
+QWidget#LibraryPage QPushButton#DetailsToggle {
+    min-height:34px; max-height:34px; background:#151f27;
+    border:1px solid #34434b; border-radius:7px;
+    color:#d9e5e8; padding:0 9px; font-weight:600; icon-size:18px;
+}
+QWidget#LibraryPage QPushButton#LibrarySecondaryAction:hover,
+QWidget#LibraryPage QPushButton#LibraryCollectionAction:hover,
+QWidget#LibraryPage QPushButton#LibraryPlaylistAction:hover,
+QWidget#LibraryPage QPushButton#DetailsToggle:hover {
+    background:#1a3029; border-color:#4da27a; color:#f3fff8;
+}
+QWidget#LibraryPage QToolButton#LibraryMoreActions {
+    min-width:36px; max-width:36px; min-height:34px; max-height:34px;
+    background:#151f27; border:1px solid #34434b; border-radius:7px;
+    color:#d9e5e8; padding:0;
+}
+QWidget#LibraryPage QToolButton#LibraryMoreActions:hover {
+    background:#1a3029; border-color:#4da27a; color:#f3fff8;
+}
+QWidget#LibraryPage QComboBox#LibraryFormatFilter {
+    min-height:26px; max-height:26px; padding:2px 7px;
+    background:#151f27; border:1px solid #34434b; border-radius:7px;
+    color:#d9e5e8;
+}
+QWidget#LibraryPage QComboBox#LibraryFormatFilter[formatActive="true"] {
+    color:#94e7b8; border-color:#41996c;
+}
+QWidget#LibraryPage QLabel#LibrarySelectedCount {
+    background:#123428; color:#9be9bb; border:1px solid #366f52;
+    border-radius:5px; padding:3px 6px; font-weight:650;
+}
+QWidget#LibraryPage QTableView::indicator {
+    width:16px; height:16px;
+}
+'''
+DARK_STYLE += LIBRARY_A_STYLE
+LIGHT_STYLE += LIBRARY_A_STYLE
