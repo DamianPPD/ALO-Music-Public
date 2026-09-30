@@ -2655,34 +2655,25 @@ LIGHT_STYLE += START_STUDIO_STYLE
 
 # Minimal Outline Library controls are scoped to the Library page.
 LIBRARY_A_STYLE = r'''
-QWidget#LibraryPage QPushButton#LibraryPrimaryEdit {
-    min-width:155px; min-height:34px; max-height:34px;
-    background:#10251d; border:1px solid #36966b; border-radius:7px;
-    color:#ecfff3; font-weight:740; padding:0 11px; icon-size:21px;
-}
-QWidget#LibraryPage QPushButton#LibraryPrimaryEdit:hover {
-    background:#17402c; border-color:#58dea0; color:#ffffff;
-}
 QWidget#LibraryPage QPushButton#LibraryDetailEdit {
-    min-height:39px; max-height:39px; min-width:172px;
-    background:#133024; border:1px solid #48b880; border-radius:7px;
-    color:#f0fff5; font-weight:750; padding:0 15px; icon-size:22px;
+    min-height:44px; max-height:44px;
+    background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #095740,stop:1 #087456);
+    border:1px solid #20d7a0; border-radius:8px;
+    color:#f3fff9; font-weight:760; padding:0 16px; icon-size:22px;
 }
 QWidget#LibraryPage QPushButton#LibraryDetailEdit:hover {
-    background:#19432e; border-color:#67dca1; color:#ffffff;
+    background:#0c805e; border-color:#62efbf; color:#ffffff;
 }
-QWidget#LibraryPage QPushButton#LibrarySecondaryAction,
 QWidget#LibraryPage QPushButton#LibraryCollectionAction,
 QWidget#LibraryPage QPushButton#LibraryPlaylistAction,
-QWidget#LibraryPage QPushButton#DetailsToggle {
+QWidget#LibraryPage QPushButton#LibrarySecondaryAction {
     min-height:34px; max-height:34px; background:#151f27;
     border:1px solid #34434b; border-radius:7px;
     color:#d9e5e8; padding:0 9px; font-weight:600; icon-size:18px;
 }
-QWidget#LibraryPage QPushButton#LibrarySecondaryAction:hover,
 QWidget#LibraryPage QPushButton#LibraryCollectionAction:hover,
 QWidget#LibraryPage QPushButton#LibraryPlaylistAction:hover,
-QWidget#LibraryPage QPushButton#DetailsToggle:hover {
+QWidget#LibraryPage QPushButton#LibrarySecondaryAction:hover {
     background:#1a3029; border-color:#4da27a; color:#f3fff8;
 }
 QWidget#LibraryPage QPushButton#LibraryCollectionAction:disabled,
@@ -2704,6 +2695,74 @@ QWidget#LibraryPage QLabel#LibrarySelectedCount {
 QWidget#LibraryPage QTableView::indicator {
     width:16px; height:16px;
 }
+QWidget#LibraryPage QFrame#DetailPanel QLabel { background:transparent; border:0; }
+QWidget#LibraryPage QFrame#LibraryDetailHeader { background:#09151b; border:0; border-bottom:1px solid #284453; }
+QWidget#LibraryPage QLabel#LibraryDetailTitle { color:#f3f8fa; font-size:14pt; font-weight:750; }
+QWidget#LibraryPage QFrame#DetailPanel QLabel#LibraryDetailNote { background:#09231f; border-radius:6px; padding:2px; }
+QWidget#LibraryPage QPushButton#DetailsToggle {
+    min-width:28px; max-width:28px; min-height:28px; max-height:28px;
+    background:#12212a; border:1px solid #36546a; border-radius:6px; padding:0;
+}
+QWidget#LibraryPage QPushButton#DetailsToggle:hover { border-color:#53cda5; background:#17342e; }
+QWidget#LibraryPage QPushButton#LibrarySecondaryAction {
+    min-height:28px; max-height:28px; color:#b9cad1; font-weight:550;
+    background:#121e27; border:1px solid #314b5b; border-radius:7px; padding:0 7px;
+}
+QWidget#LibraryPage QFrame#VersionFamilyCard,
+QWidget#LibraryPage QFrame#LibraryTrackDataCard,
+QWidget#LibraryPage QFrame#LibraryConfidenceCard,
+QWidget#LibraryPage QFrame#LibraryTechnicalCard {
+    background:#0b1820; border:1px solid #2b4b5b; border-radius:8px;
+}
+QWidget#LibraryPage QFrame#LibrarySectionHeader {
+    background:#10222c; border:0; border-bottom:1px solid #264451;
+}
+QWidget#LibraryPage QFrame#DetailPanel QLabel#LibrarySectionMark {
+    background:transparent; border:0; border-top:1px solid #91adbe;
+    border-bottom:1px solid #91adbe;
+}
+QWidget#LibraryPage QLabel#LibrarySectionTitle,
+QWidget#LibraryPage QPushButton#LibrarySectionTitle {
+    color:#e1ebf1; font-size:10.5pt; font-weight:730; background:transparent; border:0;
+    text-align:left; padding:0;
+}
+QWidget#LibraryPage QPushButton#LibrarySectionTitle:hover { color:#ffffff; }
+QWidget#LibraryPage QPushButton#LibraryFamilyArrow {
+    background:transparent; border:0; padding:0;
+}
+QWidget#LibraryPage QPushButton#LibraryFamilyArrow:hover { background:#17343d; }
+QWidget#LibraryPage QFrame#LibraryFamilyRow { background:transparent; border:0; border-bottom:1px solid #24404c; }
+QWidget#LibraryPage QFrame#LibraryFamilyRow[current="true"] { background:#0e2a27; border-left:2px solid #18d8a1; }
+QWidget#LibraryPage QLabel#LibraryFamilyIndicator,
+QWidget#LibraryPage QLabel#LibraryFamilyCurrent { color:#20d6a3; }
+QWidget#LibraryPage QLabel#LibraryFamilyTitle { color:#e6edf1; }
+QWidget#LibraryPage QFrame#DetailPanel QLabel#LibraryDetailCover {
+    background:#071118; border:1px solid #168564; border-radius:8px; color:#7a929e;
+}
+QWidget#LibraryPage QFrame#LibraryCompletenessCard {
+    background:#14221c; border:1px solid #496550; border-radius:8px;
+}
+QWidget#LibraryPage QFrame#LibraryCompletenessCard[complete="true"] {
+    background:#082c25; border-color:#0b916b;
+}
+QWidget#LibraryPage QLabel#LibraryCompletenessTitle { color:#64e8bc; font-size:10.5pt; font-weight:750; }
+QWidget#LibraryPage QLabel#LibraryCompletenessCount { color:#f6fff9; font-size:18pt; font-weight:780; }
+QWidget#LibraryPage QLabel#LibraryCompletenessHint { color:#c1d5d7; font-size:9pt; }
+QWidget#LibraryPage QLabel#LibraryCompletenessField { color:#d8e5e6; font-size:8.8pt; }
+QWidget#LibraryPage QLabel#LibraryCompletenessField[complete="true"] { color:#84e8c4; }
+QWidget#LibraryPage QFrame#LibraryDetailSeparator,
+QWidget#LibraryPage QFrame#LibraryMetricDivider { background:#2c4b55; border:0; }
+QWidget#LibraryPage QFrame#LibraryValueRow { background:transparent; border:0; border-bottom:1px solid #25414c; }
+QWidget#LibraryPage QLabel#LibraryFieldName,
+QWidget#LibraryPage QLabel#LibraryMetricName { color:#a0bdd1; font-size:9pt; }
+QWidget#LibraryPage QLabel#LibraryFieldValue,
+QWidget#LibraryPage QLabel#LibraryMetricValue { color:#f0f4f5; font-size:9.5pt; }
+QWidget#LibraryPage QLabel#LibraryConfidencePercent { font-size:17pt; font-weight:800; }
+QWidget#LibraryPage QProgressBar#LibraryConfidenceBar {
+    background:#1d303b; border:1px solid #304b5a; border-radius:5px;
+}
+QWidget#LibraryPage QLabel#LibraryConfidenceDescription { color:#aac7d6; padding:0 12px; font-size:9pt; }
+QWidget#LibraryPage QFrame#PinnedDetailActions { background:#09151b; border:0; border-top:1px solid #284453; }
 '''
 DARK_STYLE += LIBRARY_A_STYLE
 LIGHT_STYLE += LIBRARY_A_STYLE

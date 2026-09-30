@@ -35,10 +35,12 @@ def test_dashboard_has_library_health_and_ministats():
 
 def test_confidence_is_graphical_in_editor_and_library_details():
     assert 'ConfidenceWidget' in EDITOR
-    assert 'ConfidenceWidget' in LIBRARY
+    assert 'self.confidence_bar = QProgressBar()' in LIBRARY
+    assert 'self.confidence_bar.setValue(confidence.percent or 0)' in LIBRARY
     assert 'MetadataStatusCompact' in EDITOR
     assert 'RecognitionInfoCompact' in EDITOR
     assert 'QProgressBar#ConfidenceBar' in THEME
+    assert 'QProgressBar#LibraryConfidenceBar' in THEME
 
 
 def test_metadata_source_menu_has_no_manual_choice_and_uses_colored_icons():

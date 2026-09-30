@@ -23,6 +23,8 @@ CATALOG: dict[str, dict[str, str]] = {
     'settings.backup': {'pl': 'Kopia bezpieczeństwa ALO', 'en': 'ALO backup'},
     'library.active': {'pl': 'Aktywna biblioteka', 'en': 'Active library'},
     'library.manage': {'pl': 'Biblioteki', 'en': 'Libraries'},
+    'library.details.complete': {'pl': 'Dane kompletne', 'en': 'Complete data'},
+    'library.details.incomplete': {'pl': 'Dane niekompletne', 'en': 'Incomplete data'},
 }
 
 
@@ -195,6 +197,13 @@ TEXT_MAP_EN: dict[str, str] = {
 
 # Longer strings that are easier to keep grouped separately.
 TEXT_MAP_EN.update({
+    'Dane utworu': 'Track data', 'Dane niekompletne': 'Incomplete data',
+    'Wszystkie dane są uzupełnione.': 'All data is complete.',
+    'Brakuje:': 'Missing:', 'Pewność dopasowania': 'Match confidence',
+    'Dane techniczne': 'Technical data', 'Kanały': 'Channels',
+    'Czas trwania': 'Duration', 'Sample rate': 'Sample rate',
+    'Stereo': 'Stereo', 'Mono': 'Mono', 'utwory': 'tracks',
+    '(aktualnie)': '(current)', 'Pokaż szczegóły': 'Show details',
     'Źródła i biblioteka są zapamiętywane między uruchomieniami. Oryginalne pliki nie są modyfikowane.': 'Sources and the library are remembered between runs. Original files are never modified.',
     'Wybierz dane umieszczane w nazwie. Domyślnie: Wykonawca - Tytuł (Wersja) (Rok) [BPMbpm].': 'Choose the data included in the filename. Default: Artist - Title (Version) (Year) [BPMbpm].',
     'Automatycznie ujednolica typowe określenia muzyczne przy zapisie, np. dj → DJ, club → Club, feat → Feat. Każdą regułę możesz wyłączyć lub edytować.': 'Automatically normalizes common music terms when saving, e.g. dj → DJ, club → Club, feat → Feat. Each rule can be disabled or edited.',

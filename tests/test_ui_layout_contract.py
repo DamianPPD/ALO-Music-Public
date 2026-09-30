@@ -52,27 +52,19 @@ def test_player_is_compact_elegant_and_keeps_seek_volume_controls():
 
 def test_library_detail_actions_are_pinned_outside_scroll_area():
     assert "actions_bar.setObjectName('PinnedDetailActions')" in LIBRARY
-    assert 'detail_outer.addWidget(scroll, 1)' in LIBRARY
+    assert 'detail_outer.addWidget(self.detail_scroll, 1)' in LIBRARY
     assert 'detail_outer.addWidget(actions_bar)' in LIBRARY
-    assert LIBRARY.index('detail_outer.addWidget(scroll, 1)') < LIBRARY.index('detail_outer.addWidget(actions_bar)')
+    assert LIBRARY.index('detail_outer.addWidget(self.detail_scroll, 1)') < LIBRARY.index('detail_outer.addWidget(actions_bar)')
     assert 'QFrame#PinnedDetailActions' in THEME
 
 
-def test_library_details_are_wide_dense_and_split_main_optional_technical_data():
+def test_library_details_keep_dense_cover_and_data_sections():
     assert 'self.detail.setMinimumWidth(640)' in LIBRARY
     assert 'summary_row = QHBoxLayout()' in LIBRARY
-    assert 'summary_row.addWidget(self.review_box, 1)' in LIBRARY
-    assert "primary.setObjectName('PrimaryMetadataCard')" in LIBRARY
-    assert "additional.setObjectName('AdditionalMetadataCard')" in LIBRARY
-    assert 'DANE GŁÓWNE' in LIBRARY
-    assert 'DANE DODATKOWE' in LIBRARY
-    assert "self.technical_toggle = QPushButton('DANE TECHNICZNE')" in LIBRARY
-    assert "self.technical_toggle.setIcon(alo_icon('settings'" in LIBRARY
-    assert 'pg.setContentsMargins(8, 5, 8, 5)' in LIBRARY
-    assert 'tg.setContentsMargins(8, 5, 8, 5)' in LIBRARY
-    assert "('hash', 'SHA-256'" in LIBRARY
-    assert "('path', 'PLIK ŹRÓDŁOWY'" in LIBRARY
-    assert "('duration', 'DŁUGOŚĆ'" in LIBRARY
+    assert 'summary_row.addWidget(self.completeness_card, 1)' in LIBRARY
+    assert "track_card.setObjectName('LibraryTrackDataCard')" in LIBRARY
+    assert "self.technical_panel.setObjectName('LibraryTechnicalCard')" in LIBRARY
+    assert "('duration', 'Czas trwania'" in LIBRARY
     assert 'self.split.setSizes([840, 720])' in LIBRARY
 
 
@@ -88,10 +80,9 @@ def test_library_status_is_the_only_colored_table_cell_and_selection_stays_stabl
     assert 'setTextElideMode(Qt.TextElideMode.ElideRight)' in LIBRARY
 
 
-def test_library_details_button_is_in_compact_action_row():
+def test_library_details_button_is_in_panel_header():
     assert "self.details_btn.setObjectName('DetailsToggle')" in LIBRARY
-    assert 'self.details_btn, self.selected_count, self.view_state_label, self.reset_view_btn' in LIBRARY
-    assert 'self._toolbar_bottom.addWidget(widget' in LIBRARY
+    assert 'self.details_btn.clicked.connect(self._toggle_details); header_row.addWidget(self.details_btn)' in LIBRARY
     assert 'QPushButton#DetailsToggle' in THEME
 
 
@@ -189,12 +180,9 @@ def test_metadata_editor_has_large_cover_proposals_and_keeps_explicit_placeholde
     assert (ROOT / 'BRAK_OKLADKI.png').exists()
 
 
-def test_sha256_is_only_in_collapsed_technical_data_and_is_compact():
-    primary_start = LIBRARY.index("primary = QFrame(); primary.setObjectName('PrimaryMetadataCard')")
-    technical_start = LIBRARY.index("self.technical_toggle = QPushButton('DANE TECHNICZNE')")
-    assert "('hash', 'SHA-256')" not in LIBRARY[primary_start:technical_start]
-    assert "hash_text = '—' if not t.sha256 else" in LIBRARY
-    assert "self.detail_labels['hash'].setToolTip(t.sha256 or '')" in LIBRARY
+def test_sha256_is_not_in_library_quick_details():
+    assert "self.detail_labels['hash']" not in LIBRARY
+    assert "('hash', 'SHA-256')" not in LIBRARY
 
 
 def test_persistent_paths_and_scan_cancel_are_clear():

@@ -4,13 +4,13 @@ from pathlib import Path
 from weakref import ref
 
 from PySide6.QtCore import Qt, Signal, QUrl, QStringListModel, QItemSelectionModel, QSignalBlocker, QEvent, QTimer, QRect, QSize
-from PySide6.QtGui import QStandardItem, QStandardItemModel, QPixmap, QColor, QBrush, QPen, QPainter, QAction, QDesktopServices
+from PySide6.QtGui import QStandardItem, QStandardItemModel, QPixmap, QColor, QBrush, QPen, QPainter, QDesktopServices
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QComboBox, QTableView, QLabel,
     QSplitter, QFrame, QPushButton, QInputDialog, QMessageBox, QAbstractItemView,
     QHeaderView, QScrollArea, QGridLayout, QMenu, QCompleter,
-    QStyledItemDelegate, QStyleOptionViewItem, QStyle, QLayout,
+    QStyledItemDelegate, QStyleOptionViewItem, QStyle, QLayout, QProgressBar, QSizePolicy,
 )
 
 from audio_library_organizer import __version__
@@ -19,15 +19,14 @@ from audio_library_organizer.duplicates.families import group_version_families
 from audio_library_organizer.metadata.artwork import extract_embedded_cover
 from audio_library_organizer.metadata.online_lock import is_online_locked
 from audio_library_organizer.ui.state import (
-    identification_summary, metadata_completeness, library_status_text,
-    library_status_presentation, track_matches_quick_filter,
+    library_status_text, library_status_presentation, track_matches_quick_filter,
     display_bpm, effective_status, track_matches_library_filters,
 )
 from audio_library_organizer.ui.widgets import ClickableCoverLabel, show_cover_preview
-from audio_library_organizer.ui.confidence import ConfidenceWidget
+from audio_library_organizer.ui.confidence import confidence_color, confidence_presentation
 from audio_library_organizer.ui.assets import asset_path
 from audio_library_organizer.ui.genre_input import build_genre_suggestions
-from audio_library_organizer.ui.i18n import ui_text, localized_no_cover_name
+from audio_library_organizer.ui.i18n import ui_text, localized_no_cover_name, tr, language_for
 from audio_library_organizer.ui.icons import alo_icon, library_icon
 
 
@@ -49,9 +48,10 @@ class LibraryCheckHeader(QHeaderView):
         if page is None:
             return Qt.CheckState.Unchecked
         keys = {page._path_key(track) for track in page.visible_tracks()}
-        if not keys or not (keys & page._checked_paths):
+        checked = page._visible_checked_paths()
+        if not keys or not checked:
             return Qt.CheckState.Unchecked
-        if keys <= page._checked_paths:
+        if keys <= checked:
             return Qt.CheckState.Checked
         return Qt.CheckState.PartiallyChecked
 
@@ -164,6 +164,11 @@ class LibraryPage(QWidget):
         'review': 'review', 'not_selected': 'unselected', 'no_cover': 'no_cover',
         'no_year': 'no_year',
     }
+    CATEGORY_COLORS = {
+        'all': '#8fe9ad', 'ready': '#6de6a5', 'duplicate': '#bd9bf7',
+        'review': '#f4bd75', 'not_selected': '#b6a4ca',
+        'no_cover': '#7ed7e9', 'no_year': '#88afda',
+    }
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -183,7 +188,10 @@ class LibraryPage(QWidget):
         root.setSpacing(8)
         root.setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)
 
-        filters = QHBoxLayout(); filters.setSpacing(8)
+        filters = QVBoxLayout(); filters.setSpacing(5)
+        self._filters_top = QHBoxLayout(); self._filters_top.setSpacing(8)
+        self._filters_bottom = QHBoxLayout(); self._filters_bottom.setSpacing(8)
+        filters.addLayout(self._filters_top); filters.addLayout(self._filters_bottom)
         self.search = QLineEdit(); self.search.setPlaceholderText('Szukaj: wykonawca, tytuł, album…')
         self.search.setMinimumWidth(170); self.search.setMaximumWidth(560)
         self.genre_filter = QLineEdit(); self.genre_filter.setPlaceholderText('Gatunki, np. Trance, Vocal')
@@ -219,22 +227,8 @@ class LibraryPage(QWidget):
         self.format_filter.setToolTip(ui_text(self, 'Filtruj według formatu pliku'))
         self._sync_format_options()
 
-        self.edit_main = QPushButton('Edytuj metadane'); self.edit_main.setObjectName('LibraryPrimaryEdit')
-        self.edit_main.setIcon(library_icon('metadata_edit', '#9af0b6', 21)); self.edit_main.setIconSize(QSize(21, 21))
-        self.edit_main.setToolTip(ui_text(self, 'Edytuj metadane')); self.edit_main.clicked.connect(self._edit_current)
         self.collection_btn = QPushButton('Utwórz folder z zaznaczonych', self); self.collection_btn.setObjectName('LibraryCollectionAction'); self.collection_btn.setIcon(library_icon('folder_add', '#cbd8df', 18)); self.collection_btn.clicked.connect(self._request_collection)
         self.playlist_btn = QPushButton('Dodaj do playlisty', self); self.playlist_btn.setObjectName('LibraryPlaylistAction'); self.playlist_btn.setIcon(library_icon('playlist', '#cbd8df', 18)); self.playlist_btn.clicked.connect(self._request_playlist)
-        self.details_btn = QPushButton('Szczegóły utworu'); self.details_btn.setObjectName('DetailsToggle'); self.details_btn.setIcon(library_icon('details', '#cbd8df', 18))
-        self.details_btn.setCheckable(True); self.details_btn.clicked.connect(self._toggle_details)
-
-        filters.addWidget(self.search, 2)
-        filters.addWidget(self.genre_filter, 1)
-        filters.addWidget(self.bpm_min)
-        filters.addWidget(self.bpm_max)
-        filters.addWidget(self.status)
-        filters.addWidget(self.format_filter)
-        filters.addStretch(1)
-        root.addLayout(filters)
 
         view_controls = QVBoxLayout(); view_controls.setSpacing(5)
         self._toolbar_top = QHBoxLayout(); self._toolbar_top.setSpacing(8)
@@ -247,17 +241,20 @@ class LibraryPage(QWidget):
         self.reset_view_btn.setObjectName('LibrarySecondaryAction')
         self.reset_view_btn.setIcon(library_icon('reset', '#cbd8df', 18))
         self.reset_view_btn.clicked.connect(self._reset_view)
+        self.reset_view_btn.setToolTip(ui_text(self, 'Resetuj widok'))
+        self._layout_filters(self.width())
+        root.addLayout(filters)
         self.selected_count = QLabel('')
         self.selected_count.setObjectName('LibrarySelectedCount')
         self.selected_count.hide()
-        for button in (self.edit_main, self.collection_btn, self.playlist_btn, self.details_btn):
+        for button in (self.collection_btn, self.playlist_btn):
             button.setMinimumHeight(34)
             button.setMaximumHeight(34)
             button.setToolTip(ui_text(self, button.text()))
         self.playlist_btn.setToolTip(ui_text(self, 'Zapisz zaznaczone utwory jako playlistę M3U8'))
         self._toolbar_layout = view_controls
-        self._toolbar_widgets = (self.edit_main, self.collection_btn, self.playlist_btn,
-                                 self.details_btn, self.selected_count, self.view_state_label, self.reset_view_btn)
+        self._toolbar_widgets = (self.collection_btn, self.playlist_btn,
+                                 self.selected_count, self.view_state_label)
         self._toolbar_compact = None
         self._layout_toolbar(self.width())
         root.addLayout(view_controls)
@@ -297,101 +294,166 @@ class LibraryPage(QWidget):
 
         self.detail = QFrame(); self.detail.setObjectName('DetailPanel'); self.detail.setMinimumWidth(640); self.detail.setMaximumWidth(940)
         detail_outer = QVBoxLayout(self.detail); detail_outer.setContentsMargins(0, 0, 0, 0); detail_outer.setSpacing(0)
-        scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.Shape.NoFrame)
-        body = QWidget(); detail_root = QVBoxLayout(body); detail_root.setContentsMargins(8, 6, 8, 6); detail_root.setSpacing(6)
-        dtitle = QLabel('Szczegóły utworu'); dtitle.setStyleSheet('font-size:14pt;font-weight:750;'); detail_root.addWidget(dtitle)
-        self.quick_file_info = QLabel(''); self.quick_file_info.setObjectName('QuickFileInfo'); self.quick_file_info.setWordWrap(True); detail_root.addWidget(self.quick_file_info)
+        header = QFrame(); header.setObjectName('LibraryDetailHeader'); header.setFixedHeight(50)
+        header_row = QHBoxLayout(header); header_row.setContentsMargins(12, 8, 12, 8); header_row.setSpacing(8)
+        self.detail_title_icon = QLabel(); self.detail_title_icon.setObjectName('LibraryDetailNote')
+        self.detail_title_icon.setPixmap(library_icon('music_note', '#0fe4ad', 25).pixmap(25, 25))
+        header_row.addWidget(self.detail_title_icon)
+        self.detail_title = QLabel('Szczegóły utworu'); self.detail_title.setObjectName('LibraryDetailTitle')
+        header_row.addWidget(self.detail_title); header_row.addStretch(1)
+        self.details_btn = QPushButton(); self.details_btn.setObjectName('DetailsToggle')
+        self.details_btn.setCheckable(True); self.details_btn.setChecked(True); self.details_btn.setFixedSize(28, 28)
+        self.details_btn.setIcon(library_icon('collapse', '#aec4d3', 18)); self.details_btn.setIconSize(QSize(18, 18))
+        self.details_btn.setToolTip(ui_text(self, 'Ukryj szczegóły'))
+        self.details_btn.clicked.connect(self._toggle_details); header_row.addWidget(self.details_btn)
+        detail_outer.addWidget(header)
 
-        self.version_family_card = QFrame(); self.version_family_card.setObjectName('VersionFamilyCard'); self.version_family_card.setVisible(False)
-        family_layout = QVBoxLayout(self.version_family_card); family_layout.setContentsMargins(10, 7, 10, 7); family_layout.setSpacing(3)
-        family_title = QLabel('Rodzina wersji'); family_title.setObjectName('VersionFamilyHeading'); family_layout.addWidget(family_title)
-        self.version_family_label = QLabel(''); self.version_family_label.setObjectName('VersionFamilyText'); self.version_family_label.setWordWrap(True); family_layout.addWidget(self.version_family_label)
+        self.detail_scroll = QScrollArea(); self.detail_scroll.setWidgetResizable(True)
+        self.detail_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        body = QWidget(); detail_root = QVBoxLayout(body)
+        detail_root.setContentsMargins(10, 4, 10, 8); detail_root.setSpacing(8)
+        detail_root.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+        self.detail_section_marks = []
+        self.detail_section_titles = []
+
+        self.version_family_card = QFrame(); self.version_family_card.setObjectName('VersionFamilyCard')
+        self.version_family_card.hide()
+        family_layout = QVBoxLayout(self.version_family_card); family_layout.setContentsMargins(0, 0, 0, 2); family_layout.setSpacing(0)
+        family_head, self.family_toggle = self._detail_section_header('Rodzina wersji', disclosure=True)
+        family_layout.addWidget(family_head)
+        self.version_family_rows = QWidget(); self.version_family_rows.setObjectName('LibraryFamilyRows')
+        self.version_family_rows_layout = QVBoxLayout(self.version_family_rows)
+        self.version_family_rows_layout.setContentsMargins(8, 1, 8, 2); self.version_family_rows_layout.setSpacing(0)
+        family_layout.addWidget(self.version_family_rows)
+        self.family_toggle.clicked.connect(self._toggle_family)
         detail_root.addWidget(self.version_family_card)
 
-        summary_row = QHBoxLayout(); summary_row.setSpacing(10)
-        cover_box = QVBoxLayout(); cover_box.setSpacing(4)
-        self.cover = ClickableCoverLabel('Brak okładki'); self.cover.setAlignment(Qt.AlignmentFlag.AlignCenter); self.cover.setFixedSize(196, 196)
-        self.cover.setStyleSheet('background:#0b0e13;border:1px solid #2c3442;border-radius:10px;color:#758195;')
+        summary_row = QHBoxLayout(); summary_row.setContentsMargins(0, 0, 0, 0); summary_row.setSpacing(10)
+        self.cover = ClickableCoverLabel('Brak okładki'); self.cover.setObjectName('LibraryDetailCover')
+        self.cover.setAlignment(Qt.AlignmentFlag.AlignCenter); self.cover.setFixedSize(218, 218)
         self.cover.clicked.connect(self._show_cover_preview)
-        cover_box.addWidget(self.cover, 0, Qt.AlignmentFlag.AlignHCenter)
-        self.cover_caption = QLabel('Kliknij okładkę, aby powiększyć'); self.cover_caption.setWordWrap(True); self.cover_caption.setObjectName('MutedText'); self.cover_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.cover_caption.setMaximumWidth(196); cover_box.addWidget(self.cover_caption)
-        cover_host = QWidget(); cover_host.setLayout(cover_box); summary_row.addWidget(cover_host, 0)
+        summary_row.addWidget(self.cover, 0, Qt.AlignmentFlag.AlignTop)
 
-        self.review_box = QFrame(); self.review_box.setObjectName('ReviewReasonCard')
-        review_lay = QVBoxLayout(self.review_box); review_lay.setContentsMargins(10, 8, 10, 8); review_lay.setSpacing(4)
-        self.confirmed_heading = QLabel('POTWIERDZONE'); self.confirmed_heading.setObjectName('ConfirmedHeading')
-        self.confirmed_label = QLabel('—'); self.confirmed_label.setWordWrap(True); self.confirmed_label.setObjectName('ConfirmedText')
-        self.missing_heading = QLabel('BRAKI'); self.missing_heading.setObjectName('MissingHeading')
-        self.missing_label = QLabel('—'); self.missing_label.setWordWrap(True); self.missing_label.setObjectName('MissingText')
-        self.complete_label = QLabel(''); self.complete_label.setWordWrap(True); self.complete_label.setObjectName('CompleteText'); self.complete_label.setVisible(False)
-        review_lay.addWidget(self.confirmed_heading); review_lay.addWidget(self.confirmed_label)
-        review_lay.addWidget(self.missing_heading); review_lay.addWidget(self.missing_label); review_lay.addWidget(self.complete_label); review_lay.addStretch(1)
-        summary_row.addWidget(self.review_box, 1)
-        detail_root.addLayout(summary_row)
+        self.completeness_card = QFrame(); self.completeness_card.setObjectName('LibraryCompletenessCard')
+        completeness_layout = QVBoxLayout(self.completeness_card)
+        completeness_layout.setContentsMargins(13, 10, 13, 9); completeness_layout.setSpacing(3)
+        completeness_top = QHBoxLayout(); completeness_top.setSpacing(7)
+        self.completeness_icon = QLabel(); self.completeness_icon.setObjectName('LibraryCompletenessIcon')
+        self.completeness_icon.setPixmap(library_icon('approve', '#2de1ac', 21).pixmap(21, 21))
+        completeness_top.addWidget(self.completeness_icon)
+        self.completeness_title = QLabel('Dane kompletne'); self.completeness_title.setObjectName('LibraryCompletenessTitle')
+        completeness_top.addWidget(self.completeness_title, 1)
+        self.completeness_count = QLabel('0/6'); self.completeness_count.setObjectName('LibraryCompletenessCount')
+        self.completeness_hint = QLabel(''); self.completeness_hint.setObjectName('LibraryCompletenessHint')
+        self.completeness_hint.setWordWrap(True)
+        completeness_layout.addLayout(completeness_top)
+        completeness_layout.addWidget(self.completeness_count)
+        completeness_layout.addWidget(self.completeness_hint)
+        completeness_layout.addStretch(1)
+        separator = QFrame(); separator.setObjectName('LibraryDetailSeparator'); separator.setFixedHeight(1)
+        completeness_layout.addWidget(separator)
+        fields_grid = QGridLayout(); fields_grid.setContentsMargins(0, 3, 0, 0)
+        fields_grid.setHorizontalSpacing(6); fields_grid.setVerticalSpacing(4)
+        self.completeness_fields = {}
+        self.completeness_field_icons = {}
+        for index, (key, title) in enumerate((('artist', 'Wykonawca'), ('year', 'Rok'),
+                                               ('title', 'Tytuł / wersja'), ('genre', 'Gatunek'),
+                                               ('album', 'Album'), ('bpm', 'BPM'))):
+            field = QWidget(); field_layout = QHBoxLayout(field)
+            field_layout.setContentsMargins(0, 0, 0, 0); field_layout.setSpacing(5)
+            icon = QLabel(); icon.setObjectName('LibraryCompletenessFieldIcon')
+            icon.setPixmap(library_icon('empty_check', '#83939e', 13).pixmap(13, 13))
+            field_layout.addWidget(icon)
+            label = QLabel(title); label.setObjectName('LibraryCompletenessField')
+            label.setProperty('complete', False); label.setWordWrap(False)
+            field_layout.addWidget(label)
+            fields_grid.addWidget(field, index // 2, index % 2)
+            self.completeness_fields[key] = label
+            self.completeness_field_icons[key] = icon
+        completeness_layout.addLayout(fields_grid)
+        summary_row.addWidget(self.completeness_card, 1)
+        summary_row.setAlignment(self.completeness_card, Qt.AlignmentFlag.AlignTop)
+        self.completeness_card.setMinimumHeight(218)
+        summary_host = QWidget(); summary_host.setObjectName('LibrarySummary')
+        summary_host.setFixedHeight(218); summary_host.setLayout(summary_row)
+        detail_root.addWidget(summary_host)
 
         self.detail_labels: dict[str, QLabel] = {}
 
-        primary = QFrame(); primary.setObjectName('PrimaryMetadataCard')
-        pg = QGridLayout(primary); pg.setContentsMargins(8, 5, 8, 5); pg.setHorizontalSpacing(12); pg.setVerticalSpacing(2)
-        primary_title = QLabel('DANE GŁÓWNE'); primary_title.setObjectName('MetadataSectionTitle'); pg.addWidget(primary_title, 0, 0, 1, 4)
-        primary_fields = [
-            ('artist', 'WYKONAWCA', 1, 0, 1, 4),
-            ('title', 'TYTUŁ / WERSJA', 3, 0, 1, 4),
-            ('year', 'ROK', 5, 0, 1, 1), ('bpm', 'BPM', 5, 1, 1, 1), ('genre', 'GATUNEK', 5, 2, 1, 2),
-        ]
-        self._add_detail_fields(pg, primary_fields)
-        detail_root.addWidget(primary)
+        track_card = QFrame(); track_card.setObjectName('LibraryTrackDataCard')
+        data_layout = QVBoxLayout(track_card); data_layout.setContentsMargins(0, 0, 0, 7); data_layout.setSpacing(0)
+        data_head, _ = self._detail_section_header('Dane utworu'); data_layout.addWidget(data_head)
+        for key, title, icon in (('artist', 'Wykonawca', 'artist'),
+                                 ('title', 'Tytuł / wersja', 'music_note'),
+                                 ('album', 'Album / Release', 'album')):
+            data_layout.addWidget(self._detail_value_row(key, title, icon))
+        metrics = QHBoxLayout(); metrics.setContentsMargins(6, 3, 6, 0); metrics.setSpacing(0)
+        for index, (key, title, icon) in enumerate((('year', 'Rok', 'calendar'),
+                                                   ('bpm', 'BPM', 'waveform'),
+                                                   ('genre', 'Gatunek', 'tag'))):
+            if index:
+                divider = QFrame(); divider.setObjectName('LibraryMetricDivider'); divider.setFixedWidth(1)
+                metrics.addWidget(divider)
+            metrics.addWidget(self._detail_metric(key, title, icon), 1)
+        data_layout.addLayout(metrics)
+        detail_root.addWidget(track_card)
 
-        additional = QFrame(); additional.setObjectName('AdditionalMetadataCard')
-        ag = QGridLayout(additional); ag.setContentsMargins(8, 5, 8, 5); ag.setHorizontalSpacing(12); ag.setVerticalSpacing(2)
-        additional_title = QLabel('DANE DODATKOWE'); additional_title.setObjectName('MetadataSectionTitleOptional'); ag.addWidget(additional_title, 0, 0, 1, 4)
-        additional_fields = [
-            ('album', 'ALBUM / RELEASE', 1, 0, 1, 2), ('discogs', 'DISCOGS URL', 1, 2, 1, 2),
-            ('comment', 'KOMENTARZ', 3, 0, 1, 4),
-        ]
-        self._add_detail_fields(ag, additional_fields)
-        detail_root.addWidget(additional)
-
-        match_box = QFrame(); match_box.setObjectName('MatchInfoCard'); match_box.setProperty('lowConfidence', False)
-        self.match_box = match_box
-        mg = QGridLayout(match_box); mg.setContentsMargins(8, 7, 8, 7); mg.setHorizontalSpacing(12); mg.setVerticalSpacing(4)
-        confidence_head = QLabel('PEWNOŚĆ'); confidence_head.setObjectName('DetailFieldHeading'); mg.addWidget(confidence_head, 0, 0)
-        self.confidence_widget = ConfidenceWidget(None, match_box); mg.addWidget(self.confidence_widget, 1, 0)
-        sources_head = QLabel('ŹRÓDŁA DANYCH'); sources_head.setObjectName('DetailFieldHeading'); mg.addWidget(sources_head, 0, 1)
-        sources = QLabel('—'); sources.setWordWrap(True); sources.setObjectName('DetailFieldValue'); mg.addWidget(sources, 1, 1); self.detail_labels['sources'] = sources
-        reasons_head = QLabel('DOPASOWANIE'); reasons_head.setObjectName('DetailFieldHeading'); mg.addWidget(reasons_head, 2, 0, 1, 2)
-        reasons = QLabel('—'); reasons.setWordWrap(True); reasons.setObjectName('DetailFieldValue'); mg.addWidget(reasons, 3, 0, 1, 2); self.detail_labels['reasons'] = reasons
+        match_box = QFrame(); match_box.setObjectName('LibraryConfidenceCard')
+        confidence_layout = QVBoxLayout(match_box)
+        confidence_layout.setContentsMargins(0, 0, 0, 8); confidence_layout.setSpacing(3)
+        match_head, _ = self._detail_section_header('Pewność dopasowania')
+        confidence_layout.addWidget(match_head)
+        confidence_row = QHBoxLayout(); confidence_row.setContentsMargins(12, 2, 12, 0); confidence_row.setSpacing(12)
+        self.confidence_percent = QLabel('—'); self.confidence_percent.setObjectName('LibraryConfidencePercent')
+        self.confidence_bar = QProgressBar(); self.confidence_bar.setObjectName('LibraryConfidenceBar')
+        self.confidence_bar.setRange(0, 100); self.confidence_bar.setTextVisible(False); self.confidence_bar.setFixedHeight(10)
+        confidence_row.addWidget(self.confidence_percent); confidence_row.addWidget(self.confidence_bar, 1)
+        confidence_layout.addLayout(confidence_row)
+        self.confidence_description = QLabel(''); self.confidence_description.setObjectName('LibraryConfidenceDescription')
+        confidence_layout.addWidget(self.confidence_description)
         detail_root.addWidget(match_box)
 
-        history_box = QFrame(); history_box.setObjectName('HistoryCard')
-        hl = QVBoxLayout(history_box); hl.setContentsMargins(8, 5, 8, 5); hl.setSpacing(2)
-        self.history_heading = QLabel('HISTORIA ZMIAN W SESJI'); self.history_heading.setObjectName('DetailFieldHeading'); hl.addWidget(self.history_heading)
-        self.history_label = QLabel('Brak ręcznych zmian.'); self.history_label.setWordWrap(True); self.history_label.setObjectName('MutedText'); hl.addWidget(self.history_label)
-        detail_root.addWidget(history_box)
-
-        self.technical_toggle = QPushButton('DANE TECHNICZNE'); self.technical_toggle.setObjectName('DisclosureButton'); self.technical_toggle.setIcon(alo_icon('settings', '#82b8cf', 16)); self.technical_toggle.setCheckable(True); self.technical_toggle.clicked.connect(self._toggle_technical)
-        detail_root.addWidget(self.technical_toggle)
-        self.technical_panel = QFrame(); self.technical_panel.setObjectName('TechnicalPanel'); self.technical_panel.setVisible(False)
-        tg = QGridLayout(self.technical_panel); tg.setContentsMargins(8, 5, 8, 5); tg.setHorizontalSpacing(12); tg.setVerticalSpacing(2)
-        technical_fields = [
-            ('duration', 'DŁUGOŚĆ', 0, 0, 1, 1), ('size', 'ROZMIAR PLIKU', 0, 1, 1, 1),
-            ('quality', 'JAKOŚĆ', 2, 0, 1, 2), ('path', 'PLIK ŹRÓDŁOWY', 4, 0, 1, 2), ('hash', 'SHA-256', 6, 0, 1, 2),
-        ]
-        self._add_detail_fields(tg, technical_fields, technical=True)
+        self.technical_panel = QFrame(); self.technical_panel.setObjectName('LibraryTechnicalCard')
+        technical_layout = QVBoxLayout(self.technical_panel)
+        technical_layout.setContentsMargins(0, 0, 0, 7); technical_layout.setSpacing(3)
+        technical_head, _ = self._detail_section_header('Dane techniczne')
+        technical_layout.addWidget(technical_head)
+        first_row = QHBoxLayout(); first_row.setContentsMargins(6, 3, 6, 0); first_row.setSpacing(0)
+        for index, (key, title, icon) in enumerate((('format', 'Format', 'file_format'),
+                                                   ('bitrate', 'Bitrate', 'waveform'),
+                                                   ('sample_rate', 'Sample rate', 'waveform'),
+                                                   ('channels', 'Kanały', 'channels'))):
+            if index:
+                divider = QFrame(); divider.setObjectName('LibraryMetricDivider'); divider.setFixedWidth(1)
+                first_row.addWidget(divider)
+            first_row.addWidget(self._detail_metric(key, title, icon), 1)
+        technical_layout.addLayout(first_row)
+        second_row = QHBoxLayout(); second_row.setContentsMargins(6, 2, 6, 0); second_row.setSpacing(0)
+        for index, (key, title, icon) in enumerate((('duration', 'Czas trwania', 'clock'),
+                                                   ('size', 'Rozmiar pliku', 'file_size'))):
+            if index:
+                divider = QFrame(); divider.setObjectName('LibraryMetricDivider'); divider.setFixedWidth(1)
+                second_row.addWidget(divider)
+            second_row.addWidget(self._detail_metric(key, title, icon), 1)
+        technical_layout.addLayout(second_row)
         detail_root.addWidget(self.technical_panel)
         detail_root.addStretch(1)
-        scroll.setWidget(body); detail_outer.addWidget(scroll, 1)
+        self.detail_scroll.setWidget(body); detail_outer.addWidget(self.detail_scroll, 1)
 
         actions_bar = QFrame(); actions_bar.setObjectName('PinnedDetailActions')
-        actions = QHBoxLayout(actions_bar); actions.setContentsMargins(12, 9, 12, 9); actions.setSpacing(8)
+        actions = QHBoxLayout(actions_bar); actions.setContentsMargins(12, 8, 12, 8); actions.setSpacing(0)
         self.detail_edit = QPushButton('Edytuj metadane'); self.detail_edit.setObjectName('LibraryDetailEdit')
         self.detail_edit.setIcon(library_icon('metadata_edit', '#a5f3c1', 22)); self.detail_edit.setIconSize(QSize(22, 22))
         self.detail_edit.clicked.connect(self._edit_current)
-        actions.addStretch(1); actions.addWidget(self.detail_edit)
+        actions.addWidget(self.detail_edit, 1)
+        self.detail_actions = actions_bar
         detail_outer.addWidget(actions_bar)
+        self.collapsed_filler = QWidget()
+        self.collapsed_filler.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        self.collapsed_filler.hide()
+        detail_outer.addWidget(self.collapsed_filler, 1)
 
-        self.split.addWidget(self.detail); self.split.setSizes([840, 720]); self.detail.setVisible(False)
+        self.split.addWidget(self.detail); self.split.setSizes([840, 720])
         root.addWidget(self.split, 1)
 
         self.search.textChanged.connect(self._filters_changed)
@@ -405,25 +467,80 @@ class LibraryPage(QWidget):
         self._update_view_state_label()
         self._update_selection_count()
 
-    def _add_detail_fields(self, grid: QGridLayout, specs, *, technical: bool = False):
-        for key, label, row, col, row_span, col_span in specs:
-            heading = QLabel(label); heading.setObjectName('DetailFieldHeading')
-            value = QLabel('—'); value.setObjectName('DetailFieldValue')
-            value.setWordWrap(key not in {'hash'}); value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.LinksAccessibleByMouse)
-            value.setOpenExternalLinks(True)
-            grid.addWidget(heading, row, col, row_span, col_span)
-            grid.addWidget(value, row + 1, col, row_span, col_span)
-            self.detail_labels[key] = value
-            if technical and key == 'hash':
-                value.setTextFormat(Qt.TextFormat.PlainText); value.setToolTip('Pełny SHA-256')
+    def _detail_section_header(self, title: str, *, disclosure: bool = False):
+        host = QFrame(); host.setObjectName('LibrarySectionHeader')
+        row = QHBoxLayout(host); row.setContentsMargins(12, 6, 10, 6); row.setSpacing(8)
+        mark = QLabel(); mark.setObjectName('LibrarySectionMark'); mark.setFixedSize(20, 7)
+        row.addWidget(mark); self.detail_section_marks.append(mark)
+        heading = QPushButton(title) if disclosure else QLabel(title)
+        heading.setObjectName('LibrarySectionTitle')
+        if disclosure:
+            heading.setCheckable(True); heading.setChecked(True)
+        row.addWidget(heading, 1); self.detail_section_titles.append(heading)
+        if disclosure:
+            self.family_arrow = QPushButton(); self.family_arrow.setObjectName('LibraryFamilyArrow')
+            self.family_arrow.setIcon(library_icon('collapse', '#a8bdca', 15))
+            self.family_arrow.setIconSize(QSize(15, 15)); self.family_arrow.setFixedSize(24, 22)
+            self.family_arrow.clicked.connect(heading.click)
+            row.addWidget(self.family_arrow)
+        return host, heading
+
+    def _detail_value_row(self, key: str, title: str, icon: str) -> QFrame:
+        host = QFrame(); host.setObjectName('LibraryValueRow')
+        row = QHBoxLayout(host); row.setContentsMargins(12, 4, 12, 4); row.setSpacing(8)
+        glyph = QLabel(); glyph.setObjectName('LibraryFieldIcon')
+        glyph.setPixmap(library_icon(icon, '#8babc0', 17).pixmap(17, 17)); row.addWidget(glyph)
+        label = QLabel(title); label.setObjectName('LibraryFieldName'); label.setFixedWidth(123); row.addWidget(label)
+        value = QLabel('—'); value.setObjectName('LibraryFieldValue'); value.setWordWrap(True)
+        value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        row.addWidget(value, 1); self.detail_labels[key] = value
+        return host
+
+    def _detail_metric(self, key: str, title: str, icon: str) -> QWidget:
+        host = QWidget(); host.setObjectName('LibraryMetric')
+        row = QHBoxLayout(host); row.setContentsMargins(7, 4, 7, 4); row.setSpacing(5)
+        glyph = QLabel(); glyph.setObjectName('LibraryFieldIcon')
+        glyph.setPixmap(library_icon(icon, '#8babc0', 16).pixmap(16, 16)); row.addWidget(glyph)
+        stack = QVBoxLayout(); stack.setSpacing(1)
+        label = QLabel(title); label.setObjectName('LibraryMetricName'); stack.addWidget(label)
+        value = QLabel('—'); value.setObjectName('LibraryMetricValue'); value.setWordWrap(True)
+        value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        stack.addWidget(value); row.addLayout(stack, 1)
+        self.detail_labels[key] = value
+        return host
 
     def resizeEvent(self, event):
+        if hasattr(self, '_filters_top'):
+            self._layout_filters(event.size().width())
         if hasattr(self, '_toolbar_layout'):
             self._layout_toolbar(event.size().width())
         super().resizeEvent(event)
 
+    def _layout_filters(self, width: int):
+        compact = width < 1260
+        if compact == getattr(self, '_filters_compact', None):
+            return
+        self._filters_compact = compact
+        widgets = (self.search, self.genre_filter, self.bpm_min, self.bpm_max,
+                   self.status, self.format_filter, self.reset_view_btn)
+        for widget in widgets:
+            self._filters_top.removeWidget(widget)
+            self._filters_bottom.removeWidget(widget)
+        while self._filters_top.takeAt(0):
+            pass
+        if compact:
+            for widget in widgets[:4]:
+                self._filters_top.addWidget(widget, 2 if widget is self.search else 1 if widget is self.genre_filter else 0)
+            for widget in widgets[4:]:
+                self._filters_bottom.addWidget(widget)
+            self._filters_bottom.addStretch(1)
+        else:
+            for widget in widgets:
+                self._filters_top.addWidget(widget, 2 if widget is self.search else 1 if widget is self.genre_filter else 0)
+            self._filters_top.addStretch(1)
+
     def _layout_toolbar(self, width: int):
-        compact = width < 1400
+        compact = width < 850
         if compact == self._toolbar_compact:
             return
         self._toolbar_compact = compact
@@ -433,10 +550,10 @@ class LibraryPage(QWidget):
         while self._toolbar_top.takeAt(0):
             pass
         if compact:
-            for widget in self._toolbar_widgets[:3]:
+            for widget in self._toolbar_widgets[:2]:
                 self._toolbar_top.addWidget(widget)
             self._toolbar_top.addStretch(1)
-            for widget in self._toolbar_widgets[3:]:
+            for widget in self._toolbar_widgets[2:]:
                 self._toolbar_bottom.addWidget(widget, 1 if widget is self.view_state_label else 0)
         else:
             for widget in self._toolbar_widgets:
@@ -447,17 +564,18 @@ class LibraryPage(QWidget):
 
     def _paint_category_icons(self, hovered_index: int = -1):
         selected = self.status.currentData()
+        self.status.setStyleSheet(f'color: {self.CATEGORY_COLORS.get(selected, "#d9e5e8")};')
         for key, icon_name in self.CATEGORY_ICONS.items():
             index = self.status.findData(key)
             if index < 0:
                 continue
             active = key == selected
-            color = '#8fe9ad' if active or index == hovered_index else '#bdcbd3'
+            color = self.CATEGORY_COLORS[key]
             self.status.setItemIcon(index, library_icon(icon_name, color, 18))
             item = self.status.model().item(index)
             if item is not None:
                 item.setForeground(QBrush(QColor(color)))
-                item.setBackground(QBrush(QColor('#173c2d')) if active else QBrush())
+                item.setBackground(QBrush(QColor('#173c2d')) if active or index == hovered_index else QBrush())
 
     @staticmethod
     def _format_of(track: TrackRecord) -> str:
@@ -485,16 +603,17 @@ class LibraryPage(QWidget):
     def _on_check_item_changed(self, item):
         if item.column() != 0:
             return
-        key = self._path_key(item.data(Qt.ItemDataRole.UserRole))
-        if key is None:
-            return
-        if item.checkState() == Qt.CheckState.Checked:
-            self._checked_paths.add(key)
-        else:
-            self._checked_paths.discard(key)
         self._update_selection_count()
 
+    def _visible_checked_paths(self) -> set[str]:
+        return {self._path_key(item.data(Qt.ItemDataRole.UserRole))
+                for row in range(self.model.rowCount())
+                if (item := self.model.item(row, 0)) is not None
+                and item.checkState() == Qt.CheckState.Checked
+                and item.data(Qt.ItemDataRole.UserRole) is not None}
+
     def _update_selection_count(self):
+        self._checked_paths = self._visible_checked_paths()
         count = len(self._checked_paths)
         self.selected_count.setText(f'{ui_text(self, "Zaznaczono:")} {count}')
         self.selected_count.setVisible(count > 0)
@@ -504,22 +623,19 @@ class LibraryPage(QWidget):
 
     def _filters_changed(self, *_):
         self._checked_paths.clear()
-        self.refresh()
+        self.refresh(clear_checks=True)
         self.table.selectionModel().clearSelection()
 
     def _toggle_visible_checks(self):
         visible = {self._path_key(track) for track in self.visible_tracks()}
         if not visible:
             return
-        if visible <= self._checked_paths:
-            self._checked_paths.difference_update(visible)
-        else:
-            self._checked_paths.update(visible)
+        check_all = not visible <= self._visible_checked_paths()
         with QSignalBlocker(self.model):
             for row in range(self.model.rowCount()):
                 item = self.model.item(row, 0)
                 if item is not None:
-                    item.setCheckState(Qt.CheckState.Checked if self._path_key(item.data(Qt.ItemDataRole.UserRole)) in self._checked_paths else Qt.CheckState.Unchecked)
+                    item.setCheckState(Qt.CheckState.Checked if check_all else Qt.CheckState.Unchecked)
         self._update_selection_count()
 
     def _ensure_status_column_width(self) -> None:
@@ -555,7 +671,7 @@ class LibraryPage(QWidget):
                     key = str(member.path).casefold()
                 self._version_family_by_path[key] = family
         self._update_genre_suggestions()
-        self.refresh(preserve_order=True)
+        self.refresh(preserve_order=True, clear_checks=True)
         self.table.selectionModel().clearSelection()
 
     @staticmethod
@@ -672,10 +788,11 @@ class LibraryPage(QWidget):
         del blockers
         self.table.sortByColumn(1, Qt.SortOrder.AscendingOrder)
         self.table.verticalScrollBar().setValue(0)
-        self.refresh()
+        self.refresh(clear_checks=True)
         self.table.selectionModel().clearSelection()
 
-    def refresh(self, *_, preserve_order: bool = False):
+    def refresh(self, *_, preserve_order: bool = False, clear_checks: bool = False):
+        checked = set() if clear_checks else self._visible_checked_paths()
         self._sync_format_options()
         view_state = self._capture_view_state()
         text = self.search.text().casefold().strip()
@@ -724,7 +841,7 @@ class LibraryPage(QWidget):
                 item.setData(is_playing, PLAYING_ROLE)
                 item.setData(stable_sort_value, VISUAL_ORDER_ROLE)
             items[0].setCheckable(True)
-            items[0].setCheckState(Qt.CheckState.Checked if key in self._checked_paths else Qt.CheckState.Unchecked)
+            items[0].setCheckState(Qt.CheckState.Checked if key in checked else Qt.CheckState.Unchecked)
             items[3].setToolTip(track.title or '')
             items[2].setToolTip(track.artist or '')
             # Only Status is colored by default. The playing track overrides the full row.
@@ -747,7 +864,7 @@ class LibraryPage(QWidget):
                 items[1].setToolTip(f'{status_text} • {ui_text(self, "Ten plik został przez Ciebie wybrany w zakładce Duplikaty.")}')
             self.model.appendRow(items)
 
-        self._checked_paths.intersection_update(visible_keys)
+        self._checked_paths = checked & visible_keys
         preserve_existing_order = bool(order_map)
         if preserve_existing_order:
             self.model.setSortRole(VISUAL_ORDER_ROLE)
@@ -808,22 +925,25 @@ class LibraryPage(QWidget):
         self.detail_labels['year'].setText(t.year or '—')
         self.detail_labels['bpm'].setText(display_bpm(t.bpm) or '—')
         self.detail_labels['genre'].setText(t.genre or '—')
-        self.detail_labels['path'].setText(str(t.path))
+        self.detail_labels['format'].setText(self._format_of(t))
+        self.detail_labels['bitrate'].setText(f'{t.bitrate_kbps} kb/s' if t.bitrate_kbps else '—')
+        self.detail_labels['sample_rate'].setText(f'{t.sample_rate_hz / 1000:g} kHz' if t.sample_rate_hz else '—')
+        self.detail_labels['channels'].setText(ui_text(self, 'Stereo' if t.channels == 2 else 'Mono') if t.channels in (1, 2) else str(t.channels or '—'))
         self.detail_labels['duration'].setText('—' if t.duration_seconds is None else f'{int(t.duration_seconds)//60}:{int(t.duration_seconds)%60:02d}')
-        self.detail_labels['size'].setText('—' if not t.size_bytes else f'{t.size_bytes / (1024 * 1024):.2f} MB')
-        self.detail_labels['quality'].setText(f'{t.codec or "?"} · {t.bitrate_kbps or "?"} kb/s · {t.sample_rate_hz or "?"} Hz · {t.channels or "?"} {ui_text(self, "kanały")}')
-        low_confidence = bool(t.confidence is not None and t.confidence < 0.65)
-        self.match_box.setProperty('lowConfidence', low_confidence)
-        self.match_box.style().unpolish(self.match_box); self.match_box.style().polish(self.match_box); self.match_box.update()
-        info = identification_summary(t)
-        self.confidence_widget.set_value(t.confidence)
-        self.detail_labels['sources'].setText(ui_text(self, info['sources'])); self.detail_labels['reasons'].setText(ui_text(self, info['reasons']))
-        self.detail_labels['discogs'].setText(f'<a href="{t.discogs_url}">{t.discogs_url}</a>' if t.discogs_url else '—')
-        self.detail_labels['comment'].setText((t.comment or '—').replace('\n', '<br>'))
-        hash_text = '—' if not t.sha256 else f'{t.sha256[:12]}…{t.sha256[-12:]}'
-        self.detail_labels['hash'].setText(hash_text); self.detail_labels['hash'].setToolTip(t.sha256 or '')
-        history = self._history_provider(t) if self._history_provider else []
-        self.history_label.setText('\n'.join(f'• {ui_text(self, entry)}' for entry in history) if history else ui_text(self, 'Brak ręcznych zmian.'))
+        self.detail_labels['size'].setText('—' if not t.size_bytes else f'{t.size_bytes / (1024 * 1024):.1f} MB')
+
+        confidence = confidence_presentation(t.confidence)
+        color = confidence_color(confidence.percent)
+        self.confidence_percent.setText('—' if confidence.percent is None else f'{confidence.percent}%')
+        self.confidence_percent.setStyleSheet(f'color:{color}')
+        self.confidence_bar.setValue(confidence.percent or 0)
+        self.confidence_bar.setStyleSheet(
+            f'QProgressBar#LibraryConfidenceBar::chunk {{ background:{color}; border-radius:4px; }}')
+        description = {
+            'none': 'Brak wyniku rozpoznania', 'low': 'Niska pewność — sprawdź dane',
+            'medium': 'Dopasowanie wymaga krótkiej kontroli', 'high': 'Dopasowanie bardzo wysokie',
+        }[confidence.kind]
+        self.confidence_description.setText(ui_text(self, description))
 
         try:
             family_key = str(Path(t.path).resolve()).casefold()
@@ -831,31 +951,55 @@ class LibraryPage(QWidget):
             family_key = str(t.path).casefold()
         family = self._version_family_by_path.get(family_key, [])
         self.version_family_card.setVisible(len(family) > 1)
-        if family:
-            lines = []
+        if len(family) > 1:
+            self.family_toggle.setText(f'{ui_text(self, "Rodzina wersji")} ({len(family)} {ui_text(self, "utwory")})')
+            while self.version_family_rows_layout.count():
+                item = self.version_family_rows_layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
             for member in family:
+                row = QFrame(); row.setObjectName('LibraryFamilyRow')
+                row.setProperty('current', member is t)
+                contents = QHBoxLayout(row); contents.setContentsMargins(10, 4, 10, 4); contents.setSpacing(7)
+                indicator = QLabel('◉' if member is t else '○'); indicator.setObjectName('LibraryFamilyIndicator')
+                contents.addWidget(indicator)
+                title = QLabel(member.title or member.filename); title.setObjectName('LibraryFamilyTitle')
+                title.setWordWrap(True); contents.addWidget(title, 1)
                 duration = '—' if member.duration_seconds is None else f'{int(member.duration_seconds)//60}:{int(member.duration_seconds)%60:02d}'
-                marker = ui_text(self, 'Teraz: ') if member is t else '       '
-                lines.append(f'{marker}{member.title or member.filename}  —  {duration}')
-            self.version_family_label.setText(ui_text(self, f'Rodzina wersji: {len(family)} utwory') + '\n' + '\n'.join(lines))
-        else:
-            self.version_family_label.setText('')
+                contents.addWidget(QLabel(duration))
+                if member is t:
+                    marker = QLabel(ui_text(self, '(aktualnie)')); marker.setObjectName('LibraryFamilyCurrent')
+                    contents.addWidget(marker)
+                self.version_family_rows_layout.addWidget(row)
 
-        completeness = metadata_completeness(t)
-        self.confirmed_label.setText('\n'.join(ui_text(self, value) for value in completeness['confirmed_core']) or '—')
-        missing = list(completeness['missing_core'])
-        self.review_box.setProperty('hasMissing', bool(missing))
-        self.review_box.style().unpolish(self.review_box); self.review_box.style().polish(self.review_box)
-        self.missing_heading.setVisible(bool(missing)); self.missing_label.setVisible(bool(missing)); self.complete_label.setVisible(not missing)
-        if missing:
-            self.missing_label.setText('\n'.join(ui_text(self, value) for value in missing)); self.complete_label.setText('')
+        complete = {
+            'artist': bool(t.artist), 'title': bool(t.title), 'album': bool(t.album),
+            'year': bool(t.year), 'bpm': t.bpm is not None, 'genre': bool(t.genre),
+        }
+        self.completeness_count.setText(f'{sum(complete.values())}/6')
+        self.completeness_title.setText(
+            tr('library.details.complete' if all(complete.values()) else 'library.details.incomplete', language_for(self)))
+        self.completeness_card.setProperty('complete', all(complete.values()))
+        self.completeness_card.style().unpolish(self.completeness_card)
+        self.completeness_card.style().polish(self.completeness_card)
+        for key, label in self.completeness_fields.items():
+            label.setText(ui_text(self, {
+                'artist': 'Wykonawca', 'title': 'Tytuł / wersja', 'album': 'Album',
+                'year': 'Rok', 'bpm': 'BPM', 'genre': 'Gatunek',
+            }[key]))
+            self.completeness_field_icons[key].setPixmap(library_icon(
+                'approve' if complete[key] else 'empty_check',
+                '#2de1ac' if complete[key] else '#83939e', 13).pixmap(13, 13))
+            label.setProperty('complete', complete[key])
+            label.style().unpolish(label); label.style().polish(label)
+        if all(complete.values()):
+            self.completeness_hint.setText(ui_text(self, 'Wszystkie dane są uzupełnione.'))
         else:
-            self.complete_label.setText(ui_text(self, 'Dane główne kompletne — nie musisz niczego uzupełniać.'))
-
-        status = effective_status(t)
+            missing = [ui_text(self, title) for key, title in (
+                ('artist', 'Wykonawca'), ('title', 'Tytuł / wersja'), ('album', 'Album'),
+                ('year', 'Rok'), ('bpm', 'BPM'), ('genre', 'Gatunek')) if not complete[key]]
+            self.completeness_hint.setText(ui_text(self, 'Brakuje:') + ' ' + ', '.join(missing))
         self._load_cover(t)
-        if status == 'review' and not self.detail.isVisible():
-            self.details_btn.setChecked(True); self._toggle_details(True)
 
     @staticmethod
     def _external_cover_url(track: TrackRecord) -> str | None:
@@ -878,7 +1022,6 @@ class LibraryPage(QWidget):
             external_url = self._external_cover_url(track)
             if external_url:
                 self._cover_pixmap = QPixmap(); self.cover.setPixmap(QPixmap()); self.cover.setText(ui_text(self, 'Ładowanie…'))
-                self.cover_caption.setText(ui_text(self, 'Pobieranie podglądu zewnętrznej okładki…'))
                 self._load_remote_cover(track, external_url, serial); return
         self._show_source_cover_fallback(track, 'Okładka źródłowa / zapasowa.')
 
@@ -909,21 +1052,34 @@ class LibraryPage(QWidget):
         if pix.isNull():
             self.cover.setPixmap(QPixmap()); self.cover.setText(ui_text(self, 'Brak okładki'))
         else:
-            self.cover.setText(''); self.cover.setPixmap(pix.scaled(196, 196, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-        self.cover_caption.setText(ui_text(self, note or 'Kliknij okładkę, aby powiększyć'))
+            self.cover.setText(''); self.cover.setPixmap(pix.scaled(218, 218, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        self.cover.setToolTip(ui_text(self, note or 'Kliknij okładkę, aby powiększyć'))
 
     def _show_cover_preview(self):
         show_cover_preview(self, self._cover_pixmap, title=ui_text(self, 'Powiększona okładka'), note=ui_text(self, self._cover_note))
 
     def _toggle_details(self, checked: bool):
-        self.detail.setVisible(checked)
-        self.details_btn.setText(ui_text(self, 'Ukryj szczegóły' if checked else 'Szczegóły utworu'))
+        self.detail_scroll.setVisible(checked)
+        self.detail_actions.setVisible(checked)
+        self.collapsed_filler.setVisible(not checked)
+        self.detail_title.setVisible(checked)
+        self.detail_title_icon.setVisible(checked)
+        if checked:
+            self.detail.setMaximumWidth(940)
+            self.detail.setMinimumWidth(640)
+        else:
+            self.detail.setMinimumWidth(52)
+            self.detail.setMaximumWidth(52)
+        self.details_btn.setIcon(library_icon('collapse' if checked else 'expand', '#aec4d3', 18))
+        self.details_btn.setToolTip(ui_text(self, 'Ukryj szczegóły' if checked else 'Pokaż szczegóły'))
         if checked:
             self.split.setSizes([820, 740])
+        else:
+            self.split.setSizes([1500, 52])
 
-    def _toggle_technical(self, checked: bool):
-        self.technical_panel.setVisible(checked)
-        self.technical_toggle.setText('UKRYJ DANE TECHNICZNE' if checked else 'DANE TECHNICZNE')
+    def _toggle_family(self, checked: bool):
+        self.version_family_rows.setVisible(checked)
+        self.family_arrow.setIcon(library_icon('collapse' if checked else 'expand', '#a8bdca', 15))
 
     def select_track_by_path(self, path: Path) -> bool:
         target = str(Path(path).resolve()).casefold()
@@ -932,7 +1088,7 @@ class LibraryPage(QWidget):
             if candidate is not None and str(Path(candidate.path).resolve()).casefold() == target:
                 self.table.clearSelection(); index = self.model.index(row, 0)
                 self.table.setCurrentIndex(index); self.table.selectRow(row); self.table.scrollTo(index, QAbstractItemView.ScrollHint.PositionAtCenter)
-                if not self.detail.isVisible():
+                if not self.details_btn.isChecked():
                     self.details_btn.setChecked(True); self._toggle_details(True)
                 self._show_detail()
                 return True
@@ -945,7 +1101,7 @@ class LibraryPage(QWidget):
             if candidate is not None and str(Path(candidate.path).resolve()).casefold() == target:
                 self.table.clearSelection(); index = self.model.index(row, 0); self.table.setCurrentIndex(index); self.table.selectRow(row)
                 self.table.scrollTo(index, QAbstractItemView.ScrollHint.PositionAtCenter)
-                if not self.detail.isVisible():
+                if not self.details_btn.isChecked():
                     self.details_btn.setChecked(True); self._toggle_details(True)
                 return True
         return False
@@ -961,7 +1117,9 @@ class LibraryPage(QWidget):
         return tracks
 
     def _checked_tracks(self) -> list[TrackRecord]:
-        return [track for track in self.visible_tracks() if self._path_key(track) in self._checked_paths]
+        return [self.model.item(row, 0).data(Qt.ItemDataRole.UserRole)
+                for row in range(self.model.rowCount())
+                if self.model.item(row, 0).checkState() == Qt.CheckState.Checked]
 
     def visible_tracks(self) -> list[TrackRecord]:
         """Return tracks in the exact filtered/sorted order shown to the user."""

@@ -51,11 +51,11 @@ def test_library_icons_cover_every_real_category_and_edit_action(tmp_path):
                 assert not page.status.itemIcon(i).isNull(), page.status.itemText(i)
         assert not page.status.itemIcon(page.status.findData('no_cover')).isNull()
         assert not page.status.itemIcon(page.status.findData('not_selected')).isNull()
-        assert not page.edit_main.icon().isNull()
+        assert not page.detail_edit.icon().isNull()
         emitted = []
         page.edit_requested.connect(emitted.append)
         page.table.selectRow(0)
-        page.edit_main.click()
+        page.detail_edit.click()
         assert emitted == [tracks[0]]
         assets = Path(__file__).resolve().parents[1] / 'src/audio_library_organizer/assets/icons/library_a'
         for path in assets.glob('*.svg'):
@@ -155,7 +155,7 @@ def test_library_new_controls_switch_pl_en_without_losing_filter_or_checks(tmp_p
         assert 'Selected:' in page.selected_count.text()
         assert page.model.headerData(page.HEADERS.index('Format'), Qt.Orientation.Horizontal) == 'Format'
         assert page.format_filter.currentText() == 'Format: MP3'
-        assert page.edit_main.text() == 'Edit metadata'
+        assert page.detail_edit.text() == 'Edit metadata'
         assert page.collection_btn.text() == 'Create folder from selected'
         assert page.playlist_btn.text() == 'Add to playlist'
         assert page.playlist_btn.toolTip() == 'Save selected tracks as an M3U8 playlist'
@@ -163,7 +163,7 @@ def test_library_new_controls_switch_pl_en_without_losing_filter_or_checks(tmp_p
         page.refresh(preserve_order=True)
         assert 'Zaznaczono:' in page.selected_count.text()
         assert page.model.item(0, 0).checkState() == Qt.CheckState.Checked
-        assert page.edit_main.text() == 'Edytuj metadane'
+        assert page.detail_edit.text() == 'Edytuj metadane'
         assert page.collection_btn.text() == 'Utwórz folder z zaznaczonych'
         assert page.playlist_btn.text() == 'Dodaj do playlisty'
         assert page.playlist_btn.toolTip() == 'Zapisz zaznaczone utwory jako playlistę M3U8'
@@ -304,13 +304,12 @@ def test_library_toolbar_and_detail_footer_expose_only_intended_actions(tmp_path
         assert 'Cofnij ostatnią zmianę' not in buttons
         assert 'ZATWIERDŹ JAKO GOTOWE' not in buttons
         assert '⋯' not in [button.text() for button in page.findChildren(QToolButton)]
-        assert buttons.count('Edytuj metadane') == 2
+        assert buttons.count('Edytuj metadane') == 1
         page.table.selectRow(0)
         edits = []
         page.edit_requested.connect(edits.append)
-        page.edit_main.click()
         page.detail_edit.click()
-        assert edits == [tracks[0], tracks[0]]
+        assert edits == [tracks[0]]
         assert page.model.item(0, 1).text() == 'DO SPRAWDZENIA'
     finally:
         page.close()
@@ -325,11 +324,12 @@ def test_toolbar_actions_fit_at_common_logical_dpi_widths(tmp_path):
             page.resize(width, 720)
             _app().processEvents()
             assert page.width() <= width
-            widgets = [page.edit_main, page.collection_btn, page.playlist_btn,
-                       page.details_btn, page.selected_count, page.view_state_label, page.reset_view_btn]
+            widgets = [page.collection_btn, page.playlist_btn, page.selected_count,
+                       page.view_state_label]
             boxes = [widget.geometry().translated(widget.parentWidget().mapTo(page, QPoint(0, 0)))
                      for widget in widgets if widget.isVisible()]
             assert all(box.left() >= 0 and box.right() < page.width() for box in boxes)
             assert all(not left.intersects(right) for i, left in enumerate(boxes) for right in boxes[i + 1:])
+            assert page.reset_view_btn.geometry().right() < page.width()
     finally:
         page.close()

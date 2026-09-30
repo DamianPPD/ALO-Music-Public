@@ -105,10 +105,9 @@ def test_library_filter_starts_with_emphasized_all_tracks_then_statuses():
 
 
 def test_technical_data_heading_is_prominent():
-    assert "self.technical_toggle = QPushButton('DANE TECHNICZNE')" in LIBRARY
-    assert "self.technical_toggle.setIcon(alo_icon('settings'" in LIBRARY
-    assert 'QPushButton#DisclosureButton' in THEME
-    assert 'font-weight:800' in THEME[THEME.index('QPushButton#DisclosureButton'):]
+    assert "self._detail_section_header('Dane techniczne')" in LIBRARY
+    assert "('format', 'Format', 'file_format')" in LIBRARY
+    assert 'QFrame#LibraryTechnicalCard' in THEME
 
 
 def test_library_refresh_forces_details_to_update_after_reselect():
