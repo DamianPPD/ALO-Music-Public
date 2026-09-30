@@ -63,7 +63,6 @@ def test_v017_layout_uses_top_navigation_collapsible_details_and_single_click_pl
     assert 'self.library.track_selected.connect' not in main_window
     assert 'self.table.doubleClicked.connect(self._play_selected)' in library
     assert 'Szczegóły' in library
-    assert 'ZATWIERDŹ JAKO GOTOWE' in library
     assert 'Edytuj metadane' in library
     assert 'setFixedSize(50, 50)' in player
 
@@ -104,11 +103,6 @@ def test_library_removes_native_cell_focus_outline_with_delegate():
     assert 'clean.state &= ~QStyle.StateFlag.State_HasFocus' in library
     assert 'self.table.setItemDelegate(LibraryRowDelegate(self.table))' in library
 
-
-def test_library_playlist_button_shows_m3u8_extension():
-    library = Path('src/audio_library_organizer/ui/library_page.py').read_text(encoding='utf-8')
-
-    assert "QPushButton('Utwórz playlistę (.m3u8)', self)" in library
 
 
 def test_playing_track_marker_does_not_change_status_text_used_for_sorting():

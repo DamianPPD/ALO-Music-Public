@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QComboBox, QTableView, QLabel,
     QSplitter, QFrame, QPushButton, QInputDialog, QMessageBox, QAbstractItemView,
     QHeaderView, QScrollArea, QGridLayout, QMenu, QCompleter,
-    QStyledItemDelegate, QStyleOptionViewItem, QStyle, QToolButton,
+    QStyledItemDelegate, QStyleOptionViewItem, QStyle, QLayout,
 )
 
 from audio_library_organizer import __version__
@@ -181,6 +181,7 @@ class LibraryPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(4, 4, 4, 4)
         root.setSpacing(8)
+        root.setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)
 
         filters = QHBoxLayout(); filters.setSpacing(8)
         self.search = QLineEdit(); self.search.setPlaceholderText('Szukaj: wykonawca, tytuł, album…')
@@ -221,10 +222,8 @@ class LibraryPage(QWidget):
         self.edit_main = QPushButton('Edytuj metadane'); self.edit_main.setObjectName('LibraryPrimaryEdit')
         self.edit_main.setIcon(library_icon('metadata_edit', '#9af0b6', 21)); self.edit_main.setIconSize(QSize(21, 21))
         self.edit_main.setToolTip(ui_text(self, 'Edytuj metadane')); self.edit_main.clicked.connect(self._edit_current)
-        self.edit_genre = QPushButton('Gatunek dla zaznaczonych', self); self.edit_genre.setIcon(library_icon('genre', '#cbd8df', 18)); self.edit_genre.clicked.connect(self._edit_selected_genre)
-        self.select_all_btn = QPushButton('Zaznacz wszystko'); self.select_all_btn.setObjectName('LibrarySecondaryAction'); self.select_all_btn.setIcon(library_icon('select', '#cbd8df', 18)); self.select_all_btn.clicked.connect(self._select_all_visible)
-        self.collection_btn = QPushButton('Utwórz folder z zaznaczonych', self); self.collection_btn.setObjectName('LibraryCollectionAction'); self.collection_btn.setIcon(library_icon('folder', '#cbd8df', 18)); self.collection_btn.clicked.connect(self._request_collection)
-        self.playlist_btn = QPushButton('Utwórz playlistę (.m3u8)', self); self.playlist_btn.setObjectName('LibraryPlaylistAction'); self.playlist_btn.setIcon(library_icon('playlist', '#cbd8df', 18)); self.playlist_btn.clicked.connect(self._request_playlist)
+        self.collection_btn = QPushButton('Utwórz folder z zaznaczonych', self); self.collection_btn.setObjectName('LibraryCollectionAction'); self.collection_btn.setIcon(library_icon('folder_add', '#cbd8df', 18)); self.collection_btn.clicked.connect(self._request_collection)
+        self.playlist_btn = QPushButton('Dodaj do playlisty', self); self.playlist_btn.setObjectName('LibraryPlaylistAction'); self.playlist_btn.setIcon(library_icon('playlist', '#cbd8df', 18)); self.playlist_btn.clicked.connect(self._request_playlist)
         self.details_btn = QPushButton('Szczegóły utworu'); self.details_btn.setObjectName('DetailsToggle'); self.details_btn.setIcon(library_icon('details', '#cbd8df', 18))
         self.details_btn.setCheckable(True); self.details_btn.clicked.connect(self._toggle_details)
 
@@ -237,7 +236,10 @@ class LibraryPage(QWidget):
         filters.addStretch(1)
         root.addLayout(filters)
 
-        view_controls = QHBoxLayout(); view_controls.setSpacing(8)
+        view_controls = QVBoxLayout(); view_controls.setSpacing(5)
+        self._toolbar_top = QHBoxLayout(); self._toolbar_top.setSpacing(8)
+        self._toolbar_bottom = QHBoxLayout(); self._toolbar_bottom.setSpacing(8)
+        view_controls.addLayout(self._toolbar_top); view_controls.addLayout(self._toolbar_bottom)
         self.view_state_label = QLabel('')
         self.view_state_label.setObjectName('LibraryViewState')
         self.view_state_label.setWordWrap(False)
@@ -248,26 +250,16 @@ class LibraryPage(QWidget):
         self.selected_count = QLabel('')
         self.selected_count.setObjectName('LibrarySelectedCount')
         self.selected_count.hide()
-        self.more_actions = QToolButton(self)
-        self.more_actions.setObjectName('LibraryMoreActions')
-        self.more_actions.setText('⋯')
-        self.more_actions.setToolTip(ui_text(self, 'Więcej akcji'))
-        self.more_actions.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        more_menu = QMenu(self.more_actions)
-        for button in (self.edit_genre, self.collection_btn, self.playlist_btn):
-            action = more_menu.addAction(button.icon(), button.text())
-            action.triggered.connect(button.click)
-            button.hide()
-        self.more_actions.setMenu(more_menu)
-        for button in (self.edit_main, self.select_all_btn, self.details_btn):
+        for button in (self.edit_main, self.collection_btn, self.playlist_btn, self.details_btn):
             button.setMinimumHeight(34)
             button.setMaximumHeight(34)
             button.setToolTip(ui_text(self, button.text()))
-            view_controls.addWidget(button)
-        view_controls.addWidget(self.more_actions)
-        view_controls.addWidget(self.selected_count)
-        view_controls.addWidget(self.view_state_label, 1)
-        view_controls.addWidget(self.reset_view_btn)
+        self.playlist_btn.setToolTip(ui_text(self, 'Zapisz zaznaczone utwory jako playlistę M3U8'))
+        self._toolbar_layout = view_controls
+        self._toolbar_widgets = (self.edit_main, self.collection_btn, self.playlist_btn,
+                                 self.details_btn, self.selected_count, self.view_state_label, self.reset_view_btn)
+        self._toolbar_compact = None
+        self._layout_toolbar(self.width())
         root.addLayout(view_controls)
 
         self.split = QSplitter(Qt.Orientation.Horizontal)
@@ -393,24 +385,25 @@ class LibraryPage(QWidget):
 
         actions_bar = QFrame(); actions_bar.setObjectName('PinnedDetailActions')
         actions = QHBoxLayout(actions_bar); actions.setContentsMargins(12, 9, 12, 9); actions.setSpacing(8)
-        self.undo = QPushButton('Cofnij ostatnią zmianę'); self.undo.setIcon(library_icon('undo', '#a9bac4', 17)); self.undo.clicked.connect(self.undo_requested.emit)
-        edit = QPushButton('Edytuj metadane'); edit.setIcon(library_icon('metadata_edit', '#9af0b6', 18)); edit.clicked.connect(self._edit_current)
-        self.approve = QPushButton('ZATWIERDŹ JAKO GOTOWE'); self.approve.setObjectName('ApproveButton'); self.approve.setIcon(library_icon('approve', '#e9fff1', 18)); self.approve.clicked.connect(self._approve_current)
-        actions.addWidget(self.undo); actions.addStretch(1); actions.addWidget(edit); actions.addWidget(self.approve)
+        self.detail_edit = QPushButton('Edytuj metadane'); self.detail_edit.setObjectName('LibraryDetailEdit')
+        self.detail_edit.setIcon(library_icon('metadata_edit', '#a5f3c1', 22)); self.detail_edit.setIconSize(QSize(22, 22))
+        self.detail_edit.clicked.connect(self._edit_current)
+        actions.addStretch(1); actions.addWidget(self.detail_edit)
         detail_outer.addWidget(actions_bar)
 
         self.split.addWidget(self.detail); self.split.setSizes([840, 720]); self.detail.setVisible(False)
         root.addWidget(self.split, 1)
 
-        self.search.textChanged.connect(self.refresh)
-        self.genre_filter.textChanged.connect(self.refresh)
-        self.bpm_min.textChanged.connect(self.refresh)
-        self.bpm_max.textChanged.connect(self.refresh)
-        self.status.currentIndexChanged.connect(self.refresh)
-        self.format_filter.currentIndexChanged.connect(self.refresh)
+        self.search.textChanged.connect(self._filters_changed)
+        self.genre_filter.textChanged.connect(self._filters_changed)
+        self.bpm_min.textChanged.connect(self._filters_changed)
+        self.bpm_max.textChanged.connect(self._filters_changed)
+        self.status.currentIndexChanged.connect(self._filters_changed)
+        self.format_filter.currentIndexChanged.connect(self._filters_changed)
         self.table.selectionModel().selectionChanged.connect(self._show_detail)
         self.table.horizontalHeader().sortIndicatorChanged.connect(self._update_view_state_label)
         self._update_view_state_label()
+        self._update_selection_count()
 
     def _add_detail_fields(self, grid: QGridLayout, specs, *, technical: bool = False):
         for key, label, row, col, row_span, col_span in specs:
@@ -423,6 +416,31 @@ class LibraryPage(QWidget):
             self.detail_labels[key] = value
             if technical and key == 'hash':
                 value.setTextFormat(Qt.TextFormat.PlainText); value.setToolTip('Pełny SHA-256')
+
+    def resizeEvent(self, event):
+        if hasattr(self, '_toolbar_layout'):
+            self._layout_toolbar(event.size().width())
+        super().resizeEvent(event)
+
+    def _layout_toolbar(self, width: int):
+        compact = width < 1400
+        if compact == self._toolbar_compact:
+            return
+        self._toolbar_compact = compact
+        for widget in self._toolbar_widgets:
+            self._toolbar_top.removeWidget(widget)
+            self._toolbar_bottom.removeWidget(widget)
+        while self._toolbar_top.takeAt(0):
+            pass
+        if compact:
+            for widget in self._toolbar_widgets[:3]:
+                self._toolbar_top.addWidget(widget)
+            self._toolbar_top.addStretch(1)
+            for widget in self._toolbar_widgets[3:]:
+                self._toolbar_bottom.addWidget(widget, 1 if widget is self.view_state_label else 0)
+        else:
+            for widget in self._toolbar_widgets:
+                self._toolbar_top.addWidget(widget, 1 if widget is self.view_state_label else 0)
 
     def set_history_provider(self, provider):
         self._history_provider = provider
@@ -480,7 +498,14 @@ class LibraryPage(QWidget):
         count = len(self._checked_paths)
         self.selected_count.setText(f'{ui_text(self, "Zaznaczono:")} {count}')
         self.selected_count.setVisible(count > 0)
+        self.collection_btn.setEnabled(count > 0)
+        self.playlist_btn.setEnabled(count > 0)
         self.table.horizontalHeader().viewport().update()
+
+    def _filters_changed(self, *_):
+        self._checked_paths.clear()
+        self.refresh()
+        self.table.selectionModel().clearSelection()
 
     def _toggle_visible_checks(self):
         visible = {self._path_key(track) for track in self.visible_tracks()}
@@ -519,7 +544,7 @@ class LibraryPage(QWidget):
 
     def set_tracks(self, tracks: list[TrackRecord]):
         self._tracks = tracks
-        self._checked_paths.intersection_update({self._path_key(track) for track in tracks})
+        self._checked_paths.clear()
         self._sync_format_options()
         self._version_family_by_path = {}
         for family in group_version_families(tracks):
@@ -531,6 +556,7 @@ class LibraryPage(QWidget):
                 self._version_family_by_path[key] = family
         self._update_genre_suggestions()
         self.refresh(preserve_order=True)
+        self.table.selectionModel().clearSelection()
 
     @staticmethod
     def _path_key(track: TrackRecord | None) -> str | None:
@@ -629,6 +655,7 @@ class LibraryPage(QWidget):
         self.view_state_label.setText(ui_text(self, f'Sortowanie: {sort_name} {arrow}   •   Filtry: {filter_text}'))
 
     def _reset_view(self):
+        self._checked_paths.clear()
         blockers = [
             QSignalBlocker(self.search), QSignalBlocker(self.genre_filter),
             QSignalBlocker(self.bpm_min), QSignalBlocker(self.bpm_max), QSignalBlocker(self.status),
@@ -646,6 +673,7 @@ class LibraryPage(QWidget):
         self.table.sortByColumn(1, Qt.SortOrder.AscendingOrder)
         self.table.verticalScrollBar().setValue(0)
         self.refresh()
+        self.table.selectionModel().clearSelection()
 
     def refresh(self, *_, preserve_order: bool = False):
         self._sync_format_options()
@@ -657,6 +685,7 @@ class LibraryPage(QWidget):
         order_map = {key: index for index, key in enumerate(previous_order)} if preserve_order else {}
         sort_order = view_state.get('sort_order', Qt.SortOrder.AscendingOrder)
         next_order = len(order_map)
+        visible_keys = set()
 
         self.table.setSortingEnabled(False)
         self.model.removeRows(0, self.model.rowCount())
@@ -684,6 +713,7 @@ class LibraryPage(QWidget):
             status_icons = {'ready': 'status', 'duplicate': 'duplicates', 'review': 'warning', 'not_selected': 'cancel'}
             items[1].setIcon(alo_icon('lock' if locked_online else status_icons.get(effective_status(track), 'info'), presentation.accent, 15))
             key = self._path_key(track)
+            visible_keys.add(key)
             order_index = order_map.get(key)
             if order_index is None:
                 order_index = next_order
@@ -717,6 +747,7 @@ class LibraryPage(QWidget):
                 items[1].setToolTip(f'{status_text} • {ui_text(self, "Ten plik został przez Ciebie wybrany w zakładce Duplikaty.")}')
             self.model.appendRow(items)
 
+        self._checked_paths.intersection_update(visible_keys)
         preserve_existing_order = bool(order_map)
         if preserve_existing_order:
             self.model.setSortRole(VISUAL_ORDER_ROLE)
@@ -822,8 +853,6 @@ class LibraryPage(QWidget):
             self.complete_label.setText(ui_text(self, 'Dane główne kompletne — nie musisz niczego uzupełniać.'))
 
         status = effective_status(t)
-        self.approve.setEnabled(status not in {'duplicate', 'not_selected'})
-        self.approve.setText(ui_text(self, 'GOTOWE' if status == 'ready' else 'ZATWIERDŹ JAKO GOTOWE'))
         self._load_cover(t)
         if status == 'review' and not self.detail.isVisible():
             self.details_btn.setChecked(True); self._toggle_details(True)
@@ -931,6 +960,9 @@ class LibraryPage(QWidget):
                     tracks.append(track)
         return tracks
 
+    def _checked_tracks(self) -> list[TrackRecord]:
+        return [track for track in self.visible_tracks() if self._path_key(track) in self._checked_paths]
+
     def visible_tracks(self) -> list[TrackRecord]:
         """Return tracks in the exact filtered/sorted order shown to the user."""
         tracks: list[TrackRecord] = []
@@ -948,7 +980,7 @@ class LibraryPage(QWidget):
         self._genre_filter_model.setStringList(self.genre_suggestions())
 
     def _request_playlist(self):
-        tracks = self._selected_tracks()
+        tracks = self._checked_tracks()
         if not tracks:
             QMessageBox.information(self, ui_text(self, 'Brak zaznaczenia'), ui_text(self, 'Zaznacz utwory, które mają trafić do playlisty.'))
             return
@@ -978,10 +1010,10 @@ class LibraryPage(QWidget):
         elif chosen is edit:
             self.edit_requested.emit(track)
         elif chosen is folder:
-            tracks = self._selected_tracks() or [track]
+            tracks = self._checked_tracks() or [track]
             self.create_collection_requested.emit(tracks)
         elif chosen is playlist:
-            tracks = self._selected_tracks() or [track]
+            tracks = self._checked_tracks() or [track]
             self.playlist_requested.emit([t.path for t in tracks])
         elif chosen is reveal:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(track.path.parent)))
@@ -992,32 +1024,8 @@ class LibraryPage(QWidget):
             QMessageBox.information(self, ui_text(self, 'Brak zaznaczenia'), ui_text(self, 'Najpierw zaznacz utwór w bibliotece.')); return
         self.edit_requested.emit(track)
 
-    def _approve_current(self):
-        track = self._current_track()
-        if not track or effective_status(track) in {'duplicate', 'not_selected'}:
-            return
-        completeness = metadata_completeness(track)
-        missing = list(completeness['missing_core'])
-        if missing:
-            self.review_box.setProperty('hasMissing', True)
-            self.review_box.style().unpolish(self.review_box); self.review_box.style().polish(self.review_box)
-            QMessageBox.warning(
-                self, ui_text(self, 'Brak wymaganych danych'),
-                ui_text(self, 'Nie można oznaczyć jako GOTOWE — uzupełnij wymagane pola: ') + ', '.join(ui_text(self, field) for field in missing),
-            )
-            return
-        self.approve_requested.emit(track)
-
-    def _select_all_visible(self):
-        self.table.selectAll()
-        self._checked_paths.update(self._path_key(track) for track in self.visible_tracks())
-        with QSignalBlocker(self.model):
-            for row in range(self.model.rowCount()):
-                self.model.item(row, 0).setCheckState(Qt.CheckState.Checked)
-        self._update_selection_count()
-
     def _request_collection(self):
-        tracks = self._selected_tracks()
+        tracks = self._checked_tracks()
         if not tracks:
             QMessageBox.information(self, ui_text(self, 'Brak zaznaczenia'), ui_text(self, 'Zaznacz utwory, które mają trafić do nowego folderu MP3.'))
             return

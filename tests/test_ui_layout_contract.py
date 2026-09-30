@@ -90,7 +90,8 @@ def test_library_status_is_the_only_colored_table_cell_and_selection_stays_stabl
 
 def test_library_details_button_is_in_compact_action_row():
     assert "self.details_btn.setObjectName('DetailsToggle')" in LIBRARY
-    assert 'view_controls.addWidget(button)' in LIBRARY
+    assert 'self.details_btn, self.selected_count, self.view_state_label, self.reset_view_btn' in LIBRARY
+    assert 'self._toolbar_bottom.addWidget(widget' in LIBRARY
     assert 'QPushButton#DetailsToggle' in THEME
 
 

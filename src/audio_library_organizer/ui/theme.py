@@ -2663,6 +2663,14 @@ QWidget#LibraryPage QPushButton#LibraryPrimaryEdit {
 QWidget#LibraryPage QPushButton#LibraryPrimaryEdit:hover {
     background:#17402c; border-color:#58dea0; color:#ffffff;
 }
+QWidget#LibraryPage QPushButton#LibraryDetailEdit {
+    min-height:39px; max-height:39px; min-width:172px;
+    background:#133024; border:1px solid #48b880; border-radius:7px;
+    color:#f0fff5; font-weight:750; padding:0 15px; icon-size:22px;
+}
+QWidget#LibraryPage QPushButton#LibraryDetailEdit:hover {
+    background:#19432e; border-color:#67dca1; color:#ffffff;
+}
 QWidget#LibraryPage QPushButton#LibrarySecondaryAction,
 QWidget#LibraryPage QPushButton#LibraryCollectionAction,
 QWidget#LibraryPage QPushButton#LibraryPlaylistAction,
@@ -2677,13 +2685,9 @@ QWidget#LibraryPage QPushButton#LibraryPlaylistAction:hover,
 QWidget#LibraryPage QPushButton#DetailsToggle:hover {
     background:#1a3029; border-color:#4da27a; color:#f3fff8;
 }
-QWidget#LibraryPage QToolButton#LibraryMoreActions {
-    min-width:36px; max-width:36px; min-height:34px; max-height:34px;
-    background:#151f27; border:1px solid #34434b; border-radius:7px;
-    color:#d9e5e8; padding:0;
-}
-QWidget#LibraryPage QToolButton#LibraryMoreActions:hover {
-    background:#1a3029; border-color:#4da27a; color:#f3fff8;
+QWidget#LibraryPage QPushButton#LibraryCollectionAction:disabled,
+QWidget#LibraryPage QPushButton#LibraryPlaylistAction:disabled {
+    background:#131b21; border-color:#293740; color:#71848b;
 }
 QWidget#LibraryPage QComboBox#LibraryFormatFilter {
     min-height:26px; max-height:26px; padding:2px 7px;

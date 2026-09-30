@@ -13,7 +13,6 @@ def test_library_has_multi_genre_bpm_filters_and_collection_actions():
     assert 'self.genre_filter' in LIBRARY
     assert 'self.bpm_min' in LIBRARY and 'self.bpm_max' in LIBRARY
     assert 'track_matches_library_filters' in LIBRARY
-    assert 'Zaznacz wszystko' in LIBRARY
     assert 'Utwórz folder z zaznaczonych' in LIBRARY
     assert 'create_collection_requested' in LIBRARY
     assert 'Key_Left' in LIBRARY and 'Key_Right' in LIBRARY
