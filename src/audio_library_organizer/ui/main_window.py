@@ -932,8 +932,8 @@ class MainWindow(QMainWindow):
         self.action_buttons = [self.scan_btn, self.identify_btn, self.review_btn, self.export_btn, self.new_files_btn]
         self.operation_frame = QFrame(); self.operation_frame.setObjectName('OperationFrame'); self.operation_frame.setProperty('operationKind', 'idle')
         self.operation_frame.setParent(self.action_frame)
-        self.operation_frame.setMinimumWidth(350)
-        self.operation_frame.setMaximumWidth(400)
+        self.operation_frame.setMinimumWidth(410)
+        self.operation_frame.setMaximumWidth(460)
         op = QVBoxLayout(self.operation_frame); op.setContentsMargins(8, 4, 8, 4); op.setSpacing(1)
         op_head = QHBoxLayout(); op_head.setSpacing(3)
         self.operation_icon = QLabel(); self.operation_icon.setObjectName('OperationIcon'); self.operation_icon.setFixedSize(19, 19); self.operation_icon.setAlignment(Qt.AlignmentFlag.AlignCenter); self.operation_icon.setPixmap(start_icon('status_ring', '#8fa1b3', 17).pixmap(17, 17)); op_head.addWidget(self.operation_icon)

@@ -136,7 +136,7 @@ def test_operation_c_status_and_width_stay_right_of_workflow(tmp_path, monkeypat
         window.show()
         _app().processEvents()
         assert window.operation_frame.parentWidget() is window.action_frame
-        assert 350 <= window.operation_frame.width() <= 360
+        assert 405 <= window.operation_frame.width() <= 420
         gap = window.operation_frame.geometry().left() - window.new_files_btn.geometry().right()
         assert gap >= 70
         assert window.action_frame.width() - window.operation_frame.geometry().right() >= 20
