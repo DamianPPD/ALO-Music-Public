@@ -4,7 +4,7 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
 from PySide6.QtCore import Qt, QPoint, QEvent, QCoreApplication
 from PySide6.QtGui import QPalette, QColor
-from PySide6.QtTest import QSignalSpy
+from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QFrame
 
 from audio_library_organizer.domain.models import TrackRecord
@@ -66,6 +66,71 @@ def test_selection_is_reconciled_with_visible_checkbox_model(tmp_path):
         page.close()
 
 
+def test_clicked_checkbox_enums_paint_and_uncheck_consistently(tmp_path):
+    page, _ = _page(tmp_path)
+    app = QApplication.instance()
+    previous = app.styleSheet()
+    app.setStyleSheet(DARK_STYLE)
+    tracks = [TrackRecord(path=tmp_path / f'click-{i}.mp3', title=str(i)) for i in range(5)]
+    page.set_tracks(tracks); page.resize(1600, 720); page.show(); app.processEvents()
+    def painted_checks():
+        app.processEvents()
+        pixmap = page.table.viewport().grab(); rendered = pixmap.toImage(); ratio = pixmap.devicePixelRatio()
+        painted = []
+        for row in range(5):
+            center = page.table.visualRect(page.model.index(row, 0)).center()
+            colors = [rendered.pixelColor(x, y)
+                      for y in range(round((center.y() - 6) * ratio), round((center.y() + 7) * ratio))
+                      for x in range(round((center.x() - 6) * ratio), round((center.x() + 7) * ratio))]
+            painted.append(any(c.green() > 225 and 120 < c.red() < 205 and c.blue() > 130 for c in colors))
+        return painted
+
+    try:
+        assert painted_checks() == [False] * 5
+        assert page.selected_count.isHidden()
+        assert page.table.horizontalHeader().checkState() == Qt.CheckState.Unchecked
+        for row in range(4):
+            QTest.mouseClick(page.table.viewport(), Qt.MouseButton.LeftButton,
+                             pos=page.table.visualRect(page.model.index(row, 0)).center())
+            if row == 0:
+                assert painted_checks() == [True, False, False, False, False]
+                assert page.selected_count.text().endswith('1')
+        assert len(page._checked_paths) == 4
+        assert page.selected_count.text().endswith('4')
+        assert page.table.horizontalHeader().checkState() == Qt.CheckState.PartiallyChecked
+        assert painted_checks() == [True, True, True, True, False]
+        QTest.mouseClick(page.table.viewport(), Qt.MouseButton.LeftButton,
+                         pos=page.table.visualRect(page.model.index(0, 0)).center())
+        assert len(page._checked_paths) == 3
+        assert page.model.item(0, 0).checkState() == Qt.CheckState.Unchecked
+        # QVariant may contain either the enum or the integer from setCheckState.
+        page.model.setData(page.model.index(0, 0), Qt.CheckState.Checked, Qt.ItemDataRole.CheckStateRole)
+        assert page.table.itemDelegate()._check_state(page.model.index(0, 0)) == Qt.CheckState.Checked
+    finally:
+        page.close()
+        app.setStyleSheet(previous)
+
+
+def test_details_toggle_is_above_panel_and_collapse_uses_full_table_width(tmp_path):
+    page, _ = _page(tmp_path)
+    page.resize(1600, 900); page.show(); QApplication.instance().processEvents()
+    try:
+        button = page.details_btn.geometry().translated(page.details_btn.parentWidget().mapTo(page, QPoint(0, 0)))
+        panel = page.detail.geometry().translated(page.detail.parentWidget().mapTo(page, QPoint(0, 0)))
+        assert button.bottom() < panel.top()
+        assert abs(button.right() - panel.right()) <= 1
+        expanded_width = page.table.width()
+        page.details_btn.click(); QApplication.instance().processEvents()
+        assert not page.detail.isVisible() and page.details_btn.isVisible()
+        assert page.table.width() == page.split.width()
+        assert page.table.width() > expanded_width
+        page.details_btn.click(); QApplication.instance().processEvents()
+        assert page.detail.isVisible() and page.detail_scroll.isVisible()
+        assert page.table.width() == expanded_width
+    finally:
+        page.close()
+
+
 def test_select_all_notifies_row_views_after_signal_blocked_batch(tmp_path):
     page, track = _page(tmp_path)
     try:
@@ -88,7 +153,7 @@ def test_toolbar_filters_and_category_palette(tmp_path):
         assert page.collection_btn.isEnabled() is False
         assert page.playlist_btn.isEnabled() is False
         assert page.reset_view_btn.parentWidget() is page
-        assert page.details_btn.parentWidget().parentWidget() is page.detail
+        assert page.details_btn.parentWidget() is page
         for category, color in page.CATEGORY_COLORS.items():
             index = page.status.findData(category)
             assert index >= 0
@@ -176,9 +241,10 @@ def test_family_disclosure_and_details_header_toggle(tmp_path):
         page.family_arrow.click()
         assert page.version_family_rows.isVisible()
         page.details_btn.click()
+        QApplication.instance().processEvents()
         assert not page.detail_scroll.isVisible()
         assert not page.detail_title.isVisible()
-        assert page.details_btn.geometry().top() < 50
+        assert page.details_btn.geometry().bottom() < page.split.geometry().top()
         assert page.details_btn.isVisible()
         assert page.details_btn.text() == 'Rozwiń szczegóły'
         assert page.details_btn.width() >= page.details_btn.sizeHint().width()

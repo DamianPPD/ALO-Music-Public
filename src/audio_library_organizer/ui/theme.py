@@ -2700,7 +2700,7 @@ QWidget#LibraryPage QFrame#LibraryDetailHeader { background:#09151b; border:0; b
 QWidget#LibraryPage QLabel#LibraryDetailTitle { color:#f3f8fa; font-size:14pt; font-weight:750; }
 QWidget#LibraryPage QFrame#DetailPanel QLabel#LibraryDetailNote { background:#09231f; border-radius:6px; padding:2px; }
 QWidget#LibraryPage QPushButton#DetailsToggle {
-    min-height:28px; max-height:28px; color:#c7d8e2;
+    min-height:26px; max-height:26px; color:#c7d8e2; font-size:9.2pt; font-weight:550;
     background:#12212a; border:1px solid #36546a; border-radius:6px; padding:0 8px;
 }
 QWidget#LibraryPage QPushButton#DetailsToggle:hover { border-color:#53cda5; background:#17342e; }

@@ -1,37 +1,106 @@
 """Bounded-memory waveform extraction and an accessible seek control."""
+import json
+import logging
+import math
 from pathlib import Path
-from threading import Event
+import subprocess
+import sys
+from tempfile import TemporaryDirectory
+from threading import Event, Lock, get_native_id
+from time import monotonic
 
 from PySide6.QtCore import QObject, QRunnable, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QSlider
 
+from audio_library_organizer.audio import waveform_worker
 
-def read_waveform(path: Path, bins: int = 240, cancel: Event | None = None) -> list[float]:
-    if bins <= 0:
+
+_DECODER_LOCK = Lock()
+_DECODER_TIMEOUT = 60.0
+_POLL_INTERVAL = 0.025
+_LOG = logging.getLogger(__name__)
+
+
+def _waveform_command(path, bins, output, trace, generation):
+    arguments = [str(path), str(bins), str(output), str(trace), str(generation)]
+    if getattr(sys, 'frozen', False):
+        return [sys.executable, '--waveform-worker', *arguments]
+    return [sys.executable, '-I', str(Path(waveform_worker.__file__).resolve()), *arguments]
+
+
+def _decode_isolated(path, bins, cancel, generation):
+    with TemporaryDirectory(prefix='alo-waveform-') as directory:
+        output = Path(directory) / 'peaks.json'
+        trace = Path(directory) / 'decoder.log'
+        command = _waveform_command(path, bins, output, trace, generation)
+        with (Path(directory) / 'stderr.log').open('w+b') as stderr:
+            process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                       stderr=stderr,
+                                       creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            _LOG.debug('waveform started path=%s generation=%s pid=%s thread=%s',
+                       path, generation, process.pid, get_native_id())
+            deadline = monotonic() + _DECODER_TIMEOUT
+            wake = cancel if cancel is not None else Event()
+            try:
+                while process.poll() is None:
+                    if (cancel is not None and cancel.is_set()) or monotonic() >= deadline:
+                        return []
+                    wake.wait(_POLL_INTERVAL)
+                if cancel is not None and cancel.is_set():
+                    return []
+                if process.returncode != 0:
+                    # Access violations terminate only the child, never the GUI.
+                    stderr.seek(0)
+                    details = stderr.read(16384).decode('utf-8', errors='replace')
+                    if trace.is_file():
+                        with trace.open('rb') as child_trace:
+                            child_trace.seek(max(0, trace.stat().st_size - 16384))
+                            details += child_trace.read().decode('utf-8', errors='replace')
+                    _LOG.warning('waveform decoder failed path=%s generation=%s pid=%s exit=%s\n%s',
+                                 path, generation, process.pid, process.returncode, details)
+                    return []
+                if not output.is_file() or output.stat().st_size > 128 * 1024:
+                    return []
+                peaks = json.loads(output.read_text(encoding='utf-8'))
+                if (not isinstance(peaks, list) or len(peaks) > bins
+                        or any(type(value) not in (int, float) or not math.isfinite(value)
+                               or not 0 <= value <= 1 for value in peaks)):
+                    return []
+                return peaks
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                process.wait(timeout=5)
+
+
+def read_waveform(path: Path, bins: int = 240, cancel: Event | None = None,
+                  *, generation: int = 0) -> list[float]:
+    """Decode outside the GUI process; at most one native decoder is active.
+
+    Cancellation kills and reaps the old process before another starts. A
+    failed, unavailable or hung decoder leaves the ordinary seek line.
+    """
+    if not 0 < bins <= 4096 or (cancel is not None and cancel.is_set()):
         return []
     try:
-        import numpy as np
-        import soundfile as sf
-        with sf.SoundFile(str(path)) as audio:
-            count = min(bins, len(audio))
-            peaks = []
-            for i in range(count):
-                remaining = (i + 1) * len(audio) // count - audio.tell()
-                peak = 0.0
-                while remaining > 0:
-                    if cancel is not None and cancel.is_set():
-                        return []
-                    samples = audio.read(min(65536, remaining), dtype='float32', always_2d=True)
-                    if not len(samples):
-                        return []
-                    peak = max(peak, float(np.max(np.abs(np.nan_to_num(samples)))))
-                    remaining -= len(samples)
-                peaks.append(min(1.0, peak))
-            return peaks
-    except (ImportError, OSError, RuntimeError, ValueError):
-        # Unsupported files keep an ordinary seek line, never a fake waveform.
+        path = Path(path).resolve()
+        if not path.is_file():
+            return []
+    except OSError:
         return []
+    while not _DECODER_LOCK.acquire(timeout=_POLL_INTERVAL):
+        if cancel is not None and cancel.is_set():
+            return []
+    try:
+        if cancel is not None and cancel.is_set():
+            return []
+        return _decode_isolated(path, bins, cancel, generation)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        # IPC/startup errors cannot prevent playback or seek.
+        return []
+    finally:
+        _DECODER_LOCK.release()
 
 
 class WaveformSignals(QObject):
@@ -45,7 +114,9 @@ class WaveformJob(QRunnable):
         self.signals = WaveformSignals()
 
     def run(self):
-        peaks = read_waveform(self.path, cancel=self.cancel)
+        _LOG.debug('WaveformJob path=%s generation=%s thread=%s',
+                   self.path, self.generation, get_native_id())
+        peaks = read_waveform(self.path, cancel=self.cancel, generation=self.generation)
         if not self.cancel.is_set():
             self.signals.ready.emit(self.generation, peaks)
 

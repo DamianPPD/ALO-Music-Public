@@ -80,9 +80,10 @@ def test_library_status_is_the_only_colored_table_cell_and_selection_stays_stabl
     assert 'setTextElideMode(Qt.TextElideMode.ElideRight)' in LIBRARY
 
 
-def test_library_details_button_is_in_panel_header():
+def test_library_details_button_is_above_panel_and_right_aligned():
     assert "self.details_btn.setObjectName('DetailsToggle')" in LIBRARY
-    assert 'self.details_btn.clicked.connect(self._toggle_details); header_row.addWidget(self.details_btn)' in LIBRARY
+    assert 'details_controls.addWidget(self.details_btn, 0, Qt.AlignmentFlag.AlignRight)' in LIBRARY
+    assert LIBRARY.index('root.addLayout(details_controls)') < LIBRARY.index('root.addWidget(self.split, 1)')
     assert 'QPushButton#DetailsToggle' in THEME
 
 

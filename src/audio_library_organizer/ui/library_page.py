@@ -104,10 +104,17 @@ class StableTableView(QTableView):
 class LibraryRowDelegate(QStyledItemDelegate):
     """Draw a persistent playing-row highlight without native cell focus outlines."""
 
+    @staticmethod
+    def _check_state(index):
+        value = index.data(Qt.ItemDataRole.CheckStateRole)
+        # PySide may return an enum after setData and an int after setCheckState.
+        return Qt.CheckState.Unchecked if value is None else Qt.CheckState(value)
+
     def editorEvent(self, event, model, option, index):
         if index.column() == 0 and event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
-            checked = index.data(Qt.ItemDataRole.CheckStateRole) == Qt.CheckState.Checked.value
-            model.setData(index, Qt.CheckState.Unchecked if checked else Qt.CheckState.Checked, Qt.ItemDataRole.CheckStateRole)
+            checked = self._check_state(index) == Qt.CheckState.Checked
+            state = Qt.CheckState.Unchecked if checked else Qt.CheckState.Checked
+            model.setData(index, state.value, Qt.ItemDataRole.CheckStateRole)
             return True
         return super().editorEvent(event, model, option, index)
 
@@ -125,7 +132,7 @@ class LibraryRowDelegate(QStyledItemDelegate):
         super().paint(painter, clean, index)
         if index.column() == 0:
             square = QRect(option.rect.center().x() - 8, option.rect.center().y() - 8, 16, 16)
-            checked = index.data(Qt.ItemDataRole.CheckStateRole) == Qt.CheckState.Checked.value
+            checked = self._check_state(index) == Qt.CheckState.Checked
             painter.save()
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             painter.setPen(QPen(QColor('#56d99a' if checked else '#82969b'), 1.4))
@@ -301,11 +308,12 @@ class LibraryPage(QWidget):
         header_row.addWidget(self.detail_title_icon)
         self.detail_title = QLabel('Szczegóły utworu'); self.detail_title.setObjectName('LibraryDetailTitle')
         header_row.addWidget(self.detail_title); header_row.addStretch(1)
-        self.details_btn = QPushButton('Zwiń szczegóły'); self.details_btn.setObjectName('DetailsToggle')
-        self.details_btn.setCheckable(True); self.details_btn.setChecked(True); self.details_btn.setFixedHeight(28)
-        self.details_btn.setIcon(library_icon('collapse', '#aec4d3', 18)); self.details_btn.setIconSize(QSize(18, 18))
+        self.details_btn = QPushButton('Zwiń szczegóły', self); self.details_btn.setObjectName('DetailsToggle')
+        self.details_btn.setCheckable(True); self.details_btn.setChecked(True); self.details_btn.setFixedHeight(26)
+        self.details_btn.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        self.details_btn.setIcon(library_icon('collapse', '#aec4d3', 14)); self.details_btn.setIconSize(QSize(14, 14))
         self.details_btn.setToolTip(ui_text(self, 'Zwiń szczegóły'))
-        self.details_btn.clicked.connect(self._toggle_details); header_row.addWidget(self.details_btn)
+        self.details_btn.clicked.connect(self._toggle_details)
         detail_outer.addWidget(header)
 
         self.detail_scroll = QScrollArea(); self.detail_scroll.setWidgetResizable(True)
@@ -433,12 +441,12 @@ class LibraryPage(QWidget):
         actions.addWidget(self.detail_edit, 1)
         self.detail_actions = actions_bar
         detail_outer.addWidget(actions_bar)
-        self.collapsed_filler = QWidget()
-        self.collapsed_filler.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
-        self.collapsed_filler.hide()
-        detail_outer.addWidget(self.collapsed_filler, 1)
-
         self.split.addWidget(self.detail); self.split.setSizes([840, 720])
+        self._expanded_detail_sizes = [840, 720]
+        details_controls = QHBoxLayout(); details_controls.setContentsMargins(0, 0, 0, 0)
+        details_controls.addStretch(1)
+        details_controls.addWidget(self.details_btn, 0, Qt.AlignmentFlag.AlignRight)
+        root.addLayout(details_controls)
         root.addWidget(self.split, 1)
 
         self.search.textChanged.connect(self._filters_changed)
@@ -1074,32 +1082,19 @@ class LibraryPage(QWidget):
         show_cover_preview(self, self._cover_pixmap, title=ui_text(self, 'Powiększona okładka'), note=ui_text(self, self._cover_note))
 
     def _toggle_details(self, checked: bool):
-        self.detail_scroll.setVisible(checked)
-        self.detail_actions.setVisible(checked)
-        self.collapsed_filler.setVisible(not checked)
-        self.detail_title.setVisible(checked)
-        self.detail_title_icon.setVisible(checked)
+        if not checked and self.detail.isVisible():
+            self._expanded_detail_sizes = self.split.sizes()
+        self.detail.setVisible(checked)
         caption = 'Zwiń szczegóły' if checked else 'Rozwiń szczegóły'
         self.details_btn.setText(ui_text(self, caption))
         self.details_btn.setToolTip(ui_text(self, caption))
         self.details_btn.setProperty('_alo_pl_text', caption)
         self.details_btn.setProperty('_alo_pl_tooltip', caption)
+        self.details_btn.setIcon(library_icon('collapse' if checked else 'expand', '#aec4d3', 14))
         if checked:
-            self.detail.setMaximumWidth(940)
-            self.detail.setMinimumWidth(640)
+            self.split.setSizes(self._expanded_detail_sizes)
         else:
-            # Reserve both translations so switching language while collapsed fits.
-            metrics = self.details_btn.fontMetrics()
-            chrome = self.details_btn.sizeHint().width() - metrics.horizontalAdvance(self.details_btn.text())
-            collapsed_width = max(metrics.horizontalAdvance(text) for text in (
-                'Rozwiń szczegóły', 'Expand details')) + chrome + 28
-            self.detail.setMinimumWidth(collapsed_width)
-            self.detail.setMaximumWidth(collapsed_width)
-        self.details_btn.setIcon(library_icon('collapse' if checked else 'expand', '#aec4d3', 18))
-        if checked:
-            self.split.setSizes([820, 740])
-        else:
-            self.split.setSizes([1500, collapsed_width])
+            self.split.setSizes([self.split.width(), 0])
 
     def _toggle_family(self, checked: bool):
         self.version_family_rows.setVisible(checked)
