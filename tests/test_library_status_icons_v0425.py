@@ -147,6 +147,125 @@ def test_review_and_problem_accents_are_visible_and_selection_has_priority(statu
                                       round(box.center().y() * ratio)).name() == '#31d7c8'
 
 
+def test_status_rows_have_no_colored_horizontal_grid(status_page):
+    app, page, tracks = status_page
+    app.processEvents()
+    pixmap = page.table.viewport().grab()
+    image, ratio = pixmap.toImage(), pixmap.devicePixelRatio()
+    for track, tint in ((tracks[1], '#211e16'), (tracks[2], '#23181d')):
+        box = page.table.visualRect(page.model.index(_row(page, track), 3))
+        for y in (box.top() + 1, box.bottom() - 1):
+            assert image.pixelColor(round((box.left() + 12) * ratio), round(y * ratio)).name() == tint
+
+
+def test_default_split_matches_reference_and_keeps_quality_format_visible(status_page):
+    app, page, _ = status_page
+    page.resize(1600, 900)
+    app.processEvents()
+    table_width, detail_width = page.split.sizes()
+    assert .58 <= table_width / (table_width + detail_width) <= .62
+    for column in (8, 9):
+        box = page.table.visualRect(page.model.index(0, column))
+        assert box.right() < page.table.viewport().width()
+    page.split.setSizes([940, 720])
+    app.processEvents()
+    moved = page.split.sizes()
+    assert moved != [table_width, detail_width]
+    page.details_btn.click()
+    app.processEvents()
+    assert page.table.width() > table_width
+    page.details_btn.click()
+    app.processEvents()
+    assert page.split.sizes() == moved
+
+
+def test_detail_actions_are_wider_and_disclosure_is_easy_to_read(status_page):
+    _, page, _ = status_page
+    assert 312 <= page.detail_edit.width() <= 336
+    assert 34 <= page.details_btn.height() <= 40
+    assert page.details_btn.width() >= 150
+    assert page.details_btn.iconSize() == QSize(16, 16)
+
+
+def test_legend_is_in_top_filter_row_with_neutral_and_green_outline_icon(status_page):
+    app, page, _ = status_page
+    from PySide6.QtCore import QEvent, QPoint, QPointF
+    from PySide6.QtGui import QEnterEvent
+    from audio_library_organizer.ui.library_status_legend import install_library_status_legend
+    legend = install_library_status_legend(page)
+    app.processEvents()
+    center = legend.mapTo(page, legend.rect().center())
+    filter_center = page.search.mapTo(page, page.search.rect().center())
+    assert abs(center.y() - filter_center.y()) <= 3
+    assert center.x() > page.detail.mapTo(page, QPoint()).x()
+    assert legend.iconSize() == QSize(20, 20)
+    assert legend.width() >= 34 and legend.height() >= 34
+    assert legend.toolTip() == 'Legenda'
+    assert _icon_pixels(legend.icon()) == _icon_pixels(library_icon('legend', '#bdcbd3', 20))
+    QApplication.sendEvent(legend, QEnterEvent(QPointF(), QPointF(), QPointF()))
+    assert _icon_pixels(legend.icon()) == _icon_pixels(library_icon('legend', '#6de6a5', 20))
+    QApplication.sendEvent(legend, QEvent(QEvent.Type.Leave))
+    assert _icon_pixels(legend.icon()) == _icon_pixels(library_icon('legend', '#bdcbd3', 20))
+    for language, caption in (('en', 'Legend'), ('pl', 'Legenda')):
+        apply_static_language(page, language)
+        assert legend.toolTip() == caption
+    for width in (960, 1600):
+        page.resize(width, 900)
+        app.processEvents()
+        center = legend.mapTo(page, legend.rect().center())
+        filter_center = page.search.mapTo(page, page.search.rect().center())
+        assert abs(center.y() - filter_center.y()) <= 3
+        assert center.x() + legend.width() / 2 <= page.width()
+
+
+def test_legend_click_opens_existing_status_menu(status_page):
+    from PySide6.QtCore import QTimer
+    from PySide6.QtTest import QTest
+    from audio_library_organizer.ui.library_status_legend import install_library_status_legend
+    _, page, _ = status_page
+    legend = install_library_status_legend(page)
+    visible = []
+    def capture_popup_and_close():
+        visible.append(legend.menu().isVisible())
+        legend.menu().close()
+    # The popup runs a nested event loop; inspect and close it in that loop.
+    QTimer.singleShot(0, capture_popup_and_close)
+    QTest.mouseClick(legend, Qt.MouseButton.LeftButton)
+    assert visible == [True]
+    assert len(legend.menu().actions()) == 5
+
+
+def test_single_click_cycles_keep_details_consistent_without_playback(status_page):
+    from PySide6.QtTest import QTest
+    app, page, tracks = status_page
+    playback = []
+    page.play_requested.connect(playback.append)
+    sequence = [tracks[index] for index in (0, 1, 0, 2, 3, 1, 0)] * 5
+    for track in sequence:
+        box = page.table.visualRect(page.model.index(_row(page, track), 3))
+        QTest.mouseClick(page.table.viewport(), Qt.MouseButton.LeftButton, pos=box.center())
+        app.processEvents()
+        assert page._current_track() is track
+        assert page.detail.isVisible()
+        assert page.detail_labels['title'].text() == track.title
+    assert playback == []
+    assert page._checked_paths == set()
+
+
+def test_legend_svg_is_valid_minimal_outline_list():
+    from pathlib import Path
+    from xml.etree import ElementTree
+    from PySide6.QtSvg import QSvgRenderer
+    path = Path(__file__).resolve().parents[1] / 'src/audio_library_organizer/assets/icons/library_a/legend.svg'
+    assert path.is_file()
+    root = ElementTree.parse(path).getroot()
+    assert root.attrib['viewBox'] == '0 0 24 24'
+    assert root.attrib['fill'] == 'none'
+    assert float(root.attrib['stroke-width']) <= 1.6
+    assert len(root.findall('{http://www.w3.org/2000/svg}circle')) == 3
+    assert QSvgRenderer(str(path)).isValid()
+
+
 def test_nonsemantic_category_icons_are_neutral_until_hover_or_active(status_page):
     _, page, _ = status_page
     for category, asset in (('no_cover', 'no_cover'), ('no_year', 'no_year'),

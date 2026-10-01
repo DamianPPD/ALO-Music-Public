@@ -339,7 +339,7 @@ def test_legend_stays_at_upper_right_when_toolbar_reflows(tmp_path):
             page.resize(width, 720)
             page.show()
             app.processEvents()
-            assert page._toolbar_top.indexOf(legend) == page._toolbar_top.count() - 1
+            assert page._filters_top.indexOf(legend) == page._filters_top.count() - 1
             box = legend.geometry().translated(legend.parentWidget().mapTo(page, QPoint(0, 0)))
             assert box.right() >= page.width() - 12
             assert box.bottom() < page.split.geometry().top()

@@ -65,7 +65,7 @@ def test_library_details_keep_dense_cover_and_data_sections():
     assert "track_card.setObjectName('LibraryTrackDataCard')" in LIBRARY
     assert "self.technical_panel.setObjectName('LibraryTechnicalCard')" in LIBRARY
     assert "('duration', 'Czas trwania'" in LIBRARY
-    assert 'self.split.setSizes([840, 720])' in LIBRARY
+    assert 'self.split.setSizes([960, 640])' in LIBRARY
 
 
 def test_library_table_navigation_and_selection_stays_stable():

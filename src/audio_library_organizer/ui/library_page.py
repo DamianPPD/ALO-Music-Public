@@ -167,8 +167,9 @@ class LibraryRowDelegate(QStyledItemDelegate):
         if highlighted or accent is not None:
             painter.save()
             painter.setPen(QPen(PLAYING_ACCENT, 2.0) if highlighted else QPen(accent, 1.0))
-            painter.drawLine(option.rect.left(), option.rect.top() + 1, option.rect.right(), option.rect.top() + 1)
-            painter.drawLine(option.rect.left(), option.rect.bottom() - 1, option.rect.right(), option.rect.bottom() - 1)
+            if highlighted:
+                painter.drawLine(option.rect.left(), option.rect.top() + 1, option.rect.right(), option.rect.top() + 1)
+                painter.drawLine(option.rect.left(), option.rect.bottom() - 1, option.rect.right(), option.rect.bottom() - 1)
             if index.column() == 0:
                 painter.drawLine(option.rect.left() + 1, option.rect.top(), option.rect.left() + 1, option.rect.bottom())
             painter.restore()
@@ -335,9 +336,10 @@ class LibraryPage(QWidget):
         self.detail_title = QLabel('Szczegóły utworu'); self.detail_title.setObjectName('LibraryDetailTitle')
         header_row.addWidget(self.detail_title); header_row.addStretch(1)
         self.details_btn = QPushButton('Zwiń szczegóły', self); self.details_btn.setObjectName('DetailsToggle')
-        self.details_btn.setCheckable(True); self.details_btn.setChecked(True); self.details_btn.setFixedHeight(26)
+        self.details_btn.setCheckable(True); self.details_btn.setChecked(True); self.details_btn.setFixedHeight(34)
+        self.details_btn.setMinimumWidth(150)
         self.details_btn.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
-        self.details_btn.setIcon(library_icon('collapse', '#aec4d3', 14)); self.details_btn.setIconSize(QSize(14, 14))
+        self.details_btn.setIcon(library_icon('collapse', '#aec4d3', 16)); self.details_btn.setIconSize(QSize(16, 16))
         self.details_btn.setToolTip(ui_text(self, 'Zwiń szczegóły'))
         self.details_btn.clicked.connect(self._toggle_details)
         detail_outer.addWidget(header)
@@ -463,15 +465,15 @@ class LibraryPage(QWidget):
         actions = QHBoxLayout(actions_bar); actions.setContentsMargins(12, 8, 12, 8); actions.setSpacing(0)
         self.detail_edit = QPushButton('Edytuj metadane'); self.detail_edit.setObjectName('LibraryDetailEdit')
         self.detail_edit.setIcon(library_icon('metadata_edit', '#a5f3c1', 22)); self.detail_edit.setIconSize(QSize(22, 22))
-        self.detail_edit.setMinimumWidth(240); self.detail_edit.setMaximumWidth(360)
+        self.detail_edit.setMinimumWidth(324); self.detail_edit.setMaximumWidth(440)
         self.detail_edit.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         self.detail_edit.setToolTip(ui_text(self, 'Edytuj metadane'))
         self.detail_edit.clicked.connect(self._edit_current)
         actions.addStretch(1); actions.addWidget(self.detail_edit); actions.addStretch(1)
         self.detail_actions = actions_bar
         detail_outer.addWidget(actions_bar)
-        self.split.addWidget(self.detail); self.split.setSizes([840, 720])
-        self._expanded_detail_sizes = [840, 720]
+        self.split.addWidget(self.detail); self.split.setSizes([960, 640])
+        self._expanded_detail_sizes = [960, 640]
         details_controls = QHBoxLayout(); details_controls.setContentsMargins(0, 0, 0, 0)
         details_controls.addStretch(1)
         details_controls.addWidget(self.details_btn, 0, Qt.AlignmentFlag.AlignRight)
@@ -575,6 +577,9 @@ class LibraryPage(QWidget):
             for widget in widgets:
                 self._filters_top.addWidget(widget, 2 if widget is self.search else 1 if widget is self.genre_filter else 0)
             self._filters_top.addStretch(1)
+        legend = getattr(self, '_status_legend_button', None)
+        if legend is not None:
+            self._filters_top.addWidget(legend, 0, Qt.AlignmentFlag.AlignRight)
 
     def _layout_toolbar(self, width: int):
         compact = width < 850
@@ -595,10 +600,6 @@ class LibraryPage(QWidget):
         else:
             for widget in self._toolbar_widgets:
                 self._toolbar_top.addWidget(widget, 1 if widget is self.view_state_label else 0)
-        legend = getattr(self, '_status_legend_button', None)
-        if legend is not None:
-            self._toolbar_top.removeWidget(legend)
-            self._toolbar_top.addWidget(legend, 0, Qt.AlignmentFlag.AlignRight)
 
     def set_history_provider(self, provider):
         self._history_provider = provider
@@ -1130,7 +1131,7 @@ class LibraryPage(QWidget):
         self.details_btn.setToolTip(ui_text(self, caption))
         self.details_btn.setProperty('_alo_pl_text', caption)
         self.details_btn.setProperty('_alo_pl_tooltip', caption)
-        self.details_btn.setIcon(library_icon('collapse' if checked else 'expand', '#aec4d3', 14))
+        self.details_btn.setIcon(library_icon('collapse' if checked else 'expand', '#aec4d3', 16))
         if checked:
             self.split.setSizes(self._expanded_detail_sizes)
         else:

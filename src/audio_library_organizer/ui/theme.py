@@ -2700,10 +2700,16 @@ QWidget#LibraryPage QFrame#LibraryDetailHeader { background:#09151b; border:0; b
 QWidget#LibraryPage QLabel#LibraryDetailTitle { color:#f3f8fa; font-size:14pt; font-weight:750; }
 QWidget#LibraryPage QFrame#DetailPanel QLabel#LibraryDetailNote { background:#09231f; border-radius:6px; padding:2px; }
 QWidget#LibraryPage QPushButton#DetailsToggle {
-    min-height:26px; max-height:26px; color:#c7d8e2; font-size:9.2pt; font-weight:550;
-    background:#12212a; border:1px solid #36546a; border-radius:6px; padding:0 8px;
+    min-height:32px; max-height:32px; color:#dce9ef; font-size:10pt; font-weight:650;
+    background:#14262c; border:1px solid #476f6f; border-radius:6px; padding:0 12px;
 }
 QWidget#LibraryPage QPushButton#DetailsToggle:hover { border-color:#53cda5; background:#17342e; }
+QWidget#LibraryPage QToolButton#LibraryStatusLegendButton {
+    background:#151f27; border:1px solid #34434b; border-radius:7px; padding:0;
+}
+QWidget#LibraryPage QToolButton#LibraryStatusLegendButton:hover {
+    background:#1a3029; border-color:#4da27a;
+}
 QWidget#LibraryPage QPushButton#LibrarySecondaryAction {
     min-height:28px; max-height:28px; color:#b9cad1; font-weight:550;
     background:#121e27; border:1px solid #314b5b; border-radius:7px; padding:0 7px;

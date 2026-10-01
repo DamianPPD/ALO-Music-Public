@@ -43,11 +43,11 @@ def test_library_has_compact_dropdown_status_legend():
     assert 'QToolButton' in legend
     assert 'QMenu' in legend
     assert "setObjectName('LibraryStatusLegendButton')" in legend
-    assert "setText('Legenda statusów')" in legend
-    assert "setIcon(alo_icon('info'" in legend
+    assert "setText(ui_text(library_page, 'Legenda'))" in legend
+    assert "setIcon(library_icon('legend'" in legend
     for label in ('GOTOWE', 'DUPLIKAT', 'DO SPRAWDZENIA', 'PROBLEM', 'NIE WYBIERAM'):
         assert label in legend
-    assert 'library_page._toolbar_top.addWidget(button' in legend
+    assert 'library_page._filters_top.addWidget(button' in legend
     assert "setObjectName('LibraryStatusLegend')" not in legend
     assert 'install_library_status_legend(window.library)' in MAIN
 

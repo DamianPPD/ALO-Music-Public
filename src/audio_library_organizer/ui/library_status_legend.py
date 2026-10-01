@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, QSize, Qt
 from PySide6.QtWidgets import QMenu, QToolButton
 
 from audio_library_organizer.ui.state import status_presentation
-from audio_library_organizer.ui.icons import alo_icon
+from audio_library_organizer.ui.icons import alo_icon, library_icon
+from audio_library_organizer.ui.i18n import ui_text
 
 
 LEGEND_ITEMS = (
@@ -16,17 +17,26 @@ LEGEND_ITEMS = (
 )
 
 
+class LibraryLegendButton(QToolButton):
+    def event(self, event):
+        if event.type() in (QEvent.Type.Enter, QEvent.Type.Leave):
+            color = '#6de6a5' if event.type() == QEvent.Type.Enter else '#bdcbd3'
+            self.setIcon(library_icon('legend', color, 20))
+        return super().event(event)
+
+
 def install_library_status_legend(library_page) -> QToolButton:
-    """Install the compact status legend at the right end of the upper toolbar."""
+    """Install the compact status list in the top filter row above details."""
     existing = getattr(library_page, '_status_legend_button', None)
     if existing is not None:
         return existing
 
-    button = QToolButton(library_page)
+    button = LibraryLegendButton(library_page)
     button.setObjectName('LibraryStatusLegendButton')
-    button.setText('Legenda statusów')
-    button.setIcon(alo_icon('info', '#72d8f0', 16))
-    button.setToolTip('Pokaż znaczenie kolorów statusów')
+    button.setText(ui_text(library_page, 'Legenda'))
+    button.setIcon(library_icon('legend', '#bdcbd3', 20))
+    button.setIconSize(QSize(20, 20))
+    button.setToolTip(ui_text(library_page, 'Legenda'))
     button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
 
     menu = QMenu(button)
@@ -39,8 +49,8 @@ def install_library_status_legend(library_page) -> QToolButton:
         action.setToolTip(description)
     button.setMenu(menu)
 
-    button.setFixedSize(28, 28)
-    library_page._toolbar_top.addWidget(button, 0, Qt.AlignmentFlag.AlignRight)
+    button.setFixedSize(34, 34)
+    library_page._filters_top.addWidget(button, 0, Qt.AlignmentFlag.AlignRight)
 
     library_page._status_legend_button = button
     return button
