@@ -682,6 +682,8 @@ TEXT_MAP_EN.update({
     'Długość': 'Duration',
     'Format': 'Format',
     'Zaznaczono:': 'Selected:', 'Dodaj do playlisty': 'Add to playlist',
+    'Utwórz playlistę z zaznaczonych utworów': 'Create a playlist from selected tracks',
+    'Zwiń szczegóły': 'Collapse details', 'Rozwiń szczegóły': 'Expand details',
     'Zapisz zaznaczone utwory jako playlistę M3U8': 'Save selected tracks as an M3U8 playlist',
     'Filtruj według formatu pliku': 'Filter by file format',
     'Więcej akcji': 'More actions',

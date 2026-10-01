@@ -2,12 +2,15 @@ import os
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
-from PySide6.QtCore import Qt, QSignalBlocker
+from PySide6.QtCore import Qt, QPoint, QEvent, QCoreApplication
+from PySide6.QtGui import QPalette, QColor
+from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QFrame
 
 from audio_library_organizer.domain.models import TrackRecord
 from audio_library_organizer.ui.i18n import apply_static_language
 from audio_library_organizer.ui.library_page import LibraryPage
+from audio_library_organizer.ui.library_status_legend import install_library_status_legend, LEGEND_ITEMS
 from audio_library_organizer.ui.theme import DARK_STYLE
 
 
@@ -29,22 +32,51 @@ def _page(tmp_path):
 def test_selection_is_reconciled_with_visible_checkbox_model(tmp_path):
     page, track = _page(tmp_path)
     try:
-        key = page._path_key(track)
-        page._checked_paths.add(key)  # simulate stale state seen after a Windows reload
+        tracks = [TrackRecord(path=tmp_path / f'{i}.mp3', title=str(i)) for i in range(5)]
+        page.set_tracks(tracks)
+        expected = {page._path_key(t) for t in tracks[:4]}
+        page._checked_paths = expected.copy()
         page._update_selection_count()
-        assert page._checked_paths == set()
-        assert page.selected_count.isHidden()
-        assert page.table.horizontalHeader().checkState() == Qt.CheckState.Unchecked
-        assert not page.collection_btn.isEnabled() and not page.playlist_btn.isEnabled()
-
-        with QSignalBlocker(page.model):
-            page.model.item(0, 0).setCheckState(Qt.CheckState.Checked)
-        page._update_selection_count()
-        assert page._checked_paths == {key}
-        assert page.selected_count.text().endswith('1')
-        assert page.table.horizontalHeader().checkState() == Qt.CheckState.Checked
+        assert page._checked_paths == expected
+        checked = {page._path_key(page.model.item(row, 0).data(Qt.ItemDataRole.UserRole))
+                   for row in range(5) if page.model.item(row, 0).checkState() == Qt.CheckState.Checked}
+        assert checked == expected
+        assert page.selected_count.text().endswith('4')
+        assert page.table.horizontalHeader().checkState() == Qt.CheckState.PartiallyChecked
+        assert page.collection_btn.isEnabled() and page.playlist_btn.isEnabled()
+        page.resize(1600, 720); page.show()
+        QApplication.instance().processEvents()
+        pixmap = page.table.viewport().grab()
+        rendered = pixmap.toImage()
+        ratio = pixmap.devicePixelRatio()
+        painted = []
+        for row in range(5):
+            center = page.table.visualRect(page.model.index(row, 0)).center()
+            colors = [rendered.pixelColor(x, y)
+                      for y in range(round((center.y() - 6) * ratio), round((center.y() + 7) * ratio))
+                      for x in range(round((center.x() - 6) * ratio), round((center.x() + 7) * ratio))]
+            painted.append(any(c.green() > 225 and 120 < c.red() < 205 and c.blue() > 130 for c in colors))
+        assert painted == [True, True, True, True, False]
+        page.table.sortByColumn(3, Qt.SortOrder.DescendingOrder)
+        page.refresh(preserve_order=True)
+        assert page._visible_checked_paths() == expected
         page.search.setText('nothing')
         assert page._checked_paths == set() and page.selected_count.isHidden()
+    finally:
+        page.close()
+
+
+def test_select_all_notifies_row_views_after_signal_blocked_batch(tmp_path):
+    page, track = _page(tmp_path)
+    try:
+        spy = QSignalSpy(page.model.dataChanged)
+        page.table.horizontalHeader().toggleVisibleChecks()
+        assert spy.count() > 0
+        assert page.model.item(0, 0).checkState() == Qt.CheckState.Checked
+        assert page.selected_count.text().endswith('1')
+        page.table.horizontalHeader().toggleVisibleChecks()
+        assert page.selected_count.isHidden()
+        assert page.model.item(0, 0).checkState() == Qt.CheckState.Unchecked
     finally:
         page.close()
 
@@ -75,13 +107,13 @@ def test_details_match_final_sections_and_one_edit_action(tmp_path):
         assert not page.detail_title_icon.pixmap().isNull()
         assert page.detail_title.text() == 'Szczegóły utworu'
         assert {h.text() for h in page.detail_section_titles} == {
-            'Rodzina wersji', 'Dane utworu', 'Pewność dopasowania', 'Dane techniczne'}
-        assert len(page.detail_section_marks) == 4
+            'Rodzina wersji', 'Dane utworu', 'Dane techniczne'}
+        assert len(page.detail_section_marks) == 3
         assert all(mark.objectName() == 'LibrarySectionMark' for mark in page.detail_section_marks)
         assert page.detail_labels['album'].text() == 'Eurochart'
         assert [page.detail_labels[name].text() for name in ('year', 'bpm', 'genre')] == ['2008', '130', 'Trance']
-        assert page.confidence_percent.text() == '22%'
-        assert page.confidence_bar.value() == 22
+        assert page.detail.findChild(QFrame, 'LibraryConfidenceCard') is None
+        assert track.confidence == .22
         assert page.detail_labels['format'].text() == 'MP3'
         assert page.detail_labels['bitrate'].text() == '320 kb/s'
         assert page.detail_labels['sample_rate'].text() == '44.1 kHz'
@@ -102,9 +134,15 @@ def test_details_match_final_sections_and_one_edit_action(tmp_path):
 
 def test_completeness_uses_six_mockup_fields_not_editor_core_checks(tmp_path):
     page, track = _page(tmp_path)
+    app = QApplication.instance()
+    previous = app.styleSheet()
+    app.setStyleSheet(DARK_STYLE)
     try:
+        page.show()
+        app.processEvents()
         assert page.completeness_count.text() == '6/6'
         assert page.completeness_title.text() == 'Dane kompletne'
+        assert page.completeness_title.palette().color(QPalette.ColorRole.WindowText) == QColor('#64e8bc')
         track.album = None
         track.year = None
         page._show_detail()
@@ -112,8 +150,12 @@ def test_completeness_uses_six_mockup_fields_not_editor_core_checks(tmp_path):
         assert page.completeness_title.text() == 'Dane niekompletne'
         assert {name for name, label in page.completeness_fields.items() if label.property('complete') is False} == {'album', 'year'}
         assert 'Rok' in page.completeness_hint.text() and 'Album' in page.completeness_hint.text()
+        app.processEvents()
+        assert page.completeness_title.palette().color(QPalette.ColorRole.WindowText) == QColor('#ff927c')
+        assert page.completeness_fields['year'].palette().color(QPalette.ColorRole.WindowText) == QColor('#ff927c')
     finally:
         page.close()
+        app.setStyleSheet(previous)
 
 
 def test_family_disclosure_and_details_header_toggle(tmp_path):
@@ -137,10 +179,13 @@ def test_family_disclosure_and_details_header_toggle(tmp_path):
         assert not page.detail_scroll.isVisible()
         assert not page.detail_title.isVisible()
         assert page.details_btn.geometry().top() < 50
-        assert page.detail.width() == 52
+        assert page.details_btn.isVisible()
+        assert page.details_btn.text() == 'Rozwiń szczegóły'
+        assert page.details_btn.width() >= page.details_btn.sizeHint().width()
         page.details_btn.click()
         assert page.detail_scroll.isVisible()
         assert page.detail_title.isVisible()
+        assert page.details_btn.text() == 'Zwiń szczegóły'
     finally:
         page.close()
 
@@ -154,11 +199,13 @@ def test_new_details_text_translates_on_live_switch(tmp_path):
         assert page.completeness_title.text() == 'Complete data'
         assert page.completeness_hint.text() == 'All data is complete.'
         assert page.detail_section_titles[1].text() == 'Track data'
-        assert page.detail_section_titles[2].text() == 'Match confidence'
-        assert page.detail_section_titles[3].text() == 'Technical data'
-        assert page.confidence_description.text() == 'Low confidence — review the data'
+        assert page.detail_section_titles[2].text() == 'Technical data'
+        assert page.details_btn.text() == 'Collapse details'
+        page.details_btn.click()
+        assert page.details_btn.text() == 'Expand details'
         apply_static_language(page, 'pl')
         page._show_detail()
+        assert page.details_btn.text() == 'Rozwiń szczegóły'
         assert page.detail_title.text() == 'Szczegóły utworu'
         assert page.completeness_title.text() == 'Dane kompletne'
         track.album = None
@@ -197,6 +244,10 @@ def test_detail_geometry_and_scroll_at_supported_logical_dpi_widths(tmp_path):
             for key in ('year', 'bpm', 'genre', 'sample_rate', 'channels'):
                 value = page.detail_labels[key]
                 assert value.fontMetrics().horizontalAdvance(value.text()) <= value.width()
+            metric_hosts = [page.detail_labels[key].parentWidget() for key in ('year', 'bpm', 'genre')]
+            assert max(host.width() for host in metric_hosts) - min(host.width() for host in metric_hosts) <= 1
+            for key in ('year', 'bpm', 'genre'):
+                assert page.detail_labels[key].alignment() == Qt.AlignmentFlag.AlignCenter
             technical = page.technical_panel
             first = page.detail_labels['sample_rate']
             second = page.detail_labels['size']
@@ -208,3 +259,74 @@ def test_detail_geometry_and_scroll_at_supported_logical_dpi_widths(tmp_path):
     finally:
         page.close()
         app.setStyleSheet('')
+
+
+def test_legend_stays_at_upper_right_when_toolbar_reflows(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    page, track = _page(tmp_path)
+    try:
+        legend = install_library_status_legend(page)
+        assert install_library_status_legend(page) is legend
+        assert len(legend.menu().actions()) == len(LEGEND_ITEMS)
+        for width in (1920, 960, 800):
+            page.resize(width, 720)
+            page.show()
+            app.processEvents()
+            assert page._toolbar_top.indexOf(legend) == page._toolbar_top.count() - 1
+            box = legend.geometry().translated(legend.parentWidget().mapTo(page, QPoint(0, 0)))
+            assert box.right() >= page.width() - 12
+            assert box.bottom() < page.split.geometry().top()
+            assert legend.isVisible()
+        legend.menu().popup(legend.mapToGlobal(legend.rect().bottomLeft()))
+        app.processEvents()
+        assert legend.menu().isVisible()
+        legend.menu().hide()
+    finally:
+        page.close()
+
+
+def test_pending_table_style_refresh_is_cancelled_when_page_is_destroyed(tmp_path, capsys):
+    app = QApplication.instance() or QApplication([])
+    page, track = _page(tmp_path)
+    QCoreApplication.sendEvent(page.table, QEvent(QEvent.Type.StyleChange))
+    page.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    app.processEvents()
+    assert 'already deleted' not in capsys.readouterr().err
+
+
+def test_select_all_reconciles_once_even_when_batch_notification_emits_item_changed(tmp_path, monkeypatch):
+    page, track = _page(tmp_path)
+    try:
+        page.set_tracks([TrackRecord(path=tmp_path / f'{i}.mp3') for i in range(30)])
+        calls = []
+        original = page._update_selection_count
+        def counted():
+            calls.append(1)
+            original()
+        monkeypatch.setattr(page, '_update_selection_count', counted)
+        page.table.horizontalHeader().toggleVisibleChecks()
+        assert len(calls) == 1
+        assert len(page._visible_checked_paths()) == 30
+        assert page.selected_count.text().endswith('30')
+    finally:
+        page.close()
+
+
+def test_collapsed_details_fit_after_live_english_to_polish_switch(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    previous = app.styleSheet()
+    app.setStyleSheet(DARK_STYLE)
+    page, track = _page(tmp_path)
+    try:
+        page.resize(1280, 720); page.show()
+        apply_static_language(page, 'en')
+        page.details_btn.click()
+        app.processEvents()
+        apply_static_language(page, 'pl')
+        app.processEvents()
+        assert page.details_btn.text() == 'Rozwiń szczegóły'
+        assert page.details_btn.width() >= page.details_btn.sizeHint().width()
+    finally:
+        page.close()
+        app.setStyleSheet(previous)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import QMenu, QToolButton
 
@@ -23,7 +24,7 @@ def _color_icon(color: str) -> QIcon:
 
 
 def install_library_status_legend(library_page) -> QToolButton:
-    """Install a compact dropdown legend in the existing Library view-control row."""
+    """Install the compact status legend at the right end of the upper toolbar."""
     existing = getattr(library_page, '_status_legend_button', None)
     if existing is not None:
         return existing
@@ -43,12 +44,8 @@ def install_library_status_legend(library_page) -> QToolButton:
         action.setToolTip(description)
     button.setMenu(menu)
 
-    root = library_page.layout()
-    view_controls = root.itemAt(1).layout() if root is not None and root.count() > 1 else None
-    if view_controls is not None:
-        view_controls.addWidget(button)
-    elif root is not None:
-        root.addWidget(button)
+    button.setFixedSize(28, 28)
+    library_page._toolbar_top.addWidget(button, 0, Qt.AlignmentFlag.AlignRight)
 
     library_page._status_legend_button = button
     return button

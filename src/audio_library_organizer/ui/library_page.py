@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QComboBox, QTableView, QLabel,
     QSplitter, QFrame, QPushButton, QInputDialog, QMessageBox, QAbstractItemView,
     QHeaderView, QScrollArea, QGridLayout, QMenu, QCompleter,
-    QStyledItemDelegate, QStyleOptionViewItem, QStyle, QLayout, QProgressBar, QSizePolicy,
+    QStyledItemDelegate, QStyleOptionViewItem, QStyle, QLayout, QSizePolicy,
 )
 
 from audio_library_organizer import __version__
@@ -23,7 +23,6 @@ from audio_library_organizer.ui.state import (
     display_bpm, effective_status, track_matches_library_filters,
 )
 from audio_library_organizer.ui.widgets import ClickableCoverLabel, show_cover_preview
-from audio_library_organizer.ui.confidence import confidence_color, confidence_presentation
 from audio_library_organizer.ui.assets import asset_path
 from audio_library_organizer.ui.genre_input import build_genre_suggestions
 from audio_library_organizer.ui.i18n import ui_text, localized_no_cover_name, tr, language_for
@@ -182,6 +181,7 @@ class LibraryPage(QWidget):
         self._playing_path: str | None = None
         self._version_family_by_path: dict[str, list[TrackRecord]] = {}
         self._checked_paths: set[str] = set()
+        self._syncing_checks = False
 
         root = QVBoxLayout(self)
         root.setContentsMargins(4, 4, 4, 4)
@@ -228,7 +228,7 @@ class LibraryPage(QWidget):
         self._sync_format_options()
 
         self.collection_btn = QPushButton('Utwórz folder z zaznaczonych', self); self.collection_btn.setObjectName('LibraryCollectionAction'); self.collection_btn.setIcon(library_icon('folder_add', '#cbd8df', 18)); self.collection_btn.clicked.connect(self._request_collection)
-        self.playlist_btn = QPushButton('Dodaj do playlisty', self); self.playlist_btn.setObjectName('LibraryPlaylistAction'); self.playlist_btn.setIcon(library_icon('playlist', '#cbd8df', 18)); self.playlist_btn.clicked.connect(self._request_playlist)
+        self.playlist_btn = QPushButton('Utwórz playlistę', self); self.playlist_btn.setObjectName('LibraryPlaylistAction'); self.playlist_btn.setIcon(library_icon('playlist', '#cbd8df', 18)); self.playlist_btn.clicked.connect(self._request_playlist)
 
         view_controls = QVBoxLayout(); view_controls.setSpacing(5)
         self._toolbar_top = QHBoxLayout(); self._toolbar_top.setSpacing(8)
@@ -251,7 +251,7 @@ class LibraryPage(QWidget):
             button.setMinimumHeight(34)
             button.setMaximumHeight(34)
             button.setToolTip(ui_text(self, button.text()))
-        self.playlist_btn.setToolTip(ui_text(self, 'Zapisz zaznaczone utwory jako playlistę M3U8'))
+        self.playlist_btn.setToolTip(ui_text(self, 'Utwórz playlistę z zaznaczonych utworów'))
         self._toolbar_layout = view_controls
         self._toolbar_widgets = (self.collection_btn, self.playlist_btn,
                                  self.selected_count, self.view_state_label)
@@ -301,10 +301,10 @@ class LibraryPage(QWidget):
         header_row.addWidget(self.detail_title_icon)
         self.detail_title = QLabel('Szczegóły utworu'); self.detail_title.setObjectName('LibraryDetailTitle')
         header_row.addWidget(self.detail_title); header_row.addStretch(1)
-        self.details_btn = QPushButton(); self.details_btn.setObjectName('DetailsToggle')
-        self.details_btn.setCheckable(True); self.details_btn.setChecked(True); self.details_btn.setFixedSize(28, 28)
+        self.details_btn = QPushButton('Zwiń szczegóły'); self.details_btn.setObjectName('DetailsToggle')
+        self.details_btn.setCheckable(True); self.details_btn.setChecked(True); self.details_btn.setFixedHeight(28)
         self.details_btn.setIcon(library_icon('collapse', '#aec4d3', 18)); self.details_btn.setIconSize(QSize(18, 18))
-        self.details_btn.setToolTip(ui_text(self, 'Ukryj szczegóły'))
+        self.details_btn.setToolTip(ui_text(self, 'Zwiń szczegóły'))
         self.details_btn.clicked.connect(self._toggle_details); header_row.addWidget(self.details_btn)
         detail_outer.addWidget(header)
 
@@ -336,12 +336,13 @@ class LibraryPage(QWidget):
 
         self.completeness_card = QFrame(); self.completeness_card.setObjectName('LibraryCompletenessCard')
         completeness_layout = QVBoxLayout(self.completeness_card)
-        completeness_layout.setContentsMargins(13, 10, 13, 9); completeness_layout.setSpacing(3)
+        completeness_layout.setContentsMargins(13, 10, 13, 9); completeness_layout.setSpacing(6)
         completeness_top = QHBoxLayout(); completeness_top.setSpacing(7)
         self.completeness_icon = QLabel(); self.completeness_icon.setObjectName('LibraryCompletenessIcon')
         self.completeness_icon.setPixmap(library_icon('approve', '#2de1ac', 21).pixmap(21, 21))
         completeness_top.addWidget(self.completeness_icon)
         self.completeness_title = QLabel('Dane kompletne'); self.completeness_title.setObjectName('LibraryCompletenessTitle')
+        self.completeness_title.setWordWrap(True)
         completeness_top.addWidget(self.completeness_title, 1)
         self.completeness_count = QLabel('0/6'); self.completeness_count.setObjectName('LibraryCompletenessCount')
         self.completeness_hint = QLabel(''); self.completeness_hint.setObjectName('LibraryCompletenessHint')
@@ -349,7 +350,6 @@ class LibraryPage(QWidget):
         completeness_layout.addLayout(completeness_top)
         completeness_layout.addWidget(self.completeness_count)
         completeness_layout.addWidget(self.completeness_hint)
-        completeness_layout.addStretch(1)
         separator = QFrame(); separator.setObjectName('LibraryDetailSeparator'); separator.setFixedHeight(1)
         completeness_layout.addWidget(separator)
         fields_grid = QGridLayout(); fields_grid.setContentsMargins(0, 3, 0, 0)
@@ -375,7 +375,7 @@ class LibraryPage(QWidget):
         summary_row.setAlignment(self.completeness_card, Qt.AlignmentFlag.AlignTop)
         self.completeness_card.setMinimumHeight(218)
         summary_host = QWidget(); summary_host.setObjectName('LibrarySummary')
-        summary_host.setFixedHeight(218); summary_host.setLayout(summary_row)
+        summary_host.setMinimumHeight(218); summary_host.setLayout(summary_row)
         detail_root.addWidget(summary_host)
 
         self.detail_labels: dict[str, QLabel] = {}
@@ -394,24 +394,9 @@ class LibraryPage(QWidget):
             if index:
                 divider = QFrame(); divider.setObjectName('LibraryMetricDivider'); divider.setFixedWidth(1)
                 metrics.addWidget(divider)
-            metrics.addWidget(self._detail_metric(key, title, icon), 1)
+            metrics.addWidget(self._detail_metric(key, title, icon, centered=True), 1)
         data_layout.addLayout(metrics)
         detail_root.addWidget(track_card)
-
-        match_box = QFrame(); match_box.setObjectName('LibraryConfidenceCard')
-        confidence_layout = QVBoxLayout(match_box)
-        confidence_layout.setContentsMargins(0, 0, 0, 8); confidence_layout.setSpacing(3)
-        match_head, _ = self._detail_section_header('Pewność dopasowania')
-        confidence_layout.addWidget(match_head)
-        confidence_row = QHBoxLayout(); confidence_row.setContentsMargins(12, 2, 12, 0); confidence_row.setSpacing(12)
-        self.confidence_percent = QLabel('—'); self.confidence_percent.setObjectName('LibraryConfidencePercent')
-        self.confidence_bar = QProgressBar(); self.confidence_bar.setObjectName('LibraryConfidenceBar')
-        self.confidence_bar.setRange(0, 100); self.confidence_bar.setTextVisible(False); self.confidence_bar.setFixedHeight(10)
-        confidence_row.addWidget(self.confidence_percent); confidence_row.addWidget(self.confidence_bar, 1)
-        confidence_layout.addLayout(confidence_row)
-        self.confidence_description = QLabel(''); self.confidence_description.setObjectName('LibraryConfidenceDescription')
-        confidence_layout.addWidget(self.confidence_description)
-        detail_root.addWidget(match_box)
 
         self.technical_panel = QFrame(); self.technical_panel.setObjectName('LibraryTechnicalCard')
         technical_layout = QVBoxLayout(self.technical_panel)
@@ -496,8 +481,23 @@ class LibraryPage(QWidget):
         row.addWidget(value, 1); self.detail_labels[key] = value
         return host
 
-    def _detail_metric(self, key: str, title: str, icon: str) -> QWidget:
+    def _detail_metric(self, key: str, title: str, icon: str, *, centered: bool = False) -> QWidget:
         host = QWidget(); host.setObjectName('LibraryMetric')
+        if centered:
+            host.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            column = QVBoxLayout(host); column.setContentsMargins(7, 4, 7, 4); column.setSpacing(1)
+            heading = QHBoxLayout(); heading.setSpacing(5)
+            heading.addStretch(1)
+            glyph = QLabel(); glyph.setObjectName('LibraryFieldIcon')
+            glyph.setPixmap(library_icon(icon, '#8babc0', 16).pixmap(16, 16)); heading.addWidget(glyph)
+            label = QLabel(title); label.setObjectName('LibraryMetricName'); heading.addWidget(label)
+            heading.addStretch(1); column.addLayout(heading)
+            value = QLabel('—'); value.setObjectName('LibraryMetricValue'); value.setWordWrap(True)
+            value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            column.addWidget(value)
+            self.detail_labels[key] = value
+            return host
         row = QHBoxLayout(host); row.setContentsMargins(7, 4, 7, 4); row.setSpacing(5)
         glyph = QLabel(); glyph.setObjectName('LibraryFieldIcon')
         glyph.setPixmap(library_icon(icon, '#8babc0', 16).pixmap(16, 16)); row.addWidget(glyph)
@@ -558,6 +558,10 @@ class LibraryPage(QWidget):
         else:
             for widget in self._toolbar_widgets:
                 self._toolbar_top.addWidget(widget, 1 if widget is self.view_state_label else 0)
+        legend = getattr(self, '_status_legend_button', None)
+        if legend is not None:
+            self._toolbar_top.removeWidget(legend)
+            self._toolbar_top.addWidget(legend, 0, Qt.AlignmentFlag.AlignRight)
 
     def set_history_provider(self, provider):
         self._history_provider = provider
@@ -601,8 +605,15 @@ class LibraryPage(QWidget):
         self.format_filter.style().polish(self.format_filter)
 
     def _on_check_item_changed(self, item):
-        if item.column() != 0:
+        if self._syncing_checks or item.column() != 0:
             return
+        key = self._path_key(item.data(Qt.ItemDataRole.UserRole))
+        if key is None:
+            return
+        if item.checkState() == Qt.CheckState.Checked:
+            self._checked_paths.add(key)
+        else:
+            self._checked_paths.discard(key)
         self._update_selection_count()
 
     def _visible_checked_paths(self) -> set[str]:
@@ -613,12 +624,31 @@ class LibraryPage(QWidget):
                 and item.data(Qt.ItemDataRole.UserRole) is not None}
 
     def _update_selection_count(self):
-        self._checked_paths = self._visible_checked_paths()
+        visible = {self._path_key(track) for track in self.visible_tracks()}
+        self._checked_paths.intersection_update(visible)
+        changed_rows = []
+        with QSignalBlocker(self.model):
+            for row in range(self.model.rowCount()):
+                item = self.model.item(row, 0)
+                key = self._path_key(item.data(Qt.ItemDataRole.UserRole))
+                state = Qt.CheckState.Checked if key in self._checked_paths else Qt.CheckState.Unchecked
+                if item.checkState() != state:
+                    item.setCheckState(state)
+                    changed_rows.append(row)
+        # Batch changes suppress dataChanged; notify row views as well as the header.
+        if changed_rows:
+            self._syncing_checks = True
+            try:
+                self.model.dataChanged.emit(self.model.index(min(changed_rows), 0), self.model.index(max(changed_rows), 0),
+                                            [int(Qt.ItemDataRole.CheckStateRole)])
+            finally:
+                self._syncing_checks = False
         count = len(self._checked_paths)
         self.selected_count.setText(f'{ui_text(self, "Zaznaczono:")} {count}')
         self.selected_count.setVisible(count > 0)
         self.collection_btn.setEnabled(count > 0)
         self.playlist_btn.setEnabled(count > 0)
+        self.table.viewport().update()
         self.table.horizontalHeader().viewport().update()
 
     def _filters_changed(self, *_):
@@ -630,12 +660,7 @@ class LibraryPage(QWidget):
         visible = {self._path_key(track) for track in self.visible_tracks()}
         if not visible:
             return
-        check_all = not visible <= self._visible_checked_paths()
-        with QSignalBlocker(self.model):
-            for row in range(self.model.rowCount()):
-                item = self.model.item(row, 0)
-                if item is not None:
-                    item.setCheckState(Qt.CheckState.Checked if check_all else Qt.CheckState.Unchecked)
+        self._checked_paths = set() if visible <= self._checked_paths else visible
         self._update_selection_count()
 
     def _ensure_status_column_width(self) -> None:
@@ -653,7 +678,7 @@ class LibraryPage(QWidget):
             QEvent.Type.ApplicationFontChange,
             QEvent.Type.StyleChange,
         }:
-            QTimer.singleShot(0, self._ensure_status_column_width)
+            QTimer.singleShot(0, self, self._ensure_status_column_width)
         if watched is self.status.view() and event.type() == QEvent.Type.Hide:
             self._paint_category_icons()
         return handled
@@ -792,7 +817,7 @@ class LibraryPage(QWidget):
         self.table.selectionModel().clearSelection()
 
     def refresh(self, *_, preserve_order: bool = False, clear_checks: bool = False):
-        checked = set() if clear_checks else self._visible_checked_paths()
+        checked = set() if clear_checks else self._checked_paths.copy()
         self._sync_format_options()
         view_state = self._capture_view_state()
         text = self.search.text().casefold().strip()
@@ -932,19 +957,6 @@ class LibraryPage(QWidget):
         self.detail_labels['duration'].setText('—' if t.duration_seconds is None else f'{int(t.duration_seconds)//60}:{int(t.duration_seconds)%60:02d}')
         self.detail_labels['size'].setText('—' if not t.size_bytes else f'{t.size_bytes / (1024 * 1024):.1f} MB')
 
-        confidence = confidence_presentation(t.confidence)
-        color = confidence_color(confidence.percent)
-        self.confidence_percent.setText('—' if confidence.percent is None else f'{confidence.percent}%')
-        self.confidence_percent.setStyleSheet(f'color:{color}')
-        self.confidence_bar.setValue(confidence.percent or 0)
-        self.confidence_bar.setStyleSheet(
-            f'QProgressBar#LibraryConfidenceBar::chunk {{ background:{color}; border-radius:4px; }}')
-        description = {
-            'none': 'Brak wyniku rozpoznania', 'low': 'Niska pewność — sprawdź dane',
-            'medium': 'Dopasowanie wymaga krótkiej kontroli', 'high': 'Dopasowanie bardzo wysokie',
-        }[confidence.kind]
-        self.confidence_description.setText(ui_text(self, description))
-
         try:
             family_key = str(Path(t.path).resolve()).casefold()
         except OSError:
@@ -980,16 +992,19 @@ class LibraryPage(QWidget):
         self.completeness_title.setText(
             tr('library.details.complete' if all(complete.values()) else 'library.details.incomplete', language_for(self)))
         self.completeness_card.setProperty('complete', all(complete.values()))
-        self.completeness_card.style().unpolish(self.completeness_card)
-        self.completeness_card.style().polish(self.completeness_card)
+        status_icon = (library_icon('approve', '#2de1ac', 21) if all(complete.values())
+                       else alo_icon('warning', '#ff927c', 21))
+        self.completeness_icon.setPixmap(status_icon.pixmap(21, 21))
+        for widget in (self.completeness_card, self.completeness_title, self.completeness_count, self.completeness_hint):
+            widget.style().unpolish(widget); widget.style().polish(widget)
         for key, label in self.completeness_fields.items():
             label.setText(ui_text(self, {
                 'artist': 'Wykonawca', 'title': 'Tytuł / wersja', 'album': 'Album',
                 'year': 'Rok', 'bpm': 'BPM', 'genre': 'Gatunek',
             }[key]))
-            self.completeness_field_icons[key].setPixmap(library_icon(
-                'approve' if complete[key] else 'empty_check',
-                '#2de1ac' if complete[key] else '#83939e', 13).pixmap(13, 13))
+            field_icon = (library_icon('approve', '#2de1ac', 13) if complete[key]
+                          else alo_icon('warning', '#ff927c', 13))
+            self.completeness_field_icons[key].setPixmap(field_icon.pixmap(13, 13))
             label.setProperty('complete', complete[key])
             label.style().unpolish(label); label.style().polish(label)
         if all(complete.values()):
@@ -1064,18 +1079,27 @@ class LibraryPage(QWidget):
         self.collapsed_filler.setVisible(not checked)
         self.detail_title.setVisible(checked)
         self.detail_title_icon.setVisible(checked)
+        caption = 'Zwiń szczegóły' if checked else 'Rozwiń szczegóły'
+        self.details_btn.setText(ui_text(self, caption))
+        self.details_btn.setToolTip(ui_text(self, caption))
+        self.details_btn.setProperty('_alo_pl_text', caption)
+        self.details_btn.setProperty('_alo_pl_tooltip', caption)
         if checked:
             self.detail.setMaximumWidth(940)
             self.detail.setMinimumWidth(640)
         else:
-            self.detail.setMinimumWidth(52)
-            self.detail.setMaximumWidth(52)
+            # Reserve both translations so switching language while collapsed fits.
+            metrics = self.details_btn.fontMetrics()
+            chrome = self.details_btn.sizeHint().width() - metrics.horizontalAdvance(self.details_btn.text())
+            collapsed_width = max(metrics.horizontalAdvance(text) for text in (
+                'Rozwiń szczegóły', 'Expand details')) + chrome + 28
+            self.detail.setMinimumWidth(collapsed_width)
+            self.detail.setMaximumWidth(collapsed_width)
         self.details_btn.setIcon(library_icon('collapse' if checked else 'expand', '#aec4d3', 18))
-        self.details_btn.setToolTip(ui_text(self, 'Ukryj szczegóły' if checked else 'Pokaż szczegóły'))
         if checked:
             self.split.setSizes([820, 740])
         else:
-            self.split.setSizes([1500, 52])
+            self.split.setSizes([1500, collapsed_width])
 
     def _toggle_family(self, checked: bool):
         self.version_family_rows.setVisible(checked)

@@ -34,7 +34,7 @@ def test_editor_footer_uses_one_two_state_status_toggle():
 
 
 def test_library_legend_is_dropdown_in_existing_view_controls():
-    assert 'view_controls.addWidget(button)' in LEGEND
+    assert 'library_page._toolbar_top.addWidget(button' in LEGEND
     assert "setObjectName('LibraryStatusLegendButton')" in LEGEND
     assert 'QMenu' in LEGEND
     assert 'DO SPRAWDZENIA — ważne' in LEGEND

@@ -157,16 +157,16 @@ def test_library_new_controls_switch_pl_en_without_losing_filter_or_checks(tmp_p
         assert page.format_filter.currentText() == 'Format: MP3'
         assert page.detail_edit.text() == 'Edit metadata'
         assert page.collection_btn.text() == 'Create folder from selected'
-        assert page.playlist_btn.text() == 'Add to playlist'
-        assert page.playlist_btn.toolTip() == 'Save selected tracks as an M3U8 playlist'
+        assert page.playlist_btn.text() == 'Create playlist'
+        assert page.playlist_btn.toolTip() == 'Create a playlist from selected tracks'
         apply_static_language(page, 'pl')
         page.refresh(preserve_order=True)
         assert 'Zaznaczono:' in page.selected_count.text()
         assert page.model.item(0, 0).checkState() == Qt.CheckState.Checked
         assert page.detail_edit.text() == 'Edytuj metadane'
         assert page.collection_btn.text() == 'Utwórz folder z zaznaczonych'
-        assert page.playlist_btn.text() == 'Dodaj do playlisty'
-        assert page.playlist_btn.toolTip() == 'Zapisz zaznaczone utwory jako playlistę M3U8'
+        assert page.playlist_btn.text() == 'Utwórz playlistę'
+        assert page.playlist_btn.toolTip() == 'Utwórz playlistę z zaznaczonych utworów'
     finally:
         page.close()
 

@@ -33,14 +33,27 @@ def test_dashboard_has_library_health_and_ministats():
     assert 'build_library_health' in MAIN
 
 
-def test_confidence_is_graphical_in_editor_and_library_details():
-    assert 'ConfidenceWidget' in EDITOR
-    assert 'self.confidence_bar = QProgressBar()' in LIBRARY
-    assert 'self.confidence_bar.setValue(confidence.percent or 0)' in LIBRARY
-    assert 'MetadataStatusCompact' in EDITOR
-    assert 'RecognitionInfoCompact' in EDITOR
-    assert 'QProgressBar#ConfidenceBar' in THEME
-    assert 'QProgressBar#LibraryConfidenceBar' in THEME
+def test_confidence_remains_graphical_in_editor_when_library_omits_it(tmp_path):
+    import os
+    os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+    from PySide6.QtWidgets import QApplication, QProgressBar
+    from audio_library_organizer.domain.models import TrackRecord
+    from audio_library_organizer.ui.library_page import LibraryPage
+    from audio_library_organizer.ui.metadata_editor import MetadataEditorDialog
+
+    app = QApplication.instance() or QApplication([])
+    track = TrackRecord(path=tmp_path / 'track.mp3', confidence=.22)
+    page = LibraryPage()
+    editor = MetadataEditorDialog(track)
+    try:
+        page.set_tracks([track]); page.select_track(track)
+        assert page.detail.findChildren(QProgressBar) == []
+        assert editor.recognition_confidence.text() == '22%'
+        assert editor.recognition_bar.value() == 22
+    finally:
+        page.close()
+        editor._force_closing = True
+        editor.close()
 
 
 def test_metadata_source_menu_has_no_manual_choice_and_uses_colored_icons():

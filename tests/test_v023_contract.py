@@ -82,5 +82,3 @@ def test_library_keeps_status_visible_and_titles_have_tooltip():
     assert 'horizontalScrollBar().setValue(0)' in LIBRARY
     assert "items[3].setToolTip(track.title or '')" in LIBRARY
     assert 'setTextElideMode(Qt.TextElideMode.ElideRight)' in LIBRARY
-    assert 'confidence_color(confidence.percent)' in LIBRARY
-    assert 'self.confidence_bar.setValue(confidence.percent or 0)' in LIBRARY
