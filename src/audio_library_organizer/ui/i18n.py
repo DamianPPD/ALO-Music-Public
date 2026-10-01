@@ -742,6 +742,8 @@ TEXT_MAP_EN.update({
     'Poważny problem lub podejrzane dane wymagające szczególnej uwagi.': 'A serious issue or suspicious data needs special attention.',
     'Utwór pominięty decyzją użytkownika.': 'Track skipped by your choice.',
     'Legenda statusów': 'Status legend', 'Pokaż znaczenie kolorów statusów': 'Show what the status colors mean',
+    'PROBLEM': 'PROBLEM',
+    'PROBLEM — Poważny problem lub podejrzane dane wymagające szczególnej uwagi.': 'PROBLEM — A serious issue or suspicious data that needs special attention.',
     'GOTOWE — Utwór gotowy do użycia / eksportu.': 'READY — Track ready to use or export.',
     'DUPLIKAT — Utwór należy do grupy wymagającej porównania.': 'DUPLICATE — Track belongs to a group that needs comparison.',
     'DO SPRAWDZENIA — Dane wymagają ręcznej kontroli.': 'NEEDS REVIEW — Metadata needs manual review.',

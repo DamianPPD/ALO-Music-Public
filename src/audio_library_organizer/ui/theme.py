@@ -2656,13 +2656,13 @@ LIGHT_STYLE += START_STUDIO_STYLE
 # Minimal Outline Library controls are scoped to the Library page.
 LIBRARY_A_STYLE = r'''
 QWidget#LibraryPage QPushButton#LibraryDetailEdit {
-    min-height:44px; max-height:44px;
-    background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #095740,stop:1 #087456);
-    border:1px solid #20d7a0; border-radius:8px;
+    min-height:36px; max-height:36px;
+    background:#12382c;
+    border:1px solid #2ba978; border-radius:7px;
     color:#f3fff9; font-weight:760; padding:0 16px; icon-size:22px;
 }
 QWidget#LibraryPage QPushButton#LibraryDetailEdit:hover {
-    background:#0c805e; border-color:#62efbf; color:#ffffff;
+    background:#18513d; border-color:#62dba6; color:#ffffff;
 }
 QWidget#LibraryPage QPushButton#LibraryCollectionAction,
 QWidget#LibraryPage QPushButton#LibraryPlaylistAction,

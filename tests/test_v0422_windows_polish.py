@@ -30,7 +30,7 @@ def _settings(tmp_path: Path) -> AppSettings:
     return AppSettings(source_dirs=(), library=paths)
 
 
-def test_library_status_column_fits_full_review_label_with_icon_at_large_font(tmp_path: Path):
+def test_library_status_column_fits_icon_and_header_at_large_font(tmp_path: Path):
     app = _app()
     original_font = QFont(app.font())
     scaled_font = QFont(original_font)
@@ -50,12 +50,12 @@ def test_library_status_column_fits_full_review_label_with_icon_at_large_font(tm
         page.show()
         app.processEvents()
 
-        text_width = QFontMetrics(page.table.font()).horizontalAdvance('DO SPRAWDZENIA')
-        required_width = text_width + 15 + 12 + 24
+        text_width = QFontMetrics(page.table.horizontalHeader().font()).horizontalAdvance('Status')
+        required_width = text_width + 26
         assert page.table.columnWidth(1) >= required_width
+        assert page.table.columnWidth(1) < 130
         assert page.model.item(0, 1).text() == 'DO SPRAWDZENIA'
-        assert page.model.item(0, 1).toolTip() == 'DO SPRAWDZENIA'
-        assert page.model.item(0, 1).font().pointSizeF() >= scaled_font.pointSizeF()
+        assert page.model.item(0, 1).toolTip() == 'PROBLEM'
 
         option = QStyleOptionViewItem()
         option.initFrom(page.table)
@@ -67,11 +67,13 @@ def test_library_status_column_fits_full_review_label_with_icon_at_large_font(tm
         larger_font.setPointSizeF(18.0)
         page.table.setFont(larger_font)
         app.processEvents()
-        dynamic_required = QFontMetrics(larger_font).horizontalAdvance('DO SPRAWDZENIA') + 15 + 12 + 24
+        dynamic_required = QFontMetrics(page.table.horizontalHeader().font()).horizontalAdvance('Status') + 26
         assert page.table.columnWidth(1) >= dynamic_required
+        assert page.table.columnWidth(1) < 130
 
         page._restore_view_state({'column_widths': [80] * len(page.HEADERS)})
         assert page.table.columnWidth(1) >= dynamic_required
+        assert page.table.columnWidth(1) < 130
     finally:
         page.close()
         app.setFont(original_font)

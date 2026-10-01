@@ -4,13 +4,13 @@ from pathlib import Path
 from weakref import ref
 
 from PySide6.QtCore import Qt, Signal, QUrl, QStringListModel, QItemSelectionModel, QSignalBlocker, QEvent, QTimer, QRect, QSize
-from PySide6.QtGui import QStandardItem, QStandardItemModel, QPixmap, QColor, QBrush, QPen, QPainter, QDesktopServices
+from PySide6.QtGui import QStandardItem, QStandardItemModel, QPixmap, QColor, QBrush, QPen, QPainter, QDesktopServices, QIcon
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QComboBox, QTableView, QLabel,
     QSplitter, QFrame, QPushButton, QInputDialog, QMessageBox, QAbstractItemView,
     QHeaderView, QScrollArea, QGridLayout, QMenu, QCompleter,
-    QStyledItemDelegate, QStyleOptionViewItem, QStyle, QLayout, QSizePolicy,
+    QStyledItemDelegate, QStyleOptionViewItem, QStyle, QLayout, QSizePolicy, QApplication,
 )
 
 from audio_library_organizer import __version__
@@ -20,7 +20,7 @@ from audio_library_organizer.metadata.artwork import extract_embedded_cover
 from audio_library_organizer.metadata.online_lock import is_online_locked
 from audio_library_organizer.ui.state import (
     library_status_text, library_status_presentation, track_matches_quick_filter,
-    display_bpm, effective_status, track_matches_library_filters,
+    display_bpm, effective_status, review_severity, track_matches_library_filters,
 )
 from audio_library_organizer.ui.widgets import ClickableCoverLabel, show_cover_preview
 from audio_library_organizer.ui.assets import asset_path
@@ -31,6 +31,7 @@ from audio_library_organizer.ui.icons import alo_icon, library_icon
 
 PLAYING_ROLE = int(Qt.ItemDataRole.UserRole) + 1
 VISUAL_ORDER_ROLE = int(Qt.ItemDataRole.UserRole) + 2
+STATUS_ACCENT_ROLE = int(Qt.ItemDataRole.UserRole) + 3
 PLAYING_BACKGROUND = QColor('#153a42')
 PLAYING_ACCENT = QColor('#31d7c8')
 
@@ -102,7 +103,7 @@ class StableTableView(QTableView):
 
 
 class LibraryRowDelegate(QStyledItemDelegate):
-    """Draw a persistent playing-row highlight without native cell focus outlines."""
+    """Compact status icons and row accents, with cyan selection taking priority."""
 
     @staticmethod
     def _check_state(index):
@@ -120,16 +121,35 @@ class LibraryRowDelegate(QStyledItemDelegate):
 
     def paint(self, painter, option, index):
         clean = QStyleOptionViewItem(option)
+        self.initStyleOption(clean, index)
         clean.state &= ~QStyle.StateFlag.State_HasFocus
+        highlighted = bool(clean.state & QStyle.StateFlag.State_Selected) or bool(index.data(PLAYING_ROLE))
         if index.column() == 0:
             clean.features &= ~QStyleOptionViewItem.ViewItemFeature.HasCheckIndicator
-        playing = bool(index.data(PLAYING_ROLE))
-        if playing:
+        if index.column() == 1:
+            # Keep DisplayRole for sorting; show the icon and accessible tooltip.
+            clean.text = ''
+            clean.icon = QIcon()
+            clean.features &= ~(QStyleOptionViewItem.ViewItemFeature.HasDisplay
+                                | QStyleOptionViewItem.ViewItemFeature.HasDecoration)
+        if highlighted:
             clean.state &= ~QStyle.StateFlag.State_Selected
+            clean.backgroundBrush = QBrush(PLAYING_BACKGROUND)
             painter.save()
             painter.fillRect(option.rect, PLAYING_BACKGROUND)
             painter.restore()
-        super().paint(painter, clean, index)
+        elif clean.backgroundBrush.style() != Qt.BrushStyle.NoBrush:
+            # QSS item rules may omit the model's background brush.
+            painter.save()
+            painter.fillRect(option.rect, clean.backgroundBrush)
+            painter.restore()
+        style = clean.widget.style() if clean.widget is not None else QApplication.style()
+        style.drawControl(QStyle.ControlElement.CE_ItemViewItem, clean, painter, clean.widget)
+        if index.column() == 1:
+            icon = index.data(Qt.ItemDataRole.DecorationRole)
+            if icon is not None:
+                square = QRect(option.rect.center().x() - 8, option.rect.center().y() - 8, 16, 16)
+                icon.paint(painter, square, Qt.AlignmentFlag.AlignCenter, QIcon.Mode.Normal)
         if index.column() == 0:
             square = QRect(option.rect.center().x() - 8, option.rect.center().y() - 8, 16, 16)
             checked = self._check_state(index) == Qt.CheckState.Checked
@@ -143,14 +163,19 @@ class LibraryRowDelegate(QStyledItemDelegate):
                 painter.drawLine(square.left() + 3, square.center().y(), square.center().x() - 1, square.bottom() - 4)
                 painter.drawLine(square.center().x() - 1, square.bottom() - 4, square.right() - 3, square.top() + 4)
             painter.restore()
-        if playing:
+        accent = index.data(STATUS_ACCENT_ROLE)
+        if highlighted or accent is not None:
             painter.save()
-            painter.setPen(QPen(PLAYING_ACCENT, 2.0))
+            painter.setPen(QPen(PLAYING_ACCENT, 2.0) if highlighted else QPen(accent, 1.0))
             painter.drawLine(option.rect.left(), option.rect.top() + 1, option.rect.right(), option.rect.top() + 1)
             painter.drawLine(option.rect.left(), option.rect.bottom() - 1, option.rect.right(), option.rect.bottom() - 1)
             if index.column() == 0:
                 painter.drawLine(option.rect.left() + 1, option.rect.top(), option.rect.left() + 1, option.rect.bottom())
             painter.restore()
+
+    def sizeHint(self, option, index):
+        size = super().sizeHint(option, index)
+        return QSize(38, size.height()) if index.column() == 1 else size
 
 
 class LibraryPage(QWidget):
@@ -171,9 +196,9 @@ class LibraryPage(QWidget):
         'no_year': 'no_year',
     }
     CATEGORY_COLORS = {
-        'all': '#8fe9ad', 'ready': '#6de6a5', 'duplicate': '#bd9bf7',
-        'review': '#f4bd75', 'not_selected': '#b6a4ca',
-        'no_cover': '#7ed7e9', 'no_year': '#88afda',
+        'all': '#bdcbd3', 'ready': '#6de6a5', 'duplicate': '#bd9bf7',
+        'review': '#f4bd75', 'not_selected': '#bdcbd3',
+        'no_cover': '#bdcbd3', 'no_year': '#bdcbd3',
     }
 
     def __init__(self, parent=None):
@@ -271,6 +296,7 @@ class LibraryPage(QWidget):
         self.table.setHorizontalHeader(LibraryCheckHeader(self))
         self.table.installEventFilter(self)
         self.table.setItemDelegate(LibraryRowDelegate(self.table))
+        self.table.setIconSize(QSize(16, 16))
         self.table.setAlternatingRowColors(False)
         self.table.setSortingEnabled(True)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -437,8 +463,11 @@ class LibraryPage(QWidget):
         actions = QHBoxLayout(actions_bar); actions.setContentsMargins(12, 8, 12, 8); actions.setSpacing(0)
         self.detail_edit = QPushButton('Edytuj metadane'); self.detail_edit.setObjectName('LibraryDetailEdit')
         self.detail_edit.setIcon(library_icon('metadata_edit', '#a5f3c1', 22)); self.detail_edit.setIconSize(QSize(22, 22))
+        self.detail_edit.setMinimumWidth(240); self.detail_edit.setMaximumWidth(360)
+        self.detail_edit.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        self.detail_edit.setToolTip(ui_text(self, 'Edytuj metadane'))
         self.detail_edit.clicked.connect(self._edit_current)
-        actions.addWidget(self.detail_edit, 1)
+        actions.addStretch(1); actions.addWidget(self.detail_edit); actions.addStretch(1)
         self.detail_actions = actions_bar
         detail_outer.addWidget(actions_bar)
         self.split.addWidget(self.detail); self.split.setSizes([840, 720])
@@ -576,13 +605,13 @@ class LibraryPage(QWidget):
 
     def _paint_category_icons(self, hovered_index: int = -1):
         selected = self.status.currentData()
-        self.status.setStyleSheet(f'color: {self.CATEGORY_COLORS.get(selected, "#d9e5e8")};')
+        self.status.setStyleSheet('color: #6de6a5;')
         for key, icon_name in self.CATEGORY_ICONS.items():
             index = self.status.findData(key)
             if index < 0:
                 continue
             active = key == selected
-            color = self.CATEGORY_COLORS[key]
+            color = '#6de6a5' if active or index == hovered_index else self.CATEGORY_COLORS[key]
             self.status.setItemIcon(index, library_icon(icon_name, color, 18))
             item = self.status.model().item(index)
             if item is not None:
@@ -672,11 +701,10 @@ class LibraryPage(QWidget):
         self._update_selection_count()
 
     def _ensure_status_column_width(self) -> None:
-        """Keep the full status label visible with its icon at larger DPI/font sizes."""
-        text_width = self.table.fontMetrics().horizontalAdvance('DO SPRAWDZENIA')
-        icon_width = max(15, self.table.iconSize().width())
-        required = max(176, text_width + icon_width + 36)
-        if self.table.columnWidth(1) < required:
+        """Fit the header and a centered 16 px icon, including after view restore."""
+        text_width = self.table.horizontalHeader().fontMetrics().horizontalAdvance(ui_text(self, 'Status'))
+        required = max(58, text_width + 26)
+        if self.table.columnWidth(1) != required:
             self.table.setColumnWidth(1, required)
 
     def eventFilter(self, watched, event):
@@ -819,6 +847,7 @@ class LibraryPage(QWidget):
             self.status.setCurrentIndex(all_index)
         self.format_filter.setCurrentIndex(0)
         del blockers
+        self._paint_category_icons()
         self.table.sortByColumn(1, Qt.SortOrder.AscendingOrder)
         self.table.verticalScrollBar().setValue(0)
         self.refresh(clear_checks=True)
@@ -854,14 +883,24 @@ class LibraryPage(QWidget):
             presentation = library_status_presentation(track)
             is_playing = self._track_is_playing(track)
             status_text = ui_text(self, library_status_text(track))
-            locked_online = is_online_locked(track)
             values = [
                 '', status_text, track.artist or '', track.title or '', track.year or '', track.genre or '',
                 display_bpm(track.bpm), duration, quality, self._format_of(track),
             ]
             items = [QStandardItem(str(value)) for value in values]
-            status_icons = {'ready': 'status', 'duplicate': 'duplicates', 'review': 'warning', 'not_selected': 'cancel'}
-            items[1].setIcon(alo_icon('lock' if locked_online else status_icons.get(effective_status(track), 'info'), presentation.accent, 15))
+            status = effective_status(track)
+            problem = status == 'error' or (status == 'review' and review_severity(track) == 'critical')
+            tint, row_accent = None, None
+            if problem:
+                icon_name, icon_color, tint = 'alert_circle', '#f34d64', '#23181d'
+                row_accent = QColor('#bc3d50')
+            elif status == 'review':
+                icon_name, icon_color, tint = 'warning', '#f5b649', '#211e16'
+                row_accent = QColor('#ad8037')
+            else:
+                icon_name = {'ready': 'status', 'duplicate': 'duplicates', 'not_selected': 'cancel'}.get(status, 'info')
+                icon_color = '#35d893' if status == 'ready' else presentation.accent
+            items[1].setIcon(alo_icon(icon_name, icon_color, 16))
             key = self._path_key(track)
             visible_keys.add(key)
             order_index = order_map.get(key)
@@ -873,28 +912,29 @@ class LibraryPage(QWidget):
                 item.setEditable(False)
                 item.setData(is_playing, PLAYING_ROLE)
                 item.setData(stable_sort_value, VISUAL_ORDER_ROLE)
+                item.setData(row_accent, STATUS_ACCENT_ROLE)
+                if tint is not None:
+                    item.setBackground(QBrush(QColor(tint)))
             items[0].setCheckable(True)
             items[0].setCheckState(Qt.CheckState.Checked if key in checked else Qt.CheckState.Unchecked)
             items[3].setToolTip(track.title or '')
             items[2].setToolTip(track.artist or '')
-            # Only Status is colored by default. The playing track overrides the full row.
-            items[1].setBackground(QBrush(QColor(presentation.background)))
-            items[1].setForeground(QBrush(QColor(presentation.accent)))
-            font = items[1].font(); font.setBold(True); items[1].setFont(font)
             items[0].setData(track, Qt.ItemDataRole.UserRole)
-            items[1].setToolTip(status_text)
+            status_caption = ui_text(self, 'PROBLEM') if problem else status_text
+            items[1].setToolTip(status_caption)
             if is_playing:
                 playing_background = QBrush(PLAYING_BACKGROUND)
                 for item in items:
                     item.setBackground(playing_background)
-                tooltip = f'{status_text} • {ui_text(self, "TERAZ GRA")}'
+                tooltip = f'{status_caption} • {ui_text(self, "TERAZ GRA")}'
                 if is_online_locked(track):
                     tooltip += ' • ' + ui_text(self, 'Zablokowany przed ponownym rozpoznaniem online')
                 items[1].setToolTip(tooltip)
             elif is_online_locked(track):
-                items[1].setToolTip(f'{status_text} • {ui_text(self, "Zablokowany przed ponownym rozpoznaniem online")}')
+                items[1].setToolTip(f'{status_caption} • {ui_text(self, "Zablokowany przed ponownym rozpoznaniem online")}')
             elif 'duplicate_primary' in track.locked_fields:
-                items[1].setToolTip(f'{status_text} • {ui_text(self, "Ten plik został przez Ciebie wybrany w zakładce Duplikaty.")}')
+                items[1].setToolTip(f'{status_caption} • {ui_text(self, "Ten plik został przez Ciebie wybrany w zakładce Duplikaty.")}')
+            items[1].setData(items[1].toolTip(), Qt.ItemDataRole.AccessibleTextRole)
             self.model.appendRow(items)
 
         self._checked_paths = checked & visible_keys

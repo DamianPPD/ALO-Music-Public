@@ -68,9 +68,7 @@ def test_library_details_keep_dense_cover_and_data_sections():
     assert 'self.split.setSizes([840, 720])' in LIBRARY
 
 
-def test_library_status_is_the_only_colored_table_cell_and_selection_stays_stable():
-    assert 'items[1].setBackground' in LIBRARY
-    assert 'items[1].setForeground' in LIBRARY
+def test_library_table_navigation_and_selection_stays_stable():
     assert 'for item in items:' in LIBRARY
     assert 'self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)' in LIBRARY
     assert 'resizeColumnToContents' not in LIBRARY

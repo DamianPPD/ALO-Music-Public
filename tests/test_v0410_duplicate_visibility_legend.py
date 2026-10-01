@@ -45,7 +45,7 @@ def test_library_has_compact_dropdown_status_legend():
     assert "setObjectName('LibraryStatusLegendButton')" in legend
     assert "setText('Legenda statusów')" in legend
     assert "setIcon(alo_icon('info'" in legend
-    for label in ('GOTOWE', 'DUPLIKAT', 'DO SPRAWDZENIA', 'DO SPRAWDZENIA — ważne', 'NIE WYBIERAM'):
+    for label in ('GOTOWE', 'DUPLIKAT', 'DO SPRAWDZENIA', 'PROBLEM', 'NIE WYBIERAM'):
         assert label in legend
     assert 'library_page._toolbar_top.addWidget(button' in legend
     assert "setObjectName('LibraryStatusLegend')" not in legend

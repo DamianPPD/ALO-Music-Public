@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import QMenu, QToolButton
 
 from audio_library_organizer.ui.state import status_presentation
@@ -12,15 +11,9 @@ LEGEND_ITEMS = (
     ('ready', 'GOTOWE', 'Utwór gotowy do użycia / eksportu.', None),
     ('duplicate', 'DUPLIKAT', 'Utwór należy do grupy wymagającej porównania.', None),
     ('review', 'DO SPRAWDZENIA', 'Dane wymagają ręcznej kontroli.', None),
-    ('review', 'DO SPRAWDZENIA — ważne', 'Poważny problem lub podejrzane dane wymagające szczególnej uwagi.', '#ff7777'),
+    ('review', 'PROBLEM', 'Poważny problem lub podejrzane dane wymagające szczególnej uwagi.', '#f34d64'),
     ('not_selected', 'NIE WYBIERAM', 'Utwór pominięty decyzją użytkownika.', None),
 )
-
-
-def _color_icon(color: str) -> QIcon:
-    pixmap = QPixmap(12, 12)
-    pixmap.fill(QColor(color))
-    return QIcon(pixmap)
 
 
 def install_library_status_legend(library_page) -> QToolButton:
@@ -39,8 +32,10 @@ def install_library_status_legend(library_page) -> QToolButton:
     menu = QMenu(button)
     for status, label, description, accent_override in LEGEND_ITEMS:
         presentation = status_presentation(status)
-        accent = accent_override or presentation.accent
-        action = menu.addAction(_color_icon(accent), f'{label} — {description}')
+        icons = {'ready': 'status', 'duplicate': 'duplicates', 'review': 'warning', 'not_selected': 'cancel'}
+        accent = accent_override or {'ready': '#35d893', 'review': '#f5b649'}.get(status, presentation.accent)
+        icon = alo_icon('alert_circle' if accent_override else icons[status], accent, 16)
+        action = menu.addAction(icon, f'{label} — {description}')
         action.setToolTip(description)
     button.setMenu(menu)
 

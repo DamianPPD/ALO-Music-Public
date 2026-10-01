@@ -37,7 +37,7 @@ def test_library_legend_is_dropdown_in_existing_view_controls():
     assert 'library_page._toolbar_top.addWidget(button' in LEGEND
     assert "setObjectName('LibraryStatusLegendButton')" in LEGEND
     assert 'QMenu' in LEGEND
-    assert 'DO SPRAWDZENIA — ważne' in LEGEND
+    assert "'PROBLEM'" in LEGEND
 
 
 def test_operation_panel_has_clear_bottom_separator():

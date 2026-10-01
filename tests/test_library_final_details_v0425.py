@@ -157,7 +157,8 @@ def test_toolbar_filters_and_category_palette(tmp_path):
         for category, color in page.CATEGORY_COLORS.items():
             index = page.status.findData(category)
             assert index >= 0
-            assert page.status.model().item(index).foreground().color().name() == color
+            expected = '#6de6a5' if category == page.status.currentData() else color
+            assert page.status.model().item(index).foreground().color().name() == expected
             assert not page.status.itemIcon(index).isNull()
         page.search.setText('wrong')
         page.reset_view_btn.click()

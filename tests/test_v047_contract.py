@@ -14,9 +14,8 @@ def test_metadata_editor_exposes_one_whole_track_online_lock_control():
     assert "setObjectName('OnlineLockButton')" in EDITOR
 
 
-def test_library_shows_lock_marker_for_online_locked_tracks():
+def test_library_keeps_online_lock_explanation_in_status_tooltip():
     assert 'is_online_locked' in LIBRARY
-    assert "alo_icon('lock' if locked_online" in LIBRARY
     assert 'Zablokowany przed ponownym rozpoznaniem online' in LIBRARY
 
 
