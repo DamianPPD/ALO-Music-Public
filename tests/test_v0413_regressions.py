@@ -181,10 +181,10 @@ def test_playing_row_tint_restores_ready_and_review_backgrounds_when_playback_st
 
     try:
         page.set_playing_track(ready)
-        assert background(ready) == '#12262b'
+        assert background(ready) == '#142b23'
         page.set_playing_track(review)
         assert background(ready) == '#11171e'
-        assert background(review) == '#12262b'
+        assert background(review) == '#142b23'
         page.set_playing_track(None)
         assert background(review) == '#1b1b18'
     finally:

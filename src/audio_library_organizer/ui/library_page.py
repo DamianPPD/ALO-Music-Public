@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from html import escape
 from pathlib import Path
 from weakref import ref
 
@@ -34,8 +35,8 @@ PLAYING_ROLE = int(Qt.ItemDataRole.UserRole) + 1
 VISUAL_ORDER_ROLE = int(Qt.ItemDataRole.UserRole) + 2
 STATUS_ACCENT_ROLE = int(Qt.ItemDataRole.UserRole) + 3
 STATUS_BACKGROUND_ROLE = int(Qt.ItemDataRole.UserRole) + 4
-PLAYING_BACKGROUND = QColor('#12262b')
-PLAYING_ACCENT = QColor('#408d94')
+PLAYING_BACKGROUND = QColor('#142b23')
+PLAYING_ACCENT = QColor('#4cb68a')
 SELECTED_BACKGROUND = QColor('#203038')
 SELECTED_ACCENT = QColor('#65b5c0')
 
@@ -124,7 +125,7 @@ class StableTableView(QTableView):
 
 
 class LibraryRowDelegate(QStyledItemDelegate):
-    """Independent playing accents and selection outline, with neutral checks."""
+    """Thin playing/selection outlines, with neutral checks."""
 
     @staticmethod
     def _check_state(index):
@@ -178,21 +179,23 @@ class LibraryRowDelegate(QStyledItemDelegate):
             _paint_library_checkbox(painter, square, self._check_state(index),
                                     bool(clean.state & QStyle.StateFlag.State_MouseOver))
         accent = index.data(STATUS_ACCENT_ROLE)
-        if selected:
+        if selected or playing:
             painter.save()
-            painter.setPen(QPen(SELECTED_ACCENT, 1.0))
-            painter.drawLine(option.rect.left(), option.rect.top() + 1, option.rect.right(), option.rect.top() + 1)
-            painter.drawLine(option.rect.left(), option.rect.bottom() - 1, option.rect.right(), option.rect.bottom() - 1)
-            if index.column() == 0:
-                painter.drawLine(option.rect.left() + 1, option.rect.top(), option.rect.left() + 1, option.rect.bottom())
-            if index.column() == index.model().columnCount() - 1:
-                painter.drawLine(option.rect.right() - 1, option.rect.top(), option.rect.right() - 1, option.rect.bottom())
+            painter.setClipRect(option.rect)
+            painter.setPen(QPen(PLAYING_ACCENT if playing else SELECTED_ACCENT, 1.0))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            row_rect = option.rect
+            if isinstance(clean.widget, QTableView):
+                row_rect = clean.widget.visualRect(index.siblingAtColumn(0)).united(
+                    clean.widget.visualRect(index.siblingAtColumn(index.model().columnCount() - 1)))
+            # One rectangle inside the viewport; never over the row-number header.
+            painter.drawRect(row_rect.adjusted(1, 1, -2, -2))
             painter.restore()
-        if index.column() == 0 and (playing or (accent is not None and not selected)):
+        if index.column() == 0 and accent is not None and not selected and not playing:
             painter.save()
-            painter.setPen(QPen(PLAYING_ACCENT, 2.0) if playing else QPen(accent, 1.0))
-            x = option.rect.left() + (2 if playing else 1)
-            painter.drawLine(x, option.rect.top() + 2, x, option.rect.bottom() - 2)
+            painter.setPen(QPen(accent, 1.0))
+            painter.drawLine(option.rect.left() + 1, option.rect.top() + 2,
+                             option.rect.left() + 1, option.rect.bottom() - 2)
             painter.restore()
 
     def sizeHint(self, option, index):
@@ -254,8 +257,11 @@ class LibraryPage(QWidget):
         self._genre_filter_model = QStringListModel([], self)
         self._genre_filter_completer = QCompleter(self._genre_filter_model, self); self._genre_filter_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive); self._genre_filter_completer.setFilterMode(Qt.MatchFlag.MatchContains)
         self.genre_filter.setCompleter(self._genre_filter_completer)
-        self.bpm_min = QLineEdit(); self.bpm_min.setPlaceholderText('BPM od'); self.bpm_min.setFixedWidth(72)
-        self.bpm_max = QLineEdit(); self.bpm_max.setPlaceholderText('BPM do'); self.bpm_max.setFixedWidth(72)
+        self.bpm_min = QLineEdit(); self.bpm_min.setPlaceholderText('BPM od')
+        self.bpm_max = QLineEdit(); self.bpm_max.setPlaceholderText('BPM do')
+        self.bpm_min.ensurePolished()
+        bpm_width = max(84, self.bpm_min.fontMetrics().horizontalAdvance('BPM from') + 28)
+        self.bpm_min.setFixedWidth(bpm_width); self.bpm_max.setFixedWidth(bpm_width)
         self.status = QComboBox(); self.status.setFixedWidth(190)
         self.status.addItem(library_icon('all_tracks', '#8fe9ad', 18), 'Wszystkie utwory', 'all')
         all_index = self.status.findData('all')
@@ -284,13 +290,12 @@ class LibraryPage(QWidget):
         self.collection_btn = QPushButton('Utwórz folder z zaznaczonych', self); self.collection_btn.setObjectName('LibraryCollectionAction'); self.collection_btn.setIcon(library_icon('folder_add', '#cbd8df', 18)); self.collection_btn.clicked.connect(self._request_collection)
         self.playlist_btn = QPushButton('Utwórz playlistę', self); self.playlist_btn.setObjectName('LibraryPlaylistAction'); self.playlist_btn.setIcon(library_icon('playlist', '#cbd8df', 18)); self.playlist_btn.clicked.connect(self._request_playlist)
 
-        view_controls = QVBoxLayout(); view_controls.setSpacing(5)
         self._toolbar_top = QHBoxLayout(); self._toolbar_top.setSpacing(8)
-        self._toolbar_bottom = QHBoxLayout(); self._toolbar_bottom.setSpacing(8)
-        view_controls.addLayout(self._toolbar_top); view_controls.addLayout(self._toolbar_bottom)
         self.view_state_label = QLabel('')
         self.view_state_label.setObjectName('LibraryViewState')
+        self.view_state_label.setTextFormat(Qt.TextFormat.RichText)
         self.view_state_label.setWordWrap(False)
+        self.view_state_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.reset_view_btn = QPushButton('Resetuj widok')
         self.reset_view_btn.setObjectName('LibrarySecondaryAction')
         self.reset_view_btn.setIcon(library_icon('reset', '#cbd8df', 18))
@@ -306,12 +311,10 @@ class LibraryPage(QWidget):
             button.setMaximumHeight(34)
             button.setToolTip(ui_text(self, button.text()))
         self.playlist_btn.setToolTip(ui_text(self, 'Utwórz playlistę z zaznaczonych utworów'))
-        self._toolbar_layout = view_controls
-        self._toolbar_widgets = (self.collection_btn, self.playlist_btn,
-                                 self.selected_count, self.view_state_label)
-        self._toolbar_compact = None
-        self._layout_toolbar(self.width())
-        root.addLayout(view_controls)
+        for widget in (self.collection_btn, self.playlist_btn, self.selected_count):
+            self._toolbar_top.addWidget(widget)
+        self._toolbar_top.addWidget(self.view_state_label, 1)
+        root.addLayout(self._toolbar_top)
 
         self.split = QSplitter(Qt.Orientation.Horizontal)
         self.table = StableTableView()
@@ -417,14 +420,16 @@ class LibraryPage(QWidget):
         for index, (key, title) in enumerate((('artist', 'Wykonawca'), ('year', 'Rok'),
                                                ('title', 'Tytuł / wersja'), ('genre', 'Gatunek'),
                                                ('album', 'Album'), ('bpm', 'BPM'))):
-            field = QWidget(); field_layout = QHBoxLayout(field)
+            field = QWidget(); field.setObjectName('LibraryCompletenessFieldRow')
+            field_layout = QHBoxLayout(field)
             field_layout.setContentsMargins(0, 0, 0, 0); field_layout.setSpacing(5)
             icon = QLabel(); icon.setObjectName('LibraryCompletenessFieldIcon')
+            icon.setFixedSize(13, 13)
             icon.setPixmap(library_icon('empty_check', '#83939e', 13).pixmap(13, 13))
             field_layout.addWidget(icon)
             label = QLabel(title); label.setObjectName('LibraryCompletenessField')
             label.setProperty('complete', False); label.setWordWrap(False)
-            field_layout.addWidget(label)
+            field_layout.addWidget(label, 1)
             fields_grid.addWidget(field, index // 2, index % 2)
             self.completeness_fields[key] = label
             self.completeness_field_icons[key] = icon
@@ -496,10 +501,7 @@ class LibraryPage(QWidget):
         detail_outer.addWidget(actions_bar)
         self.split.addWidget(self.detail); self.split.setSizes([960, 640])
         self._expanded_detail_sizes = [960, 640]
-        details_controls = QHBoxLayout(); details_controls.setContentsMargins(0, 0, 0, 0)
-        details_controls.addStretch(1)
-        details_controls.addWidget(self.details_btn, 0, Qt.AlignmentFlag.AlignRight)
-        root.addLayout(details_controls)
+        self._toolbar_top.addWidget(self.details_btn, 0, Qt.AlignmentFlag.AlignRight)
         root.addWidget(self.split, 1)
 
         self.search.textChanged.connect(self._filters_changed)
@@ -533,7 +535,7 @@ class LibraryPage(QWidget):
 
     def _detail_value_row(self, key: str, title: str, icon: str) -> QFrame:
         host = QFrame(); host.setObjectName('LibraryValueRow')
-        row = QHBoxLayout(host); row.setContentsMargins(12, 5, 12, 5); row.setSpacing(8)
+        row = QHBoxLayout(host); row.setContentsMargins(12, 8, 12, 8); row.setSpacing(8)
         glyph = QLabel(); glyph.setObjectName('LibraryFieldIcon')
         glyph.setPixmap(library_icon(icon, '#8babc0', 17).pixmap(17, 17)); row.addWidget(glyph)
         label = QLabel(title); label.setObjectName('LibraryFieldName'); label.setFixedWidth(123); row.addWidget(label)
@@ -546,7 +548,7 @@ class LibraryPage(QWidget):
         host = QWidget(); host.setObjectName('LibraryMetric')
         if centered:
             host.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-            column = QVBoxLayout(host); column.setContentsMargins(7, 5, 7, 5); column.setSpacing(2)
+            column = QVBoxLayout(host); column.setContentsMargins(7, 8, 7, 8); column.setSpacing(2)
             heading = QHBoxLayout(); heading.setSpacing(5)
             heading.addStretch(1)
             glyph = QLabel(); glyph.setObjectName('LibraryFieldIcon')
@@ -559,7 +561,7 @@ class LibraryPage(QWidget):
             column.addWidget(value)
             self.detail_labels[key] = value
             return host
-        row = QHBoxLayout(host); row.setContentsMargins(7, 5, 7, 5); row.setSpacing(5)
+        row = QHBoxLayout(host); row.setContentsMargins(7, 8, 7, 8); row.setSpacing(5)
         glyph = QLabel(); glyph.setObjectName('LibraryFieldIcon')
         glyph.setPixmap(library_icon(icon, '#8babc0', 16).pixmap(16, 16)); row.addWidget(glyph)
         stack = QVBoxLayout(); stack.setSpacing(1)
@@ -573,8 +575,6 @@ class LibraryPage(QWidget):
     def resizeEvent(self, event):
         if hasattr(self, '_filters_top'):
             self._layout_filters(event.size().width())
-        if hasattr(self, '_toolbar_layout'):
-            self._layout_toolbar(event.size().width())
         super().resizeEvent(event)
 
     def _layout_filters(self, width: int):
@@ -587,8 +587,9 @@ class LibraryPage(QWidget):
         for widget in widgets:
             self._filters_top.removeWidget(widget)
             self._filters_bottom.removeWidget(widget)
-        while self._filters_top.takeAt(0):
-            pass
+        for layout in (self._filters_top, self._filters_bottom):
+            while layout.takeAt(0):
+                pass
         if compact:
             for widget in widgets[:4]:
                 self._filters_top.addWidget(widget, 2 if widget is self.search else 1 if widget is self.genre_filter else 0)
@@ -598,30 +599,9 @@ class LibraryPage(QWidget):
         else:
             for widget in widgets:
                 self._filters_top.addWidget(widget, 2 if widget is self.search else 1 if widget is self.genre_filter else 0)
-            self._filters_top.addStretch(1)
         legend = getattr(self, '_status_legend_button', None)
         if legend is not None:
             self._filters_top.addWidget(legend, 0, Qt.AlignmentFlag.AlignRight)
-
-    def _layout_toolbar(self, width: int):
-        compact = width < 850
-        if compact == self._toolbar_compact:
-            return
-        self._toolbar_compact = compact
-        for widget in self._toolbar_widgets:
-            self._toolbar_top.removeWidget(widget)
-            self._toolbar_bottom.removeWidget(widget)
-        while self._toolbar_top.takeAt(0):
-            pass
-        if compact:
-            for widget in self._toolbar_widgets[:2]:
-                self._toolbar_top.addWidget(widget)
-            self._toolbar_top.addStretch(1)
-            for widget in self._toolbar_widgets[2:]:
-                self._toolbar_bottom.addWidget(widget, 1 if widget is self.view_state_label else 0)
-        else:
-            for widget in self._toolbar_widgets:
-                self._toolbar_top.addWidget(widget, 1 if widget is self.view_state_label else 0)
 
     def set_history_provider(self, provider):
         self._history_provider = provider
@@ -837,22 +817,37 @@ class LibraryPage(QWidget):
             sort_name = ui_text(self, self.HEADERS[0])
         arrow = '↑' if header.sortIndicatorOrder() == Qt.SortOrder.AscendingOrder else '↓'
 
-        filters: list[str] = []
+        language = language_for(self)
+        filters: list[tuple[str, str]] = []
         status_text = self.status.currentText().strip()
         if (self.status.currentData() or 'all') != 'all':
-            filters.append(status_text)
+            color = {'review': '#d8a23a', 'error': '#f34d64', 'problem': '#f34d64',
+                     'ready': '#84cfa6', 'duplicate': '#b6a0ce'}.get(
+                self.status.currentData(), '#a5b2bd')
+            filters.append((status_text, color))
         if self.search.text().strip():
-            filters.append(f'Szukaj: {self.search.text().strip()}')
+            filters.append((f'{tr("library.view.search", language)} {self.search.text().strip()}', '#a5b2bd'))
         if self.genre_filter.text().strip():
-            filters.append(f'Gatunek: {self.genre_filter.text().strip()}')
+            filters.append((f'{tr("library.view.genre", language)} {self.genre_filter.text().strip()}', '#b6a0ce'))
         if self.bpm_min.text().strip() or self.bpm_max.text().strip():
             bpm_from = self.bpm_min.text().strip() or '—'
             bpm_to = self.bpm_max.text().strip() or '—'
-            filters.append(f'BPM {bpm_from}–{bpm_to}')
+            filters.append((f'BPM {bpm_from}–{bpm_to}', '#a5b2bd'))
         if self.format_filter.currentData():
-            filters.append(f'{ui_text(self, "Format")}: {self.format_filter.currentData()}')
-        filter_text = ' · '.join(filters) if filters else 'brak'
-        self.view_state_label.setText(ui_text(self, f'Sortowanie: {sort_name} {arrow}   •   Filtry: {filter_text}'))
+            filters.append((f'{ui_text(self, "Format")}: {self.format_filter.currentData()}', '#85bdd6'))
+        if not filters:
+            filters.append((tr('library.view.none', language), '#a5b2bd'))
+        sort_label = tr('library.view.sort', language)
+        filters_label = tr('library.view.filters', language)
+        sort_value = f'{sort_name} {arrow}'
+        filter_text = ' · '.join(value for value, _ in filters)
+        filter_html = ' · '.join(f'<span style="color:{color}">{escape(value)}</span>'
+                                 for value, color in filters)
+        self.view_state_label.setText(
+            f'{escape(sort_label)} <span style="color:#65b5c0;font-weight:600">{escape(sort_value)}</span>'
+            f' &nbsp; • &nbsp; {escape(filters_label)} {filter_html}')
+        tooltip = f'{sort_label} {sort_value}   •   {filters_label} {filter_text}'
+        self.view_state_label.setToolTip(f'<qt><span style="white-space:pre-wrap">{escape(tooltip)}</span></qt>')
 
     def _reset_view(self):
         self._checked_paths.clear()
@@ -1106,8 +1101,8 @@ class LibraryPage(QWidget):
                 'artist': 'Wykonawca', 'title': 'Tytuł / wersja', 'album': 'Album',
                 'year': 'Rok', 'bpm': 'BPM', 'genre': 'Gatunek',
             }[key]))
-            field_icon = (library_icon('approve', '#2de1ac', 13) if complete[key]
-                          else alo_icon('warning', '#ff927c', 13))
+            field_icon = library_icon('approve' if complete[key] else 'empty_check',
+                                      '#84e8c4' if complete[key] else '#ff927c', 13)
             self.completeness_field_icons[key].setPixmap(field_icon.pixmap(13, 13))
             label.setProperty('complete', complete[key])
             label.style().unpolish(label); label.style().polish(label)

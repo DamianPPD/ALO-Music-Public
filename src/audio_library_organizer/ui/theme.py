@@ -2745,11 +2745,13 @@ QWidget#LibraryPage QFrame#DetailPanel QLabel#LibraryDetailCover {
     background:#071118; border:1px solid #168564; border-radius:8px; color:#7a929e;
 }
 QWidget#LibraryPage QFrame#LibraryCompletenessCard {
-    background:#2b1b1b; border:1px solid #b85d4c; border-radius:8px;
+    background:#22191b; border:1px solid #79504b; border-radius:8px;
 }
 QWidget#LibraryPage QFrame#LibraryCompletenessCard[complete="true"] {
-    background:#082c25; border-color:#0b916b;
+    background:#10271f; border-color:#315f4c;
 }
+QWidget#LibraryPage QWidget#LibraryCompletenessFieldRow { background:transparent; }
+QWidget#LibraryPage QLabel#LibraryViewState { font-weight:400; }
 QWidget#LibraryPage QLabel#LibraryCompletenessTitle { color:#ff927c; font-size:11.5pt; font-weight:750; }
 QWidget#LibraryPage QFrame#LibraryCompletenessCard[complete="true"] QLabel#LibraryCompletenessTitle { color:#64e8bc; }
 QWidget#LibraryPage QLabel#LibraryCompletenessCount { color:#fff3ef; font-size:22pt; font-weight:780; }

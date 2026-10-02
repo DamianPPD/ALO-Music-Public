@@ -79,10 +79,24 @@ def test_library_table_navigation_and_selection_stays_stable():
 
 
 def test_library_details_button_is_above_panel_and_right_aligned():
-    assert "self.details_btn.setObjectName('DetailsToggle')" in LIBRARY
-    assert 'details_controls.addWidget(self.details_btn, 0, Qt.AlignmentFlag.AlignRight)' in LIBRARY
-    assert LIBRARY.index('root.addLayout(details_controls)') < LIBRARY.index('root.addWidget(self.split, 1)')
-    assert 'QPushButton#DetailsToggle' in THEME
+    import os
+    os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+    from PySide6.QtCore import QPoint
+    from PySide6.QtWidgets import QApplication
+    from audio_library_organizer.ui.library_page import LibraryPage
+
+    app = QApplication.instance() or QApplication([])
+    page = LibraryPage()
+    page.resize(1600, 900); page.show(); app.processEvents()
+    try:
+        button = page.details_btn.geometry().translated(page.details_btn.parentWidget().mapTo(page, QPoint()))
+        panel = page.detail.geometry().translated(page.detail.parentWidget().mapTo(page, QPoint()))
+        assert page.details_btn.objectName() == 'DetailsToggle'
+        assert button.bottom() < panel.top()
+        assert abs(button.right() - panel.right()) <= 1
+        assert button.center().y() == page.collection_btn.geometry().center().y()
+    finally:
+        page.close()
 
 
 def test_library_rounds_bpm_and_never_shows_raw_seconds_in_details():

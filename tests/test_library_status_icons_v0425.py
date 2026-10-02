@@ -105,34 +105,40 @@ def test_cyan_selection_overrides_review_and_problem_tints(status_page):
         assert _body_pixel(page, track).name() == '#203038'
 
 
-def test_playing_and_selection_have_distinct_tints_and_independent_accents(status_page):
+def test_playing_and_selection_use_single_thin_green_and_cyan_outlines(status_page):
     app, page, tracks = status_page
     playing, selected = tracks[:2]
-    page.set_playing_track(playing)
     page.select_track(selected)
+    app.processEvents()
+    row_numbers = page.table.verticalHeader().grab().toImage()
+    page.set_playing_track(playing)
+    app.processEvents()
+    assert page.table.verticalHeader().grab().toImage() == row_numbers
 
     def edge(track, column, dx, dy):
         app.processEvents()
         pixmap = page.table.viewport().grab()
         box = page.table.visualRect(page.model.index(_row(page, track), column))
         ratio = pixmap.devicePixelRatio()
+        y = box.top() + dy if dy >= 0 else box.bottom() + dy
         return pixmap.toImage().pixelColor(round((box.left() + dx) * ratio),
-                                          round((box.top() + dy) * ratio)).name()
+                                          round(y * ratio)).name()
 
-    assert _body_pixel(page, playing).name() == '#12262b'
+    assert _body_pixel(page, playing).name() == '#142b23'
     assert _body_pixel(page, selected).name() == '#203038'
-    assert edge(playing, 0, 2, 12) == '#408d94'
-    # A playing row has no cyan border across its top or bottom.
-    assert edge(playing, 3, 12, 1) == '#12262b'
-    assert edge(playing, 3, 12, 36) == '#12262b'
+    assert edge(playing, 0, 1, 12) == '#4cb68a'
+    assert edge(playing, 0, 2, 12) == '#142b23'  # No thick left bar.
+    assert edge(playing, 3, 12, 1) == '#4cb68a'
+    assert edge(playing, 3, 12, -1) == '#4cb68a'
     assert edge(selected, 3, 12, 1) == '#65b5c0'
     page.select_track(playing)
     assert _body_pixel(page, playing).name() == '#203038'
-    assert edge(playing, 3, 12, 1) == '#65b5c0'
-    assert edge(playing, 0, 2, 12) == '#408d94'
+    assert edge(playing, 3, 12, 1) == '#4cb68a'
+    assert edge(playing, 0, 1, 12) == '#4cb68a'
+    assert edge(playing, 0, 2, 12) == '#203038'
     page.set_playing_track(None)
     assert _body_pixel(page, playing).name() == '#203038'
-    assert edge(playing, 0, 2, 12) != '#408d94'
+    assert edge(playing, 0, 1, 12) == '#65b5c0'
 
 
 def test_status_icons_are_painted_at_cell_center_with_compact_bounds(status_page):
