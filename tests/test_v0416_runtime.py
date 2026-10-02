@@ -40,10 +40,10 @@ def test_metadata_editor_builds_new_compact_workspace_without_network(tmp_path: 
         assert dialog.cover_main_preview.width() == 248
         assert dialog.status_button.text() == 'DO SPRAWDZENIA'
         assert not hasattr(dialog, 'ready_button')
-        assert dialog.status_icons['artist'].text() == ''
-        assert dialog.status_icons['artist'].pixmap() is not None and not dialog.status_icons['artist'].pixmap().isNull()
-        assert dialog.status_icons['year'].text() == ''
-        assert dialog.status_icons['year'].pixmap() is not None and not dialog.status_icons['year'].pixmap().isNull()
+        assert dialog._field_status_icons['artist'].text() == ''
+        assert dialog._field_status_icons['artist'].pixmap() is not None and not dialog._field_status_icons['artist'].pixmap().isNull()
+        assert dialog._field_status_icons['year'].text() == ''
+        assert dialog._field_status_icons['year'].pixmap() is not None and not dialog._field_status_icons['year'].pixmap().isNull()
         assert dialog.recognition_bar.height() == 6
     finally:
         dialog._force_closing = True

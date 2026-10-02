@@ -122,19 +122,17 @@ def test_user_genre_chip_changes_are_manual_undoable_and_slash_is_parsed(tmp_pat
         _close(dialog)
 
 
-def test_status_panel_and_field_markers_use_green_amber_and_red_a1_states(tmp_path: Path):
+def test_field_markers_use_ready_and_problem_circle_states(tmp_path: Path):
     app = _app()
     dialog = MetadataEditorDialog(_track(tmp_path, artist=None, year=None))
     try:
         dialog.show()
         app.processEvents()
-        assert dialog.status_icons['title'].property('statusKind') == 'ok'
-        assert dialog.status_icons['year'].property('statusKind') == 'warning'
-        assert dialog.status_icons['artist'].property('statusKind') == 'critical'
-        assert dialog.status_icons['title'].pixmap().width() >= 18
-        assert dialog.status_icons['year'].pixmap().width() >= 18
-        assert dialog.status_icons['artist'].pixmap().width() >= 18
-        assert dialog._field_status_icons['year'].property('statusKind') == 'warning'
+        assert dialog._field_status_icons['title'].property('statusKind') == 'ok'
+        assert dialog._field_status_icons['title'].pixmap().width() >= 20
+        assert dialog._field_status_icons['year'].pixmap().width() >= 20
+        assert dialog._field_status_icons['artist'].pixmap().width() >= 20
+        assert dialog._field_status_icons['year'].property('statusKind') == 'critical'
         assert dialog._field_status_icons['artist'].property('statusKind') == 'critical'
         assert not dialog._field_status_icons['year'].pixmap().isNull()
         assert not dialog._field_status_icons['artist'].pixmap().isNull()
@@ -194,7 +192,6 @@ def test_failed_cover_request_ends_with_neutral_error_instead_of_loading(tmp_pat
         assert dialog.cover_info_values['format'].text() == '—'
         assert dialog.cover_info_values['size'].text() == '—'
         assert dialog._cover_proposal_labels.get(key) is None or dialog._cover_proposal_labels[key].text() != '…'
-        assert dialog.status_icons['cover'].property('statusKind') == 'warning'
         assert dialog.selected_cover_available() is False
         assert dialog.selected_cover_url() is None
         assert dialog.cover_save_state() is None

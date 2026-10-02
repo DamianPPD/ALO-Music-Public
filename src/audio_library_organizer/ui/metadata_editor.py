@@ -45,7 +45,7 @@ from audio_library_organizer.metadata.normalization import normalize_music_text,
 from audio_library_organizer.domain.preferences import default_name_rules
 from audio_library_organizer.metadata.online_lock import is_online_locked
 from audio_library_organizer.ui.assets import asset_path
-from audio_library_organizer.ui.icons import editor_icon
+from audio_library_organizer.ui.icons import editor_icon, library_icon
 from audio_library_organizer.ui.state import display_bpm, metadata_completeness, effective_status, library_status_presentation, review_severity
 from audio_library_organizer.ui.confidence import ConfidenceWidget
 from audio_library_organizer.ui.player import CompactPlayerBar
@@ -175,17 +175,18 @@ class MissingEmptyState(QWidget):
         subtitle = QLabel('Wszystkie wymagane pola są uzupełnione'); subtitle.setObjectName('MissingEmptySubtitle'); subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter); box.addWidget(subtitle)
 
 
-def _section_header(text: str, icon_name: str, *, compact: bool = False) -> QWidget:
+def _section_header(text: str, icon_name: str, *, icon_factory=editor_icon, icon_color='#8bbfcf') -> QWidget:
     host = QWidget()
     host.setObjectName('EditorSectionHeader')
     host.setStyleSheet('background:transparent;')
     row = QHBoxLayout(host)
-    row.setContentsMargins(0, 0, 0, 1)
+    row.setContentsMargins(0, 0, 0, 5)
     row.setSpacing(7)
     icon = QLabel()
-    icon_size = 16 if compact else 17
+    icon.setObjectName('EditorSectionIcon')
+    icon_size = 18
     icon.setStyleSheet('background:transparent;')
-    icon.setPixmap(editor_icon(icon_name, '#5fd5f2', icon_size).pixmap(icon_size, icon_size))
+    icon.setPixmap(icon_factory(icon_name, icon_color, icon_size).pixmap(icon_size, icon_size))
     icon.setFixedSize(icon_size + 2, icon_size + 2)
     icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
     label = QLabel(text)
@@ -439,6 +440,7 @@ class MetadataEditorDialog(QDialog):
 
     def __init__(self, track: TrackRecord, parent=None, *, filename_template: str = DEFAULT_FILENAME_TEMPLATE, player_bar=None, genre_suggestions=(), normalize_names: bool = True, name_rules=None, navigation_index: int = 0, navigation_total: int = 1):
         super().__init__(parent)
+        self.setObjectName('MetadataEditorDialog')
         self.track = track
         self.navigation_total = max(1, int(navigation_total))
         self.navigation_index = max(0, min(int(navigation_index), self.navigation_total - 1))
@@ -724,12 +726,15 @@ class MetadataEditorDialog(QDialog):
         ap.addWidget(self.audio_summary)
         self.audio_empty_status = QFrame()
         self.audio_empty_status.setObjectName('AudioRecognitionSummary')
+        self.audio_empty_status.setProperty('emptyResult', True)
         empty_row = QHBoxLayout(self.audio_empty_status)
         empty_row.setContentsMargins(8, 5, 8, 5)
         empty_row.setSpacing(8)
         empty_icon = QLabel()
-        empty_icon.setPixmap(editor_icon('audio_recognize', '#20c5c3', 17).pixmap(17, 17))
-        empty_icon.setFixedSize(23, 23)
+        empty_icon.setObjectName('AudioRecognitionEmptyIcon')
+        empty_icon.setPixmap(library_icon('status_problem', '#f34d64', 20).pixmap(20, 20))
+        empty_icon.setFixedSize(24, 24)
+        empty_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         empty_row.addWidget(empty_icon)
         empty_text = QVBoxLayout()
         empty_text.setSpacing(1)
@@ -766,9 +771,14 @@ class MetadataEditorDialog(QDialog):
         self.suspicious_warning.setVisible(any('Duża różnica' in reason for reason in track.match_reasons))
         content.addWidget(self.suspicious_warning)
 
-        # Główna przestrzeń: edytowalne metadane, kompaktowy status oraz okładki.
+        # Metadane i informacje o rozpoznaniu obok niezmienionej galerii okładek.
         workspace = QHBoxLayout()
         workspace.setSpacing(10)
+        self.metadata_column = QWidget()
+        self.metadata_column.setObjectName('MetadataEditorColumn')
+        metadata_column_layout = QVBoxLayout(self.metadata_column)
+        metadata_column_layout.setContentsMargins(0, 0, 0, 0)
+        metadata_column_layout.setSpacing(8)
 
         metadata = self.metadata_card = QFrame()
         metadata.setObjectName('PrimaryMetadataCard')
@@ -820,66 +830,28 @@ class MetadataEditorDialog(QDialog):
         url_row.addWidget(self.open_url_button)
         form.addRow(self._field_label('Discogs URL'), url_host)
         form.addRow(self._field_label('Komentarz'), self._field_input('comment', self.comment))
-        workspace.addWidget(metadata, 5)
-
-        status_host = self.status_recognition_column = QFrame()
-        status_host.setObjectName('StatusRecognitionColumn')
-        status_host.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        status_col = QVBoxLayout(status_host)
-        status_col.setContentsMargins(0, 0, 0, 0)
-        status_col.setSpacing(7)
-
-        status_card = self.status_card = QFrame()
-        status_card.setObjectName('MetadataStatusCompact')
-        status_box = QVBoxLayout(status_card)
-        status_box.setContentsMargins(10, 8, 10, 8)
-        status_box.setSpacing(4)
-        status_title = _section_header('Status pliku', 'status', compact=True)
-        status_box.addWidget(status_title)
-        self.status_labels = {}
-        self.status_icons = {}
-        self.status_rows = {}
-        for field_name, label in (
-            ('artist', 'Wykonawca'),
-            ('title', 'Tytuł / wersja'),
-            ('bpm', 'BPM'),
-            ('cover', 'Okładka'),
-            ('year', 'Rok'),
-            ('genre', 'Gatunek'),
-        ):
-            row_frame = QFrame()
-            row_frame.setObjectName('MetadataStatusRow')
-            row_layout = QHBoxLayout(row_frame)
-            row_layout.setContentsMargins(5, 2, 5, 2)
-            row_layout.setSpacing(7)
-            icon = QLabel('')
-            icon.setObjectName('MetadataStatusIcon')
-            icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            icon.setFixedSize(18, 18)
-            item = QLabel(label)
-            item.setObjectName('MetadataStatusText')
-            row_layout.addWidget(icon)
-            row_layout.addWidget(item, 1)
-            self.status_icons[field_name] = icon
-            self.status_labels[field_name] = item
-            self.status_rows[field_name] = row_frame
-            status_box.addWidget(row_frame)
-        status_col.addWidget(status_card, 3)
+        metadata_column_layout.addWidget(metadata, 1)
 
         recognition = self.recognition_card = QFrame()
         recognition.setObjectName('RecognitionInfoCompact')
         ril = QVBoxLayout(recognition)
         ril.setContentsMargins(10, 8, 10, 8)
         ril.setSpacing(5)
-        ri_title = _section_header('Informacje o rozpoznaniu', 'info', compact=True)
+        ri_title = _section_header('Informacje o rozpoznaniu', 'info')
         ril.addWidget(ri_title)
+        recognition_details = QGridLayout()
+        recognition_details.setHorizontalSpacing(20)
+        recognition_details.setVerticalSpacing(5)
+        recognition_details.setColumnStretch(0, 1)
+        recognition_details.setColumnStretch(1, 1)
+        ril.addLayout(recognition_details)
         self.recognition_values = {}
-        for key, label in (
+        for row, (key, label) in enumerate((
             ('source', 'Główne źródło'),
             ('fields', 'Rozpoznane pola'),
             ('duration', 'Długość'),
             ('bitrate', 'Bitrate'),
-        ):
+        )):
             line = QHBoxLayout()
             line.setContentsMargins(0, 0, 0, 0)
             line.setSpacing(8)
@@ -891,10 +863,10 @@ class MetadataEditorDialog(QDialog):
             line.addWidget(name)
             line.addStretch(1)
             line.addWidget(value)
-            ril.addLayout(line)
+            recognition_details.addLayout(line, row, 0)
             self.recognition_values[key] = value
 
-        for key, label in (('audio_status', 'Rozpoznanie audio'), ('audio_score', 'Dopasowanie'), ('audio_result', 'Wynik audio')):
+        for row, (key, label) in enumerate((('audio_status', 'Rozpoznanie audio'), ('audio_score', 'Dopasowanie'), ('audio_result', 'Wynik audio'))):
             line = QHBoxLayout()
             line.setSpacing(8)
             name = QLabel(label)
@@ -907,7 +879,7 @@ class MetadataEditorDialog(QDialog):
             line.addWidget(name)
             line.addStretch(1)
             line.addWidget(value)
-            ril.addLayout(line)
+            recognition_details.addLayout(line, row, 1)
             self.recognition_values[key] = value
 
         confidence_row = QHBoxLayout()
@@ -919,15 +891,15 @@ class MetadataEditorDialog(QDialog):
         self.recognition_confidence = QLabel('—')
         self.recognition_confidence.setObjectName('RecognitionConfidencePercent')
         confidence_row.addWidget(self.recognition_confidence)
-        ril.addLayout(confidence_row)
+        recognition_details.addLayout(confidence_row, 3, 1)
         self.recognition_bar = QProgressBar()
         self.recognition_bar.setObjectName('RecognitionConfidenceBar')
         self.recognition_bar.setRange(0, 100)
         self.recognition_bar.setTextVisible(False)
         self.recognition_bar.setFixedHeight(6)
         ril.addWidget(self.recognition_bar)
-        status_col.addWidget(recognition, 2)
-        workspace.addWidget(status_host, 2)
+        metadata_column_layout.addWidget(recognition)
+        workspace.addWidget(self.metadata_column, 3)
 
         gallery = self.cover_gallery = QFrame()
         gallery.setObjectName('CoverGallery')
@@ -1045,10 +1017,7 @@ class MetadataEditorDialog(QDialog):
         self._cover_proposal_labels: dict[str, ClickableCoverLabel] = {}
         self._selected_cover_key = 'placeholder'
         self._selected_external_url = track.cover_art_url
-        workspace.addWidget(gallery, 4)
-        workspace.setStretch(0, 5)
-        workspace.setStretch(1, 2)
-        workspace.setStretch(2, 4)
+        workspace.addWidget(gallery, 2)
         content.addLayout(workspace)
 
         naming = QFrame()
@@ -1088,7 +1057,8 @@ class MetadataEditorDialog(QDialog):
         comparison_layout.setContentsMargins(8, 6, 8, 6)
         comparison_layout.setSpacing(4)
         compare_head = QHBoxLayout()
-        compare_title = _section_header('Porównanie źródeł  (pomocniczo)', 'database', compact=True)
+        compare_title = _section_header('Porównanie źródeł  (pomocniczo)', 'legend',
+                                        icon_factory=library_icon, icon_color='#bdcbd3')
         compare_head.addWidget(compare_title)
         self.source_legend_button = QToolButton()
         self.source_legend_button.setObjectName('SourceLegendInfoButton')
@@ -1247,7 +1217,7 @@ class MetadataEditorDialog(QDialog):
         value_row.addWidget(widget, 1)
         indicator = QLabel()
         indicator.setObjectName('MetadataFieldWarning')
-        indicator.setFixedSize(20, 20)
+        indicator.setFixedSize(24, 24)
         indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
         indicator.hide()
         self._field_status_icons[field_name] = indicator
@@ -1749,88 +1719,56 @@ class MetadataEditorDialog(QDialog):
         for field_name in self.CORE_FIELDS:
             widget = self._field_widgets[field_name]
             missing = not bool(self._widget_text(widget).strip())
+            problem = self._field_status_kind(field_name) == 'critical'
+            if field_name == 'year':
+                widget.setProperty('invalidYear', not is_valid_year_text(self.year.text().strip()))
             widget.setProperty('missingRequired', missing)
+            widget.setProperty('fieldProblem', problem)
             widget.style().unpolish(widget)
             widget.style().polish(widget)
             inner_edit = getattr(widget, 'edit', None)
             if inner_edit is not None:
                 inner_edit.setProperty('missingRequired', missing)
+                inner_edit.setProperty('fieldProblem', problem)
                 inner_edit.style().unpolish(inner_edit)
                 inner_edit.style().polish(inner_edit)
             shell = self._field_value_shells.get(field_name)
             if shell is not None:
                 shell.setProperty('missingRequired', missing)
+                shell.setProperty('fieldProblem', problem)
                 shell.style().unpolish(shell)
                 shell.style().polish(shell)
 
-    def _refresh_status_summary(self) -> None:
-        preview = self._preview_track()
-        values = {
-            'artist': bool(preview.artist),
-            'title': bool(preview.title),
-            'bpm': preview.bpm is not None,
-            'cover': self.selected_cover_available(),
-            'year': bool(preview.year),
-            'genre': bool(preview.genre),
-        }
-        for field_name, label in (
-            ('artist', 'Wykonawca'),
-            ('title', 'Tytuł / wersja'),
-            ('bpm', 'BPM'),
-            ('cover', 'Okładka'),
-            ('year', 'Rok'),
-            ('genre', 'Gatunek'),
-        ):
-            widget = self.status_labels.get(field_name)
-            icon = self.status_icons.get(field_name)
-            row = self.status_rows.get(field_name)
-            if widget is None or icon is None or row is None:
-                continue
-            ok = values[field_name]
-            if ok:
-                icon_name, icon_color, kind = 'status', '#35df89', 'ok'
-            elif field_name in {'artist', 'title'}:
-                icon_name, icon_color, kind = 'alert_circle', '#ff665e', 'critical'
-            else:
-                icon_name, icon_color, kind = 'alert_circle', '#ffc85b', 'warning'
-            widget.setText(ui_text(self, label))
-            icon.setText('')
-            icon.setPixmap(editor_icon(icon_name, icon_color, 18).pixmap(18, 18))
-            for element in (widget, icon, row):
-                element.setProperty('statusKind', kind)
-                element.style().unpolish(element)
-                element.style().polish(element)
-            if kind == 'ok':
-                icon.setStyleSheet('background:transparent; border:0;')
-                widget.setStyleSheet('color:#63e39a; font-weight:760;')
-                row.setStyleSheet('background:transparent; border:0;')
-            elif kind == 'warning':
-                icon.setStyleSheet('background:transparent; border:0;')
-                widget.setStyleSheet('color:#f5b64f; font-weight:820;')
-                row.setStyleSheet('background:transparent; border:0;')
-            elif kind == 'critical':
-                icon.setStyleSheet('background:transparent; border:0;')
-                widget.setStyleSheet('color:#ff8179; font-weight:820;')
-                row.setStyleSheet('background:transparent; border:0;')
+    def _field_status_kind(self, field_name: str) -> str:
+        text = self._widget_text(self._field_widgets[field_name]).strip()
+        if field_name in self.CORE_FIELDS and not text:
+            return 'critical'
+        if field_name == 'year' and not is_valid_year_text(text):
+            return 'critical'
+        if field_name == 'bpm' and text:
+            try:
+                float(text.replace(',', '.'))
+            except ValueError:
+                return 'critical'
+        return 'ok'
 
-        # Przy polach pokazujemy wyłącznie ostrzeżenia. Poprawne wartości nie
-        # dostają drugiej, konkurującej z panelem statusu zielonej ikony.
+    def _refresh_status_summary(self) -> None:
+        # Field presentation is independent of the removed file-status panel.
+        icons = {'ok': ('status_ready', '#35d893'),
+                 'warning': ('status_review', '#d8a23a'),
+                 'critical': ('status_problem', '#f34d64')}
         for field_name, indicator in self._field_status_icons.items():
-            status = self.status_icons.get(field_name)
-            if status is not None:
-                field_kind = status.property('statusKind')
-            else:
-                missing = field_name in self.CORE_FIELDS and not bool(self._widget_text(self._field_widgets[field_name]).strip())
-                field_kind = 'critical' if missing and field_name in {'artist', 'title'} else 'warning' if missing else 'ok'
-            problematic = field_kind in {'warning', 'critical'}
-            color = '#ff665e' if field_kind == 'critical' else '#ffc85b'
+            field_kind = self._field_status_kind(field_name)
+            icon_name, color = icons[field_kind]
+            text = self._widget_text(self._field_widgets[field_name]).strip()
             indicator.setText('')
-            indicator.setPixmap(editor_icon('alert_circle', color, 16).pixmap(16, 16) if problematic else QPixmap())
+            indicator.setPixmap(library_icon(icon_name, color, 20).pixmap(20, 20))
             indicator.setProperty('statusKind', field_kind)
-            indicator.setVisible(problematic)
+            indicator.setVisible(field_kind != 'ok' or bool(text))
             indicator.style().unpolish(indicator)
             indicator.style().polish(indicator)
-            indicator.setToolTip(ui_text(self, 'Dane kompletne' if not problematic else 'Brak danych'))
+            tooltip = 'Dane kompletne' if field_kind == 'ok' else 'Brak danych' if not text else 'PROBLEM'
+            indicator.setToolTip(ui_text(self, tooltip))
 
     def _refresh_recognition_info(self) -> None:
         values = self._preview_track()

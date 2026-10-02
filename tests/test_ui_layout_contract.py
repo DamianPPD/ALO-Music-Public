@@ -204,11 +204,11 @@ def test_persistent_paths_and_scan_cancel_are_clear():
     assert 'QPushButton#CancelScanAction' in THEME
 
 
-def test_metadata_editor_v0416_keeps_individual_fields_compact_status_comparison_and_inline_player():
+def test_metadata_editor_keeps_individual_fields_recognition_comparison_and_inline_player():
     for label in ('Wykonawca', 'Tytuł / wersja', 'Rok', 'Gatunek', 'BPM', 'Album / Release', 'Discogs URL', 'Komentarz'):
         assert label in EDITOR
     assert "metadata.setObjectName('PrimaryMetadataCard')" in EDITOR
-    assert "status_card.setObjectName('MetadataStatusCompact')" in EDITOR
+    assert "status_card.setObjectName('MetadataStatusCompact')" not in EDITOR
     assert "recognition.setObjectName('RecognitionInfoCompact')" in EDITOR
     assert "comparison.setObjectName('SourceComparisonCard')" in EDITOR
     assert "self.source_legend_button.setText('')" in EDITOR

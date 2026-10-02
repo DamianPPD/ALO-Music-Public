@@ -74,16 +74,18 @@ def test_top_track_strip_shows_filename_bpm_duration_and_format(tmp_path: Path):
         dialog.close()
 
 
-def test_valid_fields_have_no_extra_icon_and_missing_fields_show_warning(tmp_path: Path):
+def test_valid_fields_show_ready_and_missing_required_fields_show_problem(tmp_path: Path):
     dialog = MetadataEditorDialog(_complete_track(tmp_path, year=None))
     try:
-        assert dialog._field_status_icons['artist'].isHidden()
+        assert not dialog._field_status_icons['artist'].isHidden()
+        assert dialog._field_status_icons['artist'].property('statusKind') == 'ok'
         assert not dialog._field_status_icons['year'].isHidden()
         assert dialog._field_status_icons['year'].text() == ''
         assert not dialog._field_status_icons['year'].pixmap().isNull()
-        assert dialog._field_status_icons['year'].property('statusKind') == 'warning'
+        assert dialog._field_status_icons['year'].property('statusKind') == 'critical'
         dialog.year.setText('2009')
-        assert dialog._field_status_icons['year'].isHidden()
+        assert not dialog._field_status_icons['year'].isHidden()
+        assert dialog._field_status_icons['year'].property('statusKind') == 'ok'
         dialog.artist.clear()
         assert not dialog._field_status_icons['artist'].isHidden()
         assert dialog._field_status_icons['artist'].text() == ''

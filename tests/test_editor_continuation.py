@@ -27,14 +27,14 @@ def test_field_markers_follow_status_and_sources(tmp_path):
     app = QApplication.instance() or QApplication([])
     dialog = MetadataEditorDialog(TrackRecord(path=tmp_path/'a.mp3', artist='Artist', field_sources={'artist':'Tag'}))
     try:
-        assert dialog._field_status_icons['artist'].property('statusKind') == dialog.status_icons['artist'].property('statusKind') == 'ok'
-        assert dialog._field_status_icons['artist'].isHidden()
-        assert dialog._field_status_icons['year'].property('statusKind') == 'warning'
+        assert dialog._field_status_icons['artist'].property('statusKind') == 'ok'
+        assert not dialog._field_status_icons['artist'].isHidden()
+        assert dialog._field_status_icons['year'].property('statusKind') == 'critical'
         assert not dialog._field_status_icons['year'].isHidden()
         assert not dialog._source_buttons['artist'].icon().isNull()
         dialog.year.setText('2009')
         assert dialog._field_status_icons['year'].property('statusKind') == 'ok'
-        assert dialog._field_status_icons['year'].isHidden()
+        assert not dialog._field_status_icons['year'].isHidden()
         dialog.artist.clear()
         assert dialog._field_status_icons['artist'].property('statusKind') == 'critical'
     finally:

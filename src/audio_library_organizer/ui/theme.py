@@ -2770,3 +2770,47 @@ QWidget#LibraryPage QFrame#PinnedDetailActions { background:#09151b; border:0; b
 '''
 DARK_STYLE += LIBRARY_A_STYLE
 LIGHT_STYLE += LIBRARY_A_STYLE
+
+# This round changes only the metadata editor's panels and visual error states.
+METADATA_EDITOR_PANEL_STYLE = r'''
+QDialog#MetadataEditorDialog QWidget#MetadataEditorColumn { background:transparent; }
+QDialog#MetadataEditorDialog QWidget#EditorSectionHeader {
+    background:transparent; border:0; border-bottom:1px solid #284653;
+}
+QDialog#MetadataEditorDialog QLabel#EditorSectionTitle {
+    color:#e1ebf1; background:transparent; font-size:10pt; font-weight:730; padding:0;
+}
+QDialog#MetadataEditorDialog QLabel#EditorSectionIcon,
+QDialog#MetadataEditorDialog QLabel#MetadataFieldWarning { background:transparent; border:0; margin:0; }
+QDialog#MetadataEditorDialog QProgressBar#RecognitionConfidenceBar {
+    min-height:6px; max-height:6px; border:0;
+}
+QDialog#MetadataEditorDialog QLineEdit[fieldProblem="true"] {
+    border:1px solid #f34d64; background:#29151b; color:#fff3f5;
+}
+QDialog#MetadataEditorDialog QLineEdit[fieldProblem="true"]:focus {
+    border-color:#ff7284;
+}
+QDialog#MetadataEditorDialog QFrame#MetadataValueShell[fieldProblem="true"] {
+    background:#29151b; border:0; border-radius:7px;
+}
+QDialog#MetadataEditorDialog QFrame#AudioRecognitionSummary[emptyResult="true"] {
+    background:#21151b; border:0; border-radius:6px;
+}
+QDialog#MetadataEditorDialog QFrame#AudioRecognitionSummary[emptyResult="true"] QLabel {
+    background:transparent;
+}
+QDialog#MetadataEditorDialog QFrame#AudioRecognitionSummary[emptyResult="true"] QLabel#AudioRecognitionSummaryHeading {
+    color:#ff8792;
+}
+QDialog#MetadataEditorDialog QFrame#AudioRecognitionSummary[emptyResult="true"] QLabel#AudioRecognitionSummaryResult {
+    color:#d6dde3; font-weight:400;
+}
+'''
+DARK_STYLE += METADATA_EDITOR_PANEL_STYLE
+LIGHT_STYLE += METADATA_EDITOR_PANEL_STYLE + r'''
+QDialog#MetadataEditorDialog QFrame#PrimaryMetadataCard QWidget#EditorSectionHeader,
+QDialog#MetadataEditorDialog QFrame#SourceComparisonCard QWidget#EditorSectionHeader { border-bottom-color:#aec1cb; }
+QDialog#MetadataEditorDialog QFrame#PrimaryMetadataCard QLabel#EditorSectionTitle,
+QDialog#MetadataEditorDialog QFrame#SourceComparisonCard QLabel#EditorSectionTitle { color:#243b47; }
+'''

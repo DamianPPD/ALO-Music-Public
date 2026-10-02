@@ -39,7 +39,7 @@ def _close(dialog):
     dialog.close()
 
 
-def test_three_editor_columns_keep_equal_height_at_multiple_widths(tmp_path: Path):
+def test_metadata_and_recognition_column_matches_cover_height_at_multiple_widths(tmp_path: Path):
     app = _app()
     dialog = MetadataEditorDialog(_track(tmp_path))
     try:
@@ -48,8 +48,7 @@ def test_three_editor_columns_keep_equal_height_at_multiple_widths(tmp_path: Pat
             dialog.show()
             app.processEvents()
             heights = (
-                dialog.metadata_card.height(),
-                dialog.status_recognition_column.height(),
+                dialog.metadata_column.height(),
                 dialog.cover_gallery.height(),
             )
             assert max(heights) - min(heights) <= 2
@@ -152,6 +151,12 @@ def test_source_comparison_reserves_readable_columns_and_scrolls_when_narrow(tmp
         table = dialog.source_table
         assert 190 <= table.columnWidth(0) < 220
         assert table.columnWidth(2) >= 250
+        # The editor's vertical scrollbar can narrow the table viewport.
+        # Keep readable columns and verify that actions remain fully reachable.
+        if table.horizontalScrollBar().maximum() > 0:
+            assert table.horizontalScrollBar().isVisible()
+            table.horizontalScrollBar().setValue(table.horizontalScrollBar().maximum())
+            app.processEvents()
         for row in range(table.rowCount()):
             source_item = table.item(row, 0)
             assert table.cellWidget(row, 0) is None
@@ -159,6 +164,7 @@ def test_source_comparison_reserves_readable_columns_and_scrolls_when_narrow(tmp
             title = table.item(row, 2)
             assert table.columnWidth(2) >= table.fontMetrics().horizontalAdvance(title.text()) + 16
             action = table.cellWidget(row, 6)
+            assert action.geometry().left() >= 0
             assert action.geometry().right() <= table.viewport().width()
             assert table.columnViewportPosition(6) >= table.columnViewportPosition(1) + table.columnWidth(1)
         table.setFixedWidth(750)
@@ -305,7 +311,8 @@ def test_warning_marker_belongs_to_value_shell_before_source_badge(tmp_path: Pat
         assert shell.mapTo(dialog, shell.rect().topRight()).x() < badge.mapTo(dialog, badge.rect().topLeft()).x()
         assert not marker.isHidden()
         dialog.year.setText('2009')
-        assert marker.isHidden()
+        assert not marker.isHidden()
+        assert marker.property('statusKind') == 'ok'
     finally:
         _close(dialog)
 

@@ -27,14 +27,15 @@ def test_top_toolbar_keeps_workflow_actions_with_single_start_accent():
 def test_editor_section_headers_match_reference_wording_and_icons():
     for text in (
         "Metadane utworu",
-        "Status pliku",
+        "Informacje o rozpoznaniu",
         "Okładka (wybierana z listy)",
         "Porównanie źródeł  (pomocniczo)",
     ):
         assert text in EDITOR
     assert "setObjectName('EditorSectionTitle')" in EDITOR
     assert "color:#e7eef3;" in THEME
-    assert "editor_icon(icon_name, '#5fd5f2'" in EDITOR
+    assert "icon_factory(icon_name, icon_color, icon_size)" in EDITOR
+    assert "'legend'," in EDITOR and 'icon_factory=library_icon' in EDITOR
 
 
 def test_editor_online_and_bottom_actions_use_real_icons():

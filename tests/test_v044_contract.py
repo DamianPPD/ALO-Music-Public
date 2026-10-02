@@ -62,7 +62,7 @@ def test_metadata_editor_keeps_status_only_on_bottom_action_and_active_url_actio
     assert 'AKTUALNY STATUS:' not in EDITOR
     assert "self.status_button.setText(ui_text(self, 'GOTOWE')" in EDITOR
     assert "self.status_button.setProperty('currentStatusKind', 'ready' if self.mark_ready else 'review')" in EDITOR
-    assert "status_card.setObjectName('MetadataStatusCompact')" in EDITOR
+    assert "status_card.setObjectName('MetadataStatusCompact')" not in EDITOR
     assert 'Otwórz link' in EDITOR
     assert 'QDesktopServices.openUrl' in EDITOR
     assert "scheme() in {'http', 'https'}" in EDITOR
