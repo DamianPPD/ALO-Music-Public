@@ -157,18 +157,41 @@ def test_library_refresh_keeps_current_visual_order_after_status_change(tmp_path
     assert after == before
 
 
-def test_playing_row_delegate_draws_explicit_high_contrast_highlight():
-    library = Path('src/audio_library_organizer/ui/library_page.py').read_text(encoding='utf-8')
-    delegate = library.split('class LibraryRowDelegate(QStyledItemDelegate)', 1)[1].split('class LibraryPage', 1)[0]
+def test_playing_row_tint_restores_ready_and_review_backgrounds_when_playback_stops(tmp_path):
+    from audio_library_organizer.ui.theme import DARK_STYLE
+    app = _qt_app()
+    previous = app.styleSheet()
+    app.setStyleSheet(DARK_STYLE)
+    ready = _complete_track(tmp_path / 'ready.mp3', status='ready', title='Ready')
+    review = _complete_track(tmp_path / 'review.flac', status='review', title='Review')
+    review.size_bytes, review.duration_seconds, review.codec = 800000, 180, 'FLAC'
+    page = LibraryPage()
+    page.set_tracks([ready, review])
+    page.resize(1600, 900); page.show()
 
-    assert 'PLAYING_BACKGROUND = QColor(' in library
-    assert 'PLAYING_ACCENT = QColor(' in library
-    assert 'painter.fillRect(option.rect, PLAYING_BACKGROUND)' in delegate
-    assert 'painter.setPen(QPen(PLAYING_ACCENT' in delegate
-    assert 'painter.drawLine' in delegate
+    def background(track):
+        app.processEvents()
+        row = next(row for row in range(page.model.rowCount())
+                   if page.model.item(row, 0).data(Qt.ItemDataRole.UserRole) is track)
+        box = page.table.visualRect(page.model.index(row, 3))
+        pixmap = page.table.viewport().grab()
+        ratio = pixmap.devicePixelRatio()
+        return pixmap.toImage().pixelColor(round((box.left() + 12) * ratio),
+                                          round((box.top() + 5) * ratio)).name()
+
+    try:
+        page.set_playing_track(ready)
+        assert background(ready) == '#12262b'
+        page.set_playing_track(review)
+        assert background(ready) == '#11171e'
+        assert background(review) == '#12262b'
+        page.set_playing_track(None)
+        assert background(review) == '#1b1b18'
+    finally:
+        page.close()
+        app.setStyleSheet(previous)
 
 def test_status_change_from_metadata_editor_does_not_recenter_library():
     main_window = Path('src/audio_library_organizer/ui/main_window.py').read_text(encoding='utf-8')
     method = main_window.split('def _set_ready_from_editor', 1)[1].split('def _edit_metadata', 1)[0]
     assert 'self.library.select_track_by_path(track.path)' not in method
-

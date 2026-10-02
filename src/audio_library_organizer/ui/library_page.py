@@ -34,8 +34,25 @@ PLAYING_ROLE = int(Qt.ItemDataRole.UserRole) + 1
 VISUAL_ORDER_ROLE = int(Qt.ItemDataRole.UserRole) + 2
 STATUS_ACCENT_ROLE = int(Qt.ItemDataRole.UserRole) + 3
 STATUS_BACKGROUND_ROLE = int(Qt.ItemDataRole.UserRole) + 4
-PLAYING_BACKGROUND = QColor('#153a42')
-PLAYING_ACCENT = QColor('#31d7c8')
+PLAYING_BACKGROUND = QColor('#12262b')
+PLAYING_ACCENT = QColor('#408d94')
+SELECTED_BACKGROUND = QColor('#203038')
+SELECTED_ACCENT = QColor('#65b5c0')
+
+
+def _paint_library_checkbox(painter, square, state, hovered=False):
+    painter.save()
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setPen(QPen(QColor('#b9c3cb' if hovered else '#929ca5'), 1.4))
+    painter.setBrush(QBrush(QColor('#172128')))
+    painter.drawRoundedRect(square, 3, 3)
+    painter.setPen(QPen(QColor('#edf0f2'), 2.1))
+    if state == Qt.CheckState.PartiallyChecked:
+        painter.drawLine(square.left() + 4, square.center().y(), square.right() - 4, square.center().y())
+    elif state == Qt.CheckState.Checked:
+        painter.drawLine(square.left() + 3, square.center().y(), square.center().x() - 1, square.bottom() - 4)
+        painter.drawLine(square.center().x() - 1, square.bottom() - 4, square.right() - 3, square.top() + 4)
+    painter.restore()
 
 
 class LibraryCheckHeader(QHeaderView):
@@ -44,6 +61,8 @@ class LibraryCheckHeader(QHeaderView):
     def __init__(self, page):
         super().__init__(Qt.Orientation.Horizontal, page.table)
         self._page = ref(page)
+        self._check_hovered = False
+        self.setMouseTracking(True)
 
     def checkState(self):
         page = self._page()
@@ -66,19 +85,19 @@ class LibraryCheckHeader(QHeaderView):
         super().paintSection(painter, rect, logical_index)
         if logical_index == 0:
             square = QRect(rect.center().x() - 8, rect.center().y() - 8, 16, 16)
-            state = self.checkState()
-            painter.save()
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-            painter.setPen(QPen(QColor('#56d99a' if state != Qt.CheckState.Unchecked else '#82969b'), 1.4))
-            painter.setBrush(QBrush(QColor('#16422f' if state != Qt.CheckState.Unchecked else '#142129')))
-            painter.drawRoundedRect(square, 3, 3)
-            painter.setPen(QPen(QColor('#a6f7c5'), 2.1))
-            if state == Qt.CheckState.PartiallyChecked:
-                painter.drawLine(square.left() + 4, square.center().y(), square.right() - 4, square.center().y())
-            elif state == Qt.CheckState.Checked:
-                painter.drawLine(square.left() + 3, square.center().y(), square.center().x() - 1, square.bottom() - 4)
-                painter.drawLine(square.center().x() - 1, square.bottom() - 4, square.right() - 3, square.top() + 4)
-            painter.restore()
+            _paint_library_checkbox(painter, square, self.checkState(), self._check_hovered)
+
+    def mouseMoveEvent(self, event):
+        hovered = self.logicalIndexAt(event.position().toPoint()) == 0
+        if hovered != self._check_hovered:
+            self._check_hovered = hovered
+            self.updateSection(0)
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event):
+        self._check_hovered = False
+        self.updateSection(0)
+        super().leaveEvent(event)
 
     def mousePressEvent(self, event):
         if self.logicalIndexAt(event.position().toPoint()) == 0:
@@ -105,7 +124,7 @@ class StableTableView(QTableView):
 
 
 class LibraryRowDelegate(QStyledItemDelegate):
-    """Compact status icons and row accents, with cyan selection taking priority."""
+    """Independent playing accents and selection outline, with neutral checks."""
 
     @staticmethod
     def _check_state(index):
@@ -125,7 +144,8 @@ class LibraryRowDelegate(QStyledItemDelegate):
         clean = QStyleOptionViewItem(option)
         self.initStyleOption(clean, index)
         clean.state &= ~QStyle.StateFlag.State_HasFocus
-        highlighted = bool(clean.state & QStyle.StateFlag.State_Selected) or bool(index.data(PLAYING_ROLE))
+        selected = bool(clean.state & QStyle.StateFlag.State_Selected)
+        playing = bool(index.data(PLAYING_ROLE))
         if index.column() == 0:
             clean.features &= ~QStyleOptionViewItem.ViewItemFeature.HasCheckIndicator
         if index.column() == 1:
@@ -134,11 +154,12 @@ class LibraryRowDelegate(QStyledItemDelegate):
             clean.icon = QIcon()
             clean.features &= ~(QStyleOptionViewItem.ViewItemFeature.HasDisplay
                                 | QStyleOptionViewItem.ViewItemFeature.HasDecoration)
-        if highlighted:
+        if selected or playing:
             clean.state &= ~QStyle.StateFlag.State_Selected
-            clean.backgroundBrush = QBrush(PLAYING_BACKGROUND)
+            background = SELECTED_BACKGROUND if selected else PLAYING_BACKGROUND
+            clean.backgroundBrush = QBrush(background)
             painter.save()
-            painter.fillRect(option.rect, PLAYING_BACKGROUND)
+            painter.fillRect(option.rect, background)
             painter.restore()
         elif clean.backgroundBrush.style() != Qt.BrushStyle.NoBrush:
             # QSS item rules may omit the model's background brush.
@@ -154,26 +175,24 @@ class LibraryRowDelegate(QStyledItemDelegate):
                 icon.paint(painter, square, Qt.AlignmentFlag.AlignCenter, QIcon.Mode.Normal)
         if index.column() == 0:
             square = QRect(option.rect.center().x() - 8, option.rect.center().y() - 8, 16, 16)
-            checked = self._check_state(index) == Qt.CheckState.Checked
-            painter.save()
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-            painter.setPen(QPen(QColor('#56d99a' if checked else '#82969b'), 1.4))
-            painter.setBrush(QBrush(QColor('#16422f' if checked else '#142129')))
-            painter.drawRoundedRect(square, 3, 3)
-            if checked:
-                painter.setPen(QPen(QColor('#a6f7c5'), 2.1))
-                painter.drawLine(square.left() + 3, square.center().y(), square.center().x() - 1, square.bottom() - 4)
-                painter.drawLine(square.center().x() - 1, square.bottom() - 4, square.right() - 3, square.top() + 4)
-            painter.restore()
+            _paint_library_checkbox(painter, square, self._check_state(index),
+                                    bool(clean.state & QStyle.StateFlag.State_MouseOver))
         accent = index.data(STATUS_ACCENT_ROLE)
-        if highlighted or accent is not None:
+        if selected:
             painter.save()
-            painter.setPen(QPen(PLAYING_ACCENT, 2.0) if highlighted else QPen(accent, 1.0))
-            if highlighted:
-                painter.drawLine(option.rect.left(), option.rect.top() + 1, option.rect.right(), option.rect.top() + 1)
-                painter.drawLine(option.rect.left(), option.rect.bottom() - 1, option.rect.right(), option.rect.bottom() - 1)
+            painter.setPen(QPen(SELECTED_ACCENT, 1.0))
+            painter.drawLine(option.rect.left(), option.rect.top() + 1, option.rect.right(), option.rect.top() + 1)
+            painter.drawLine(option.rect.left(), option.rect.bottom() - 1, option.rect.right(), option.rect.bottom() - 1)
             if index.column() == 0:
                 painter.drawLine(option.rect.left() + 1, option.rect.top(), option.rect.left() + 1, option.rect.bottom())
+            if index.column() == index.model().columnCount() - 1:
+                painter.drawLine(option.rect.right() - 1, option.rect.top(), option.rect.right() - 1, option.rect.bottom())
+            painter.restore()
+        if index.column() == 0 and (playing or (accent is not None and not selected)):
+            painter.save()
+            painter.setPen(QPen(PLAYING_ACCENT, 2.0) if playing else QPen(accent, 1.0))
+            x = option.rect.left() + (2 if playing else 1)
+            painter.drawLine(x, option.rect.top() + 2, x, option.rect.bottom() - 2)
             painter.restore()
 
     def sizeHint(self, option, index):
@@ -299,6 +318,7 @@ class LibraryPage(QWidget):
         self.table.setHorizontalHeader(LibraryCheckHeader(self))
         self.table.installEventFilter(self)
         self.table.setItemDelegate(LibraryRowDelegate(self.table))
+        self.table.setMouseTracking(True)
         self.table.setIconSize(QSize(16, 16))
         self.table.setAlternatingRowColors(False)
         self.table.setSortingEnabled(True)
@@ -349,7 +369,7 @@ class LibraryPage(QWidget):
         self.detail_scroll = QScrollArea(); self.detail_scroll.setWidgetResizable(True)
         self.detail_scroll.setFrameShape(QFrame.Shape.NoFrame)
         body = QWidget(); detail_root = QVBoxLayout(body)
-        detail_root.setContentsMargins(10, 4, 10, 8); detail_root.setSpacing(8)
+        detail_root.setContentsMargins(10, 8, 10, 8); detail_root.setSpacing(8)
         detail_root.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         self.detail_section_marks = []
         self.detail_section_titles = []
@@ -366,7 +386,7 @@ class LibraryPage(QWidget):
         self.family_toggle.clicked.connect(self._toggle_family)
         detail_root.addWidget(self.version_family_card)
 
-        summary_row = QHBoxLayout(); summary_row.setContentsMargins(0, 0, 0, 0); summary_row.setSpacing(10)
+        summary_row = QHBoxLayout(); summary_row.setContentsMargins(0, 0, 0, 0); summary_row.setSpacing(13)
         self.cover = ClickableCoverLabel('Brak okładki'); self.cover.setObjectName('LibraryDetailCover')
         self.cover.setAlignment(Qt.AlignmentFlag.AlignCenter); self.cover.setFixedSize(218, 218)
         self.cover.clicked.connect(self._show_cover_preview)
@@ -374,7 +394,7 @@ class LibraryPage(QWidget):
 
         self.completeness_card = QFrame(); self.completeness_card.setObjectName('LibraryCompletenessCard')
         completeness_layout = QVBoxLayout(self.completeness_card)
-        completeness_layout.setContentsMargins(13, 10, 13, 9); completeness_layout.setSpacing(6)
+        completeness_layout.setContentsMargins(15, 12, 15, 11); completeness_layout.setSpacing(8)
         completeness_top = QHBoxLayout(); completeness_top.setSpacing(7)
         self.completeness_icon = QLabel(); self.completeness_icon.setObjectName('LibraryCompletenessIcon')
         self.completeness_icon.setPixmap(library_icon('approve', '#2de1ac', 21).pixmap(21, 21))
@@ -390,8 +410,8 @@ class LibraryPage(QWidget):
         completeness_layout.addWidget(self.completeness_hint)
         separator = QFrame(); separator.setObjectName('LibraryDetailSeparator'); separator.setFixedHeight(1)
         completeness_layout.addWidget(separator)
-        fields_grid = QGridLayout(); fields_grid.setContentsMargins(0, 3, 0, 0)
-        fields_grid.setHorizontalSpacing(6); fields_grid.setVerticalSpacing(4)
+        fields_grid = QGridLayout(); fields_grid.setContentsMargins(0, 5, 0, 0)
+        fields_grid.setHorizontalSpacing(6); fields_grid.setVerticalSpacing(5)
         self.completeness_fields = {}
         self.completeness_field_icons = {}
         for index, (key, title) in enumerate((('artist', 'Wykonawca'), ('year', 'Rok'),
@@ -421,11 +441,12 @@ class LibraryPage(QWidget):
         track_card = QFrame(); track_card.setObjectName('LibraryTrackDataCard')
         data_layout = QVBoxLayout(track_card); data_layout.setContentsMargins(0, 0, 0, 7); data_layout.setSpacing(0)
         data_head, _ = self._detail_section_header('Dane utworu'); data_layout.addWidget(data_head)
+        data_layout.addSpacing(2)
         for key, title, icon in (('artist', 'Wykonawca', 'artist'),
                                  ('title', 'Tytuł / wersja', 'music_note'),
                                  ('album', 'Album / Release', 'album')):
             data_layout.addWidget(self._detail_value_row(key, title, icon))
-        metrics = QHBoxLayout(); metrics.setContentsMargins(6, 3, 6, 0); metrics.setSpacing(0)
+        metrics = QHBoxLayout(); metrics.setContentsMargins(6, 5, 6, 0); metrics.setSpacing(0)
         for index, (key, title, icon) in enumerate((('year', 'Rok', 'calendar'),
                                                    ('bpm', 'BPM', 'waveform'),
                                                    ('genre', 'Gatunek', 'tag'))):
@@ -438,7 +459,7 @@ class LibraryPage(QWidget):
 
         self.technical_panel = QFrame(); self.technical_panel.setObjectName('LibraryTechnicalCard')
         technical_layout = QVBoxLayout(self.technical_panel)
-        technical_layout.setContentsMargins(0, 0, 0, 7); technical_layout.setSpacing(3)
+        technical_layout.setContentsMargins(0, 0, 0, 7); technical_layout.setSpacing(5)
         technical_head, _ = self._detail_section_header('Dane techniczne')
         technical_layout.addWidget(technical_head)
         first_row = QHBoxLayout(); first_row.setContentsMargins(6, 3, 6, 0); first_row.setSpacing(0)
@@ -464,14 +485,13 @@ class LibraryPage(QWidget):
         self.detail_scroll.setWidget(body); detail_outer.addWidget(self.detail_scroll, 1)
 
         actions_bar = QFrame(); actions_bar.setObjectName('PinnedDetailActions')
-        actions = QHBoxLayout(actions_bar); actions.setContentsMargins(12, 8, 12, 8); actions.setSpacing(0)
+        actions = QHBoxLayout(actions_bar); actions.setContentsMargins(14, 10, 14, 10); actions.setSpacing(0)
         self.detail_edit = QPushButton('Edytuj metadane'); self.detail_edit.setObjectName('LibraryDetailEdit')
         self.detail_edit.setIcon(library_icon('metadata_edit', '#a5f3c1', 22)); self.detail_edit.setIconSize(QSize(22, 22))
-        self.detail_edit.setMinimumWidth(324); self.detail_edit.setMaximumWidth(440)
-        self.detail_edit.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        self.detail_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.detail_edit.setToolTip(ui_text(self, 'Edytuj metadane'))
         self.detail_edit.clicked.connect(self._edit_current)
-        actions.addStretch(1); actions.addWidget(self.detail_edit); actions.addStretch(1)
+        actions.addWidget(self.detail_edit)
         self.detail_actions = actions_bar
         detail_outer.addWidget(actions_bar)
         self.split.addWidget(self.detail); self.split.setSizes([960, 640])
@@ -513,7 +533,7 @@ class LibraryPage(QWidget):
 
     def _detail_value_row(self, key: str, title: str, icon: str) -> QFrame:
         host = QFrame(); host.setObjectName('LibraryValueRow')
-        row = QHBoxLayout(host); row.setContentsMargins(12, 4, 12, 4); row.setSpacing(8)
+        row = QHBoxLayout(host); row.setContentsMargins(12, 5, 12, 5); row.setSpacing(8)
         glyph = QLabel(); glyph.setObjectName('LibraryFieldIcon')
         glyph.setPixmap(library_icon(icon, '#8babc0', 17).pixmap(17, 17)); row.addWidget(glyph)
         label = QLabel(title); label.setObjectName('LibraryFieldName'); label.setFixedWidth(123); row.addWidget(label)
@@ -526,7 +546,7 @@ class LibraryPage(QWidget):
         host = QWidget(); host.setObjectName('LibraryMetric')
         if centered:
             host.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-            column = QVBoxLayout(host); column.setContentsMargins(7, 4, 7, 4); column.setSpacing(1)
+            column = QVBoxLayout(host); column.setContentsMargins(7, 5, 7, 5); column.setSpacing(2)
             heading = QHBoxLayout(); heading.setSpacing(5)
             heading.addStretch(1)
             glyph = QLabel(); glyph.setObjectName('LibraryFieldIcon')
@@ -539,7 +559,7 @@ class LibraryPage(QWidget):
             column.addWidget(value)
             self.detail_labels[key] = value
             return host
-        row = QHBoxLayout(host); row.setContentsMargins(7, 4, 7, 4); row.setSpacing(5)
+        row = QHBoxLayout(host); row.setContentsMargins(7, 5, 7, 5); row.setSpacing(5)
         glyph = QLabel(); glyph.setObjectName('LibraryFieldIcon')
         glyph.setPixmap(library_icon(icon, '#8babc0', 16).pixmap(16, 16)); row.addWidget(glyph)
         stack = QVBoxLayout(); stack.setSpacing(1)
@@ -895,15 +915,16 @@ class LibraryPage(QWidget):
             problem = status == 'error' or (status == 'review' and review_severity(track) == 'critical')
             tint, row_accent = None, None
             if problem:
-                icon_name, icon_color, tint = 'alert_circle', '#f34d64', '#23181d'
+                icon_name, icon_color, tint = 'status_problem', '#f34d64', '#23181d'
                 row_accent = QColor('#bc3d50')
             elif status == 'review':
-                icon_name, icon_color, tint = 'warning', '#f5b649', '#211e16'
-                row_accent = QColor('#ad8037')
+                icon_name, icon_color, tint = 'status_review', '#d8a23a', '#1b1b18'
+                row_accent = QColor('#b8862f')
             else:
-                icon_name = {'ready': 'status', 'duplicate': 'duplicates', 'not_selected': 'cancel'}.get(status, 'info')
+                icon_name = {'ready': 'status_ready', 'duplicate': 'duplicates', 'not_selected': 'cancel'}.get(status, 'info')
                 icon_color = '#35d893' if status == 'ready' else presentation.accent
-            items[1].setIcon(alo_icon(icon_name, icon_color, 16))
+            icon_factory = library_icon if problem or status in {'ready', 'review'} else alo_icon
+            items[1].setIcon(icon_factory(icon_name, icon_color, 16))
             key = self._path_key(track)
             visible_keys.add(key)
             order_index = order_map.get(key)

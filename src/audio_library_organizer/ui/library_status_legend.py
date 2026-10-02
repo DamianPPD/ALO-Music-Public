@@ -42,9 +42,10 @@ def install_library_status_legend(library_page) -> QToolButton:
     menu = QMenu(button)
     for status, label, description, accent_override in LEGEND_ITEMS:
         presentation = status_presentation(status)
-        icons = {'ready': 'status', 'duplicate': 'duplicates', 'review': 'warning', 'not_selected': 'cancel'}
-        accent = accent_override or {'ready': '#35d893', 'review': '#f5b649'}.get(status, presentation.accent)
-        icon = alo_icon('alert_circle' if accent_override else icons[status], accent, 16)
+        icons = {'ready': 'status_ready', 'duplicate': 'duplicates', 'review': 'status_review', 'not_selected': 'cancel'}
+        accent = accent_override or {'ready': '#35d893', 'review': '#d8a23a'}.get(status, presentation.accent)
+        icon_factory = library_icon if status in {'ready', 'review'} else alo_icon
+        icon = icon_factory('status_problem' if accent_override else icons[status], accent, 16)
         action = menu.addAction(icon, f'{label} — {description}')
         action.setToolTip(description)
     button.setMenu(menu)

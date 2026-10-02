@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QApplication
 
 from audio_library_organizer.domain.models import TrackRecord
 from audio_library_organizer.ui.i18n import apply_static_language
-from audio_library_organizer.ui.icons import alo_icon, library_icon
+from audio_library_organizer.ui.icons import library_icon
 from audio_library_organizer.ui.library_page import LibraryPage
 from audio_library_organizer.ui.theme import DARK_STYLE
 
@@ -60,10 +60,10 @@ def _body_pixel(page, track, column=3):
 def test_ready_review_and_problem_use_final_reference_shapes(status_page):
     _, page, tracks = status_page
     for track, name, color in zip(tracks,
-                                 ('status', 'warning', 'alert_circle', 'alert_circle'),
-                                 ('#35d893', '#f5b649', '#f34d64', '#f34d64')):
+                                 ('status_ready', 'status_review', 'status_problem', 'status_problem'),
+                                 ('#35d893', '#d8a23a', '#f34d64', '#f34d64')):
         item = page.model.item(_row(page, track), 1)
-        assert _icon_pixels(item.icon()) == _icon_pixels(alo_icon(name, color, 16))
+        assert _icon_pixels(item.icon()) == _icon_pixels(library_icon(name, color, 16))
     # A critical review is a visual problem, not a new backend status.
     assert tracks[2].status == 'review'
     assert page.model.item(_row(page, tracks[2]), 1).toolTip() == 'PROBLEM'
@@ -93,7 +93,7 @@ def test_status_tints_cover_row_without_coloring_text(status_page):
         assert all(page.model.item(row, column).foreground().style() == Qt.BrushStyle.NoBrush
                    for column in range(page.model.columnCount()))
     assert _body_pixel(page, tracks[0]).name() == '#11171e'
-    assert _body_pixel(page, tracks[1]).name() == '#211e16'
+    assert _body_pixel(page, tracks[1]).name() == '#1b1b18'
     assert _body_pixel(page, tracks[2]).name() == '#23181d'
     assert _body_pixel(page, tracks[1], 8) == _body_pixel(page, tracks[1])
 
@@ -102,7 +102,37 @@ def test_cyan_selection_overrides_review_and_problem_tints(status_page):
     _, page, tracks = status_page
     for track in tracks:
         page.table.selectRow(_row(page, track))
-        assert _body_pixel(page, track).name() == '#153a42'
+        assert _body_pixel(page, track).name() == '#203038'
+
+
+def test_playing_and_selection_have_distinct_tints_and_independent_accents(status_page):
+    app, page, tracks = status_page
+    playing, selected = tracks[:2]
+    page.set_playing_track(playing)
+    page.select_track(selected)
+
+    def edge(track, column, dx, dy):
+        app.processEvents()
+        pixmap = page.table.viewport().grab()
+        box = page.table.visualRect(page.model.index(_row(page, track), column))
+        ratio = pixmap.devicePixelRatio()
+        return pixmap.toImage().pixelColor(round((box.left() + dx) * ratio),
+                                          round((box.top() + dy) * ratio)).name()
+
+    assert _body_pixel(page, playing).name() == '#12262b'
+    assert _body_pixel(page, selected).name() == '#203038'
+    assert edge(playing, 0, 2, 12) == '#408d94'
+    # A playing row has no cyan border across its top or bottom.
+    assert edge(playing, 3, 12, 1) == '#12262b'
+    assert edge(playing, 3, 12, 36) == '#12262b'
+    assert edge(selected, 3, 12, 1) == '#65b5c0'
+    page.select_track(playing)
+    assert _body_pixel(page, playing).name() == '#203038'
+    assert edge(playing, 3, 12, 1) == '#65b5c0'
+    assert edge(playing, 0, 2, 12) == '#408d94'
+    page.set_playing_track(None)
+    assert _body_pixel(page, playing).name() == '#203038'
+    assert edge(playing, 0, 2, 12) != '#408d94'
 
 
 def test_status_icons_are_painted_at_cell_center_with_compact_bounds(status_page):
@@ -126,11 +156,12 @@ def test_status_icons_are_painted_at_cell_center_with_compact_bounds(status_page
         assert max(xs) - min(xs) <= 16
         assert max(ys) - min(ys) <= 16
         assert abs((min(xs) + max(xs)) / 2 - box.center().x()) <= 1.5
+        assert max(xs) - min(xs) >= 13
 
 
 def test_review_and_problem_accents_are_visible_and_selection_has_priority(status_page):
     app, page, tracks = status_page
-    for track, expected in ((tracks[1], '#ad8037'), (tracks[2], '#bc3d50')):
+    for track, expected in ((tracks[1], '#b8862f'), (tracks[2], '#bc3d50')):
         app.processEvents()
         pixmap = page.table.viewport().grab()
         box = page.table.visualRect(page.model.index(_row(page, track), 0))
@@ -144,7 +175,7 @@ def test_review_and_problem_accents_are_visible_and_selection_has_priority(statu
     box = page.table.visualRect(page.model.index(_row(page, tracks[2]), 0))
     ratio = pixmap.devicePixelRatio()
     assert pixmap.toImage().pixelColor(round((box.left() + 1) * ratio),
-                                      round(box.center().y() * ratio)).name() == '#31d7c8'
+                                      round(box.center().y() * ratio)).name() == '#65b5c0'
 
 
 def test_status_rows_have_no_colored_horizontal_grid(status_page):
@@ -152,7 +183,7 @@ def test_status_rows_have_no_colored_horizontal_grid(status_page):
     app.processEvents()
     pixmap = page.table.viewport().grab()
     image, ratio = pixmap.toImage(), pixmap.devicePixelRatio()
-    for track, tint in ((tracks[1], '#211e16'), (tracks[2], '#23181d')):
+    for track, tint in ((tracks[1], '#1b1b18'), (tracks[2], '#23181d')):
         box = page.table.visualRect(page.model.index(_row(page, track), 3))
         for y in (box.top() + 1, box.bottom() - 1):
             assert image.pixelColor(round((box.left() + 12) * ratio), round(y * ratio)).name() == tint
@@ -181,7 +212,7 @@ def test_default_split_matches_reference_and_keeps_quality_format_visible(status
 
 def test_detail_actions_are_wider_and_disclosure_is_easy_to_read(status_page):
     _, page, _ = status_page
-    assert 312 <= page.detail_edit.width() <= 336
+    assert page.detail_edit.width() >= page.detail.width() - 34
     assert 34 <= page.details_btn.height() <= 40
     assert page.details_btn.width() >= 150
     assert page.details_btn.iconSize() == QSize(16, 16)
@@ -286,7 +317,7 @@ def test_nonsemantic_category_icons_are_neutral_until_hover_or_active(status_pag
 def test_edit_metadata_button_is_prominent_but_compact(status_page):
     _, page, tracks = status_page
     assert 34 <= page.detail_edit.height() <= 40
-    assert page.detail_edit.width() < page.detail.width() * .8
+    assert page.detail_edit.width() >= page.detail.width() - 34
     assert page.detail_edit.iconSize().width() > page.collection_btn.iconSize().width()
     assert page.detail_edit.toolTip() == 'Edytuj metadane'
     edits = []

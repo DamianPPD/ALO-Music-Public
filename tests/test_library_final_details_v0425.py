@@ -55,7 +55,9 @@ def test_selection_is_reconciled_with_visible_checkbox_model(tmp_path):
             colors = [rendered.pixelColor(x, y)
                       for y in range(round((center.y() - 6) * ratio), round((center.y() + 7) * ratio))
                       for x in range(round((center.x() - 6) * ratio), round((center.x() + 7) * ratio))]
-            painted.append(any(c.green() > 225 and 120 < c.red() < 205 and c.blue() > 130 for c in colors))
+            painted.append(any(min(c.red(), c.green(), c.blue()) > 220
+                               and max(c.red(), c.green(), c.blue()) - min(c.red(), c.green(), c.blue()) < 15
+                               for c in colors))
         assert painted == [True, True, True, True, False]
         page.table.sortByColumn(3, Qt.SortOrder.DescendingOrder)
         page.refresh(preserve_order=True)
@@ -82,7 +84,9 @@ def test_clicked_checkbox_enums_paint_and_uncheck_consistently(tmp_path):
             colors = [rendered.pixelColor(x, y)
                       for y in range(round((center.y() - 6) * ratio), round((center.y() + 7) * ratio))
                       for x in range(round((center.x() - 6) * ratio), round((center.x() + 7) * ratio))]
-            painted.append(any(c.green() > 225 and 120 < c.red() < 205 and c.blue() > 130 for c in colors))
+            painted.append(any(min(c.red(), c.green(), c.blue()) > 220
+                               and max(c.red(), c.green(), c.blue()) - min(c.red(), c.green(), c.blue()) < 15
+                               for c in colors))
         return painted
 
     try:
