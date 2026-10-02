@@ -12,9 +12,10 @@ import gc, json, shutil, subprocess, sys, weakref
 from pathlib import Path
 import numpy as np
 import soundfile as sf
-from PySide6.QtCore import QCoreApplication, QEvent, QThreadPool
+from PySide6.QtCore import QCoreApplication, QEvent, QThreadPool, QPersistentModelIndex, Qt, qInstallMessageHandler
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtWidgets import QApplication, QVBoxLayout, QWidget
+from PySide6.QtTest import QSignalSpy, QTest
 from audio_library_organizer import crash_debug
 from audio_library_organizer.domain.models import TrackRecord
 from audio_library_organizer.ui import waveform
@@ -67,6 +68,27 @@ bar.track_changed.connect(page.set_playing_track)
 states = []
 bar.player.playbackStateChanged.connect(states.append)
 pool = QThreadPool.globalInstance()
+host.resize(1600, 1000); host.show(); app.processEvents()
+page.table.sortByColumn(3, Qt.SortOrder.DescendingOrder)
+indexes = [QPersistentModelIndex(page.model.index(row, 3)) for row in range(page.model.rowCount())]
+removed, inserted, reset = (QSignalSpy(page.model.rowsRemoved), QSignalSpy(page.model.rowsInserted),
+                            QSignalSpy(page.model.modelReset))
+plays = QSignalSpy(page.play_requested)
+qt_messages = []
+previous_handler = qInstallMessageHandler(lambda kind, context, message: qt_messages.append(message))
+
+def double_click(track):
+    row = next(row for row in range(page.model.rowCount())
+               if page.model.item(row, 0).data(Qt.ItemDataRole.UserRole) is track)
+    center = page.table.visualRect(page.model.index(row, 3)).center()
+    before = plays.count()
+    QTest.mouseClick(page.table.viewport(), Qt.MouseButton.LeftButton, pos=center, delay=0)
+    assert plays.count() == before
+    QTest.mouseDClick(page.table.viewport(), Qt.MouseButton.LeftButton, pos=center, delay=0)
+    QTest.mouseRelease(page.table.viewport(), Qt.MouseButton.LeftButton, pos=center, delay=0)
+    assert plays.count() == before + 1
+    assert all(index.isValid() for index in indexes)
+    assert removed.count() == inserted.count() == reset.count() == 0
 
 # Single selections alone must not start either decoder, even over 100 clicks.
 for i in range(100):
@@ -77,7 +99,7 @@ assert bar.current_path is None and not processes
 # Every settled switch performs a real child decode; QMediaPlayer is not mocked.
 for i in range(100):
     track = tracks[i % len(tracks)]
-    page.select_track(track); page._play_selected()
+    double_click(track)
     assert pool.waitForDone(10000)
     app.processEvents()
     assert pool.activeThreadCount() == 0 and not waveform._ACTIVE_JOBS
@@ -94,7 +116,7 @@ assert len(processes) == 100
 # A->B->C->D->E and longer rapid bursts replace in-flight waveform/playback.
 for i in range(100):
     track = tracks[(i + 1) % len(tracks)]
-    page.select_track(track); page._play_selected()
+    double_click(track)
     app.processEvents()
 assert pool.waitForDone(10000)
 app.processEvents()
@@ -104,6 +126,8 @@ assert pool.activeThreadCount() == 0 and not waveform._ACTIVE_JOBS
 assert all(count == 0 for count in active_at_spawn)
 assert all(process.poll() is not None for process in processes)
 assert QMediaPlayer.PlaybackState.PlayingState in states
+assert not [message for message in qt_messages if 'index' in message.lower() or 'model' in message.lower()]
+qInstallMessageHandler(previous_handler)
 
 # Also destroy the receiver with a fresh request; cancellation must finish.
 bar.load(paths[0], autoplay=True)

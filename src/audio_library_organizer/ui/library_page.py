@@ -33,6 +33,7 @@ from audio_library_organizer.ui.icons import alo_icon, library_icon
 PLAYING_ROLE = int(Qt.ItemDataRole.UserRole) + 1
 VISUAL_ORDER_ROLE = int(Qt.ItemDataRole.UserRole) + 2
 STATUS_ACCENT_ROLE = int(Qt.ItemDataRole.UserRole) + 3
+STATUS_BACKGROUND_ROLE = int(Qt.ItemDataRole.UserRole) + 4
 PLAYING_BACKGROUND = QColor('#153a42')
 PLAYING_ACCENT = QColor('#31d7c8')
 
@@ -917,25 +918,17 @@ class LibraryPage(QWidget):
                 item.setData(row_accent, STATUS_ACCENT_ROLE)
                 if tint is not None:
                     item.setBackground(QBrush(QColor(tint)))
+                item.setData(item.background(), STATUS_BACKGROUND_ROLE)
             items[0].setCheckable(True)
             items[0].setCheckState(Qt.CheckState.Checked if key in checked else Qt.CheckState.Unchecked)
             items[3].setToolTip(track.title or '')
             items[2].setToolTip(track.artist or '')
             items[0].setData(track, Qt.ItemDataRole.UserRole)
-            status_caption = ui_text(self, 'PROBLEM') if problem else status_text
-            items[1].setToolTip(status_caption)
             if is_playing:
                 playing_background = QBrush(PLAYING_BACKGROUND)
                 for item in items:
                     item.setBackground(playing_background)
-                tooltip = f'{status_caption} • {ui_text(self, "TERAZ GRA")}'
-                if is_online_locked(track):
-                    tooltip += ' • ' + ui_text(self, 'Zablokowany przed ponownym rozpoznaniem online')
-                items[1].setToolTip(tooltip)
-            elif is_online_locked(track):
-                items[1].setToolTip(f'{status_caption} • {ui_text(self, "Zablokowany przed ponownym rozpoznaniem online")}')
-            elif 'duplicate_primary' in track.locked_fields:
-                items[1].setToolTip(f'{status_caption} • {ui_text(self, "Ten plik został przez Ciebie wybrany w zakładce Duplikaty.")}')
+            items[1].setToolTip(self._playing_status_tooltip(track, is_playing))
             items[1].setData(items[1].toolTip(), Qt.ItemDataRole.AccessibleTextRole)
             self.model.appendRow(items)
 
@@ -963,19 +956,57 @@ class LibraryPage(QWidget):
             return str(track.path).casefold() == self._playing_path
 
     def set_playing_track(self, track: TrackRecord | None):
-        if track is None:
-            new_path = None
-        else:
-            try:
-                new_path = str(Path(track.path).resolve()).casefold()
-            except OSError:
-                new_path = str(track.path).casefold()
+        new_path = self._path_key(track)
         if new_path == self._playing_path:
             return
+        old_path = self._playing_path
         self._playing_path = new_path
-        # Rebuild only the lightweight table model so TERAZ GRA follows the
-        # shared player without changing the selected row or visual order.
-        self.refresh(preserve_order=True)
+        # This notification can arrive inside QTableView.doubleClicked. Keep
+        # its model items and active indexes alive throughout that event.
+        self._update_playing_row_state(old_path, new_path)
+
+    def _playing_status_tooltip(self, track: TrackRecord, is_playing: bool) -> str:
+        status = effective_status(track)
+        problem = status == 'error' or (status == 'review' and review_severity(track) == 'critical')
+        caption = ui_text(self, 'PROBLEM' if problem else library_status_text(track))
+        if is_playing:
+            caption += ' • ' + ui_text(self, 'TERAZ GRA')
+        if is_online_locked(track):
+            caption += ' • ' + ui_text(self, 'Zablokowany przed ponownym rozpoznaniem online')
+        elif not is_playing and 'duplicate_primary' in track.locked_fields:
+            caption += ' • ' + ui_text(self, 'Ten plik został przez Ciebie wybrany w zakładce Duplikaty.')
+        return caption
+
+    def _update_playing_row_state(self, old_path: str | None, new_path: str | None):
+        changed_rows = []
+        with QSignalBlocker(self.model):
+            for row in range(self.model.rowCount()):
+                track = self.model.item(row, 0).data(Qt.ItemDataRole.UserRole)
+                key = self._path_key(track)
+                if key not in {old_path, new_path}:
+                    continue
+                is_playing = key == new_path
+                for column in range(self.model.columnCount()):
+                    item = self.model.item(row, column)
+                    item.setData(is_playing, PLAYING_ROLE)
+                    item.setBackground(QBrush(PLAYING_BACKGROUND) if is_playing
+                                       else item.data(STATUS_BACKGROUND_ROLE))
+                status_item = self.model.item(row, 1)
+                status_item.setToolTip(self._playing_status_tooltip(track, is_playing))
+                status_item.setData(status_item.toolTip(), Qt.ItemDataRole.AccessibleTextRole)
+                changed_rows.append(row)
+        # Batch role changes repaint only affected rows. Suppress checkbox
+        # reconciliation for these notifications; their check state is untouched.
+        previous_syncing = self._syncing_checks
+        self._syncing_checks = True
+        try:
+            for row in changed_rows:
+                self.model.dataChanged.emit(self.model.index(row, 0),
+                                            self.model.index(row, self.model.columnCount() - 1),
+                                            [PLAYING_ROLE, int(Qt.ItemDataRole.BackgroundRole),
+                                             int(Qt.ItemDataRole.ToolTipRole), int(Qt.ItemDataRole.AccessibleTextRole)])
+        finally:
+            self._syncing_checks = previous_syncing
 
     def _current_track(self):
         idx = self.table.currentIndex()
