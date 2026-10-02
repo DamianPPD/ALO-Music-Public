@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from threading import Event
+from uuid import uuid4
 
 from PySide6.QtCore import Qt, QUrl, Signal, QTimer, QSize, QThreadPool, Slot, QPoint, QRect, QRectF
 from PySide6.QtGui import QPixmap, QColor, QPainter, QPainterPath, QLinearGradient
@@ -21,6 +22,7 @@ from audio_library_organizer.ui.icons import alo_icon, editor_icon
 from audio_library_organizer.ui.i18n import ui_text, localized_no_cover_name
 from audio_library_organizer.ui.playback_sync import PendingPlaybackPosition
 from audio_library_organizer.ui.waveform import WaveformSlider, WaveformJob, read_waveform
+from audio_library_organizer import crash_debug
 
 
 def track_display_lines(track: TrackRecord) -> tuple[str, str, str]:
@@ -221,6 +223,9 @@ class PlayerBar(QWidget):
         self.setMinimumHeight(114)
         self._waveform_generation = 0
         self._waveform_cancel = Event()
+        self._debug_player_id = uuid4().hex
+        player_id = self._debug_player_id
+        self.destroyed.connect(lambda: crash_debug.record('player.destroyed', player_id=player_id))
         self.audio = QAudioOutput(self)
         self.audio.setVolume(0.75)
         self.player = QMediaPlayer(self)
@@ -354,7 +359,14 @@ class PlayerBar(QWidget):
             self.audio.setDevice(device)
             self.output_device.setToolTip(device.description())
 
+    def _debug(self, event, **fields):
+        crash_debug.record(event, **crash_debug.track_context(self.current_path),
+                           player_id=self._debug_player_id, generation=self._waveform_generation,
+                           job_id=f'{self._debug_player_id}:{self._waveform_generation}', **fields)
+
     def load_track(self, track: TrackRecord, *, position_ms: int = 0, autoplay: bool = True, source_label: str = 'Biblioteka'):
+        crash_debug.record('player.track.enter', **crash_debug.track_context(track.path),
+                           player_id=self._debug_player_id, autoplay=autoplay)
         self._playback_error_text = ''
         same_track = False
         if self.current_path is not None:
@@ -371,6 +383,8 @@ class PlayerBar(QWidget):
         self.meta.setText(meta or track.path.name)
         self.source_label.setText(f"{ui_text(self, 'Źródło:')} {ui_text(self, self.current_source_label)}")
         self._load_cover(track)
+        crash_debug.record('player.track.cover.done', **crash_debug.track_context(track.path),
+                           player_id=self._debug_player_id)
         if same_track:
             self._clear_pending_seek_state()
             self.player.setPosition(max(0, int(position_ms)))
@@ -379,6 +393,7 @@ class PlayerBar(QWidget):
         else:
             self.load(track.path, position_ms=position_ms, autoplay=autoplay, keep_display=True)
         self.track_changed.emit(track)
+        self._debug('player.track.done')
 
     def queue_next(self, track: TrackRecord, *, source_label: str = 'Biblioteka'):
         self.queued_track = track
@@ -405,6 +420,7 @@ class PlayerBar(QWidget):
         self._pending_seek_retry_scheduled = False
 
     def load(self, path: Path, *, position_ms: int = 0, autoplay: bool = True, keep_display: bool = False):
+        self._debug('player.waveform.cancel.request', reason='replace')
         self._playback_error_text = ''
         self.current_path = Path(path)
         self._waveform_cancel.set()
@@ -413,7 +429,8 @@ class PlayerBar(QWidget):
         self._waveform_generation += 1
         self.seek.set_peaks([])
         self.waveform_changed.emit([])
-        job = WaveformJob(self.current_path, self._waveform_generation, self._waveform_cancel)
+        job = WaveformJob(self.current_path, self._waveform_generation, self._waveform_cancel,
+                          job_id=f'{self._debug_player_id}:{self._waveform_generation}')
         job.signals.ready.connect(self._waveform_ready, Qt.ConnectionType.QueuedConnection)
         QThreadPool.globalInstance().start(job)
         requested_position = max(0, int(position_ms))
@@ -436,7 +453,9 @@ class PlayerBar(QWidget):
             self.source_label.setText(f"{ui_text(self, 'Źródło:')} {ui_text(self, 'Plik lokalny')}")
             self._cover_pixmap = QPixmap()
             self.surface.set_cover_pixmap(QPixmap())
+        self._debug('player.source.enter', source=source_url.toString())
         self.player.setSource(source_url)
+        self._debug('player.source.done')
         if requested_position <= 0:
             self._clear_pending_seek_state()
             if autoplay:
@@ -444,6 +463,10 @@ class PlayerBar(QWidget):
 
     @Slot(int, object)
     def _waveform_ready(self, generation, peaks):
+        crash_debug.record('player.waveform.accept' if generation == self._waveform_generation
+                           else 'player.waveform.discard.stale', player_id=self._debug_player_id,
+                           generation=generation, current_generation=self._waveform_generation,
+                           job_id=f'{self._debug_player_id}:{generation}', peaks=len(peaks))
         if generation == self._waveform_generation:
             self.seek.set_peaks(peaks)
             self.waveform_changed.emit(peaks)
@@ -466,6 +489,7 @@ class PlayerBar(QWidget):
             self.player.play()
 
     def _source_changed(self, source: QUrl):
+        self._debug('player.source.changed', source=source.toString())
         if self._pending_source_url is None or source != self._pending_source_url:
             return
         self._pending_source_changed = True
@@ -515,6 +539,7 @@ class PlayerBar(QWidget):
             self._schedule_pending_seek_retry(generation)
 
     def _media_status(self, status):
+        self._debug('player.media.status', status=str(status))
         if status in (QMediaPlayer.MediaStatus.LoadedMedia, QMediaPlayer.MediaStatus.BufferedMedia):
             if status != self.player.mediaStatus():
                 return
@@ -604,6 +629,7 @@ class PlayerBar(QWidget):
             reply.deleteLater()
 
     def _state(self, state):
+        self._debug('player.playback.state', state=str(state))
         playing = state == QMediaPlayer.PlaybackState.PlayingState
         self.surface.set_playing(playing)
         self.playback_status.setText(ui_text(self,
@@ -645,6 +671,7 @@ class PlayerBar(QWidget):
                 QTimer.singleShot(0, self.player.play)
 
     def _error(self, _error, text: str):
+        self._debug('player.error', error=str(_error), text=text)
         self._clear_pending_seek_state()
         if text:
             self._playback_error_text = text

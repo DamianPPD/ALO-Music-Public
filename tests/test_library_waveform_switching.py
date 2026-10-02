@@ -116,3 +116,27 @@ def test_destroying_player_cancels_live_worker_without_deleted_qobject_access(tm
     assert QThreadPool.globalInstance().waitForDone(3000)
     app.processEvents()
     assert errors == []
+
+
+def test_queued_waveform_result_is_removed_when_receiver_is_destroyed(tmp_path, monkeypatch):
+    """The worker finishes and emits before deletion, with delivery still queued."""
+    import shiboken6
+
+    monkeypatch.setattr(waveform, 'read_waveform', lambda *args, **kwargs: [.25])
+    errors = []
+    monkeypatch.setattr(sys, 'excepthook', lambda *args: errors.append(args))
+    app, host, page, bar, tracks = _host(tmp_path, monkeypatch)
+    delivered = []
+    bar.waveform_changed.connect(lambda peaks: delivered.append(list(peaks)))
+    page.select_track(tracks[0]); page._play_selected()
+    # No GUI event processing between emission and receiver destruction.
+    assert QThreadPool.globalInstance().waitForDone(3000)
+    assert delivered == [[]]
+    cancel = bar._waveform_cancel
+    host.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert not shiboken6.isValid(bar)
+    assert cancel.is_set()
+    app.processEvents()
+    assert delivered == [[]]
+    assert errors == []

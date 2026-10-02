@@ -114,6 +114,9 @@ def main(argv: list[str] | None = None) -> int:
     if '--smoke-test' in args:
         return _smoke_test()
 
+    from audio_library_organizer import crash_debug
+    crash_debug.initialize()  # Capture native GUI faults from before Qt imports.
+
     try:
         from PySide6.QtCore import QSettings, QTimer
         from PySide6.QtWidgets import QApplication, QDialog
@@ -203,7 +206,9 @@ def main(argv: list[str] | None = None) -> int:
             startup_loader.close()
         raise
 
-    return app.exec()
+    result = app.exec()
+    crash_debug.record('application.event_loop.finished', exit_code=result)
+    return result
 
 
 if __name__ == '__main__':

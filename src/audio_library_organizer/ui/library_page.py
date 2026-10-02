@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from audio_library_organizer import __version__
+from audio_library_organizer import crash_debug
 from audio_library_organizer.domain.models import TrackRecord
 from audio_library_organizer.duplicates.families import group_version_families
 from audio_library_organizer.metadata.artwork import extract_embedded_cover
@@ -986,12 +987,14 @@ class LibraryPage(QWidget):
     def _play_selected(self, _index=None):
         track = self._current_track()
         if track:
+            crash_debug.record('library.play.request', **crash_debug.track_context(track.path))
             self.play_requested.emit(track)
 
     def _show_detail(self, *_):
         t = self._current_track()
         if not t:
             return
+        crash_debug.record('library.selection.enter', **crash_debug.track_context(t.path))
         self.track_selected.emit(t)
         self.detail_labels['artist'].setText(t.artist or '—')
         self.detail_labels['title'].setText(t.title or '—')
@@ -1064,6 +1067,7 @@ class LibraryPage(QWidget):
                 ('year', 'Rok'), ('bpm', 'BPM'), ('genre', 'Gatunek')) if not complete[key]]
             self.completeness_hint.setText(ui_text(self, 'Brakuje:') + ' ' + ', '.join(missing))
         self._load_cover(t)
+        crash_debug.record('library.selection.done', **crash_debug.track_context(t.path))
 
     @staticmethod
     def _external_cover_url(track: TrackRecord) -> str | None:

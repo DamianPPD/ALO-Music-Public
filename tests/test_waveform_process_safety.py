@@ -140,7 +140,7 @@ def test_worker_entrypoint_decodes_without_starting_gui(tmp_path):
     import json
     assert json.loads(output.read_text()) == [.5] * 4
     log = trace.read_text()
-    assert 'generation=21' in log and 'audio.read.enter' in log and 'audio.read.leave' in log
+    assert '"generation": 21' in log and 'audio.read.enter' in log and 'audio.read.leave' in log
     assert 'SoundFile.enter' in log and 'SoundFile.opened' in log
 
 
