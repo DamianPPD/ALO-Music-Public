@@ -60,7 +60,8 @@ def test_metadata_editor_status_colors_and_source_action_are_visible(tmp_path: P
         from audio_library_organizer.ui.icons import library_icon
         assert dialog._field_status_icons['artist'].property('statusKind') == 'ok'
         assert dialog._field_status_icons['year'].property('statusKind') == 'critical'
-        assert dialog._field_status_icons['artist'].pixmap().toImage() == library_icon('status_ready', '#35d893', 20).pixmap(20, 20).toImage()
+        assert dialog._field_status_icons['artist'].isHidden()
+        assert dialog._field_status_icons['artist'].pixmap().isNull()
         assert dialog._field_status_icons['year'].pixmap().toImage() == library_icon('status_problem', '#f34d64', 20).pixmap(20, 20).toImage()
         assert dialog.source_table.columnWidth(6) == 126
         assert dialog.source_table.cellWidget(0, 6).objectName() == 'UseSourceDataCell'

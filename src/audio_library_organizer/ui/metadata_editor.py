@@ -3,8 +3,8 @@ from __future__ import annotations
 from copy import copy, deepcopy
 from pathlib import Path
 
-from PySide6.QtCore import Property, Qt, QTimer, QUrl, Signal, Slot, QRegularExpression, QSize, QRectF, QBuffer, QByteArray, QIODevice
-from PySide6.QtGui import QAction, QPixmap, QIcon, QColor, QPainter, QPen, QRegularExpressionValidator, QDesktopServices, QImageReader
+from PySide6.QtCore import Property, Qt, QTimer, QUrl, Signal, Slot, QRegularExpression, QSize, QRectF, QPointF, QBuffer, QByteArray, QIODevice
+from PySide6.QtGui import QAction, QPixmap, QIcon, QColor, QPainter, QPen, QPolygonF, QRegularExpressionValidator, QDesktopServices, QImageReader
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
     QDialog,
@@ -175,26 +175,44 @@ class MissingEmptyState(QWidget):
         subtitle = QLabel('Wszystkie wymagane pola są uzupełnione'); subtitle.setObjectName('MissingEmptySubtitle'); subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter); box.addWidget(subtitle)
 
 
-def _section_header(text: str, icon_name: str, *, icon_factory=editor_icon, icon_color='#8bbfcf') -> QWidget:
+def _section_mark() -> QLabel:
+    # The Library's technical header uses two QSS borders, not an SVG asset.
+    mark = QLabel()
+    mark.setObjectName('LibrarySectionMark')
+    mark.setFixedSize(20, 7)
+    return mark
+
+
+def _section_header(text: str, *, icon_widget=None) -> QWidget:
     host = QWidget()
     host.setObjectName('EditorSectionHeader')
     host.setStyleSheet('background:transparent;')
     row = QHBoxLayout(host)
     row.setContentsMargins(0, 0, 0, 5)
-    row.setSpacing(7)
-    icon = QLabel()
-    icon.setObjectName('EditorSectionIcon')
-    icon_size = 18
-    icon.setStyleSheet('background:transparent;')
-    icon.setPixmap(icon_factory(icon_name, icon_color, icon_size).pixmap(icon_size, icon_size))
-    icon.setFixedSize(icon_size + 2, icon_size + 2)
-    icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    row.setSpacing(8)
     label = QLabel(text)
     label.setObjectName('EditorSectionTitle')
-    row.addWidget(icon)
+    row.addWidget(icon_widget if icon_widget is not None else _section_mark())
     row.addWidget(label)
     row.addStretch(1)
     return host
+
+
+def _cover_selection_marker_pixmap() -> QPixmap:
+    size = 22
+    pixmap = QPixmap(size * 3, size * 3)
+    pixmap.setDevicePixelRatio(3.0)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor('#071014'))
+    painter.drawPolygon(QPolygonF([QPointF(0, 0), QPointF(size, 0), QPointF(size, size)]))
+    painter.setPen(QPen(QColor('#35d893'), 1.6, Qt.PenStyle.SolidLine,
+                        Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    painter.drawPolyline(QPolygonF([QPointF(10, 7), QPointF(13, 10), QPointF(18, 5)]))
+    painter.end()
+    return pixmap
 
 
 def _set_editor_button_icon(button, name: str, color: str, size: int) -> None:
@@ -606,14 +624,15 @@ class MetadataEditorDialog(QDialog):
         self.scan_online_button = QPushButton('Rozpoznaj online')
         self.scan_online_button.setObjectName('SingleTrackOnlineButton')
         self.scan_online_button.setProperty('actionRole', 'primary')
-        _set_editor_button_icon(self.scan_online_button, 'search', '#e9fdff', 19)
+        _set_editor_button_icon(self.scan_online_button, 'editor_online_recognize', '#74e9fc', 20)
         self.scan_online_button.setToolTip('Uruchom rozpoznawanie online tylko dla tego utworu.')
         self.scan_online_button.clicked.connect(lambda: self.online_scan_requested.emit(self))
         pol.addWidget(self.scan_online_button)
+        pol.addSpacing(4)
         self.audio_scan_button = QPushButton('Rozpoznaj po audio')
         self.audio_scan_button.setObjectName('SingleTrackAudioButton')
         self.audio_scan_button.setProperty('actionRole', 'primary')
-        _set_editor_button_icon(self.audio_scan_button, 'audio_recognize', '#e9fdff', 19)
+        _set_editor_button_icon(self.audio_scan_button, 'audio_recognize', '#c1c7ff', 20)
         self.audio_scan_button.setToolTip('Rozpoznaj ten utwór po lokalnie wygenerowanym fingerprintcie audio.')
         self.audio_scan_button.clicked.connect(lambda: self.audio_scan_requested.emit(self))
         pol.addWidget(self.audio_scan_button)
@@ -771,7 +790,7 @@ class MetadataEditorDialog(QDialog):
         self.suspicious_warning.setVisible(any('Duża różnica' in reason for reason in track.match_reasons))
         content.addWidget(self.suspicious_warning)
 
-        # Metadane i informacje o rozpoznaniu obok niezmienionej galerii okładek.
+        # Metadata on the left; covers and compact recognition on the right.
         workspace = QHBoxLayout()
         workspace.setSpacing(10)
         self.metadata_column = QWidget()
@@ -779,6 +798,11 @@ class MetadataEditorDialog(QDialog):
         metadata_column_layout = QVBoxLayout(self.metadata_column)
         metadata_column_layout.setContentsMargins(0, 0, 0, 0)
         metadata_column_layout.setSpacing(8)
+        self.cover_recognition_column = QWidget()
+        self.cover_recognition_column.setObjectName('EditorCoverRecognitionColumn')
+        cover_recognition_layout = QVBoxLayout(self.cover_recognition_column)
+        cover_recognition_layout.setContentsMargins(0, 0, 0, 0)
+        cover_recognition_layout.setSpacing(8)
 
         metadata = self.metadata_card = QFrame()
         metadata.setObjectName('PrimaryMetadataCard')
@@ -789,7 +813,7 @@ class MetadataEditorDialog(QDialog):
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)
         form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
-        metadata_head = _section_header('Metadane utworu', 'metadata')
+        metadata_head = _section_header('Metadane utworu')
         form.addRow(metadata_head)
 
         self.artist = QLineEdit(track.artist or '')
@@ -804,7 +828,7 @@ class MetadataEditorDialog(QDialog):
         self.album = QLineEdit(track.album or '')
         self.discogs_url = QLineEdit(track.discogs_url or '')
         self.comment = QTextEdit(track.comment or '')
-        self.comment.setMaximumHeight(66)
+        self.comment.setMinimumHeight(66)
         self.comment.setPlaceholderText('Dodaj komentarz…')
 
         for field_name, label, widget in (
@@ -837,7 +861,7 @@ class MetadataEditorDialog(QDialog):
         ril = QVBoxLayout(recognition)
         ril.setContentsMargins(10, 8, 10, 8)
         ril.setSpacing(5)
-        ri_title = _section_header('Informacje o rozpoznaniu', 'info')
+        ri_title = _section_header('Informacje o rozpoznaniu')
         ril.addWidget(ri_title)
         recognition_details = QGridLayout()
         recognition_details.setHorizontalSpacing(20)
@@ -859,6 +883,7 @@ class MetadataEditorDialog(QDialog):
             name.setObjectName('RecognitionFieldName')
             value = QLabel('—')
             value.setObjectName('RecognitionFieldValue')
+            value.setWordWrap(key == 'source')
             value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             line.addWidget(name)
             line.addStretch(1)
@@ -898,7 +923,6 @@ class MetadataEditorDialog(QDialog):
         self.recognition_bar.setTextVisible(False)
         self.recognition_bar.setFixedHeight(6)
         ril.addWidget(self.recognition_bar)
-        metadata_column_layout.addWidget(recognition)
         workspace.addWidget(self.metadata_column, 3)
 
         gallery = self.cover_gallery = QFrame()
@@ -907,7 +931,7 @@ class MetadataEditorDialog(QDialog):
         gl = QVBoxLayout(gallery)
         gl.setContentsMargins(10, 8, 10, 8)
         gl.setSpacing(6)
-        gh = _section_header('Okładka (wybierana z listy)', 'image')
+        gh = _section_header('Okładka (wybierana z listy)')
         gl.addWidget(gh)
 
         cover_top = QHBoxLayout()
@@ -920,12 +944,6 @@ class MetadataEditorDialog(QDialog):
         self.cover_main_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.cover_main_preview.setFixedSize(248, 248)
         self.cover_main_preview.clicked.connect(self._preview_selected_cover)
-        self.cover_selected_badge = QLabel('', self.cover_main_preview)
-        self.cover_selected_badge.setObjectName('CoverSelectedBadge')
-        self.cover_selected_badge.setPixmap(editor_icon('status', '#f2fff8', 17).pixmap(17, 17))
-        self.cover_selected_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.cover_selected_badge.setFixedSize(24, 24)
-        self.cover_selected_badge.move(216, 216)
         cover_main_col.addWidget(self.cover_main_preview, 0, Qt.AlignmentFlag.AlignLeft)
 
         self.cover_info = QFrame()
@@ -1017,7 +1035,9 @@ class MetadataEditorDialog(QDialog):
         self._cover_proposal_labels: dict[str, ClickableCoverLabel] = {}
         self._selected_cover_key = 'placeholder'
         self._selected_external_url = track.cover_art_url
-        workspace.addWidget(gallery, 2)
+        cover_recognition_layout.addWidget(gallery, 1)
+        cover_recognition_layout.addWidget(recognition)
+        workspace.addWidget(self.cover_recognition_column, 2)
         content.addLayout(workspace)
 
         naming = QFrame()
@@ -1026,11 +1046,8 @@ class MetadataEditorDialog(QDialog):
         nl.setContentsMargins(10, 6, 10, 6)
         nl.setSpacing(3)
         name_row = QHBoxLayout()
-        name_icon = QLabel()
-        name_icon.setStyleSheet('background:transparent;')
-        name_icon.setPixmap(editor_icon('metadata', '#78a9c6', 15).pixmap(15, 15))
-        name_icon.setFixedSize(17, 17)
-        name_row.addWidget(name_icon)
+        name_row.setSpacing(8)
+        name_row.addWidget(_section_mark())
         nh = QLabel('Nazwa wynikowa')
         nh.setObjectName('DetailFieldHeading')
         name_row.addWidget(nh)
@@ -1057,14 +1074,12 @@ class MetadataEditorDialog(QDialog):
         comparison_layout.setContentsMargins(8, 6, 8, 6)
         comparison_layout.setSpacing(4)
         compare_head = QHBoxLayout()
-        compare_title = _section_header('Porównanie źródeł  (pomocniczo)', 'legend',
-                                        icon_factory=library_icon, icon_color='#bdcbd3')
-        compare_head.addWidget(compare_title)
         self.source_legend_button = QToolButton()
         self.source_legend_button.setObjectName('SourceLegendInfoButton')
         self.source_legend_button.setText('')
-        self.source_legend_button.setIcon(editor_icon('info', '#8ed9eb', 16))
-        self.source_legend_button.setIconSize(QSize(16, 16))
+        self.source_legend_button.setIcon(library_icon('legend', '#bdcbd3', 18))
+        self.source_legend_button.setIconSize(QSize(18, 18))
+        self.source_legend_button.setFixedSize(20, 20)
         self.source_legend_button.setProperty('iconStyle', 'thin')
         self.source_legend_button.setToolTip('Legenda źródeł — kliknij')
         self.source_legend_button.setAccessibleName('Legenda źródeł')
@@ -1096,7 +1111,9 @@ class MetadataEditorDialog(QDialog):
             legend_menu.addAction(action)
         self.source_legend_button.setMenu(legend_menu)
         self.source_legend_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        compare_head.addWidget(self.source_legend_button)
+        compare_title = _section_header('Porównanie źródeł  (pomocniczo)',
+                                        icon_widget=self.source_legend_button)
+        compare_head.addWidget(compare_title)
         compare_head.addStretch(1)
         comparison_layout.addLayout(compare_head)
 
@@ -1386,7 +1403,7 @@ class MetadataEditorDialog(QDialog):
         if not hasattr(self, 'scan_online_button'):
             return
         self.scan_online_button.setText(ui_text(self, 'Rozpoznawanie…' if busy else 'Rozpoznaj online'))
-        _set_editor_button_icon(self.scan_online_button, 'search', '#91a4b0' if busy else '#dce8ef', 18)
+        _set_editor_button_icon(self.scan_online_button, 'editor_online_recognize', '#91a4b0' if busy else '#74e9fc', 20)
         self.scan_online_button.setEnabled(not busy and not self.online_lock.isChecked())
         self.previous_file_button.setEnabled(not busy and self.navigation_index > 0)
         self.next_file_button.setEnabled(not busy and self.navigation_index + 1 < self.navigation_total)
@@ -1754,20 +1771,23 @@ class MetadataEditorDialog(QDialog):
 
     def _refresh_status_summary(self) -> None:
         # Field presentation is independent of the removed file-status panel.
-        icons = {'ok': ('status_ready', '#35d893'),
-                 'warning': ('status_review', '#d8a23a'),
+        icons = {'warning': ('status_review', '#d8a23a'),
                  'critical': ('status_problem', '#f34d64')}
         for field_name, indicator in self._field_status_icons.items():
             field_kind = self._field_status_kind(field_name)
-            icon_name, color = icons[field_kind]
+            problematic = field_kind in icons
             text = self._widget_text(self._field_widgets[field_name]).strip()
             indicator.setText('')
-            indicator.setPixmap(library_icon(icon_name, color, 20).pixmap(20, 20))
+            if problematic:
+                icon_name, color = icons[field_kind]
+                indicator.setPixmap(library_icon(icon_name, color, 20).pixmap(20, 20))
+            else:
+                indicator.setPixmap(QPixmap())
             indicator.setProperty('statusKind', field_kind)
-            indicator.setVisible(field_kind != 'ok' or bool(text))
+            indicator.setVisible(problematic)
             indicator.style().unpolish(indicator)
             indicator.style().polish(indicator)
-            tooltip = 'Dane kompletne' if field_kind == 'ok' else 'Brak danych' if not text else 'PROBLEM'
+            tooltip = '' if not problematic else 'Brak danych' if not text else 'PROBLEM'
             indicator.setToolTip(ui_text(self, tooltip))
 
     def _refresh_recognition_info(self) -> None:
@@ -2403,12 +2423,13 @@ class MetadataEditorDialog(QDialog):
             preview.setToolTip(ui_text(self, title))
             preview.clicked.connect(lambda k=key: self._select_cover_choice(k))
             lay.addWidget(preview, 0, Qt.AlignmentFlag.AlignCenter)
-            selected_badge = QLabel('', card)
-            selected_badge.setObjectName('CoverProposalSelectedBadge')
-            selected_badge.setPixmap(editor_icon('status', '#f2fff8', 14).pixmap(14, 14))
+            selected_badge = QLabel('', preview)
+            selected_badge.setObjectName('CoverProposalSelectedMarker')
+            selected_badge.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            selected_badge.setPixmap(_cover_selection_marker_pixmap())
             selected_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            selected_badge.setFixedSize(20, 20)
-            selected_badge.move(preview_size - 20, preview_size - 20)
+            selected_badge.setFixedSize(22, 22)
+            selected_badge.move(preview_size - 22, 0)
             selected_badge.setVisible(key == getattr(self, '_selected_cover_key', ''))
             selected_badge.raise_()
             self._cover_proposal_labels[key] = preview
@@ -2433,7 +2454,7 @@ class MetadataEditorDialog(QDialog):
         if card is not None:
             selected = key == getattr(self, '_selected_cover_key', '')
             card.setProperty('selected', selected)
-            badge = card.findChild(QLabel, 'CoverProposalSelectedBadge')
+            badge = card.findChild(QLabel, 'CoverProposalSelectedMarker')
             if badge is not None:
                 badge.setVisible(selected)
                 badge.raise_()

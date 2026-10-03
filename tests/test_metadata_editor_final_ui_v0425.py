@@ -47,7 +47,7 @@ def test_cover_proposals_fit_two_columns_three_rows_without_extra_placeholders(t
             editor._select_cover_choice(key, record_undo=False)
             card = editor._cover_proposal_labels[key].parentWidget()
             assert card.property('selected') is True
-            assert card.findChild(QLabel, 'CoverProposalSelectedBadge').isVisibleTo(card)
+            assert card.findChild(QLabel, 'CoverProposalSelectedMarker').isVisibleTo(card)
     finally:
         _close(editor)
 

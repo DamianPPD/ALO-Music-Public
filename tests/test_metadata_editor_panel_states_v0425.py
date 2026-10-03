@@ -41,7 +41,7 @@ def _box(widget, parent):
 
 
 @pytest.mark.parametrize('width,height', [(1540, 1000), (1180, 760)])
-def test_removed_status_panel_leaves_metadata_and_recognition_beside_cover(editor, width, height):
+def test_removed_status_panel_leaves_recognition_below_cover(editor, width, height):
     editor.resize(width, height)
     QApplication.instance().processEvents()
     assert not editor.findChild(QFrame, 'MetadataStatusCompact')
@@ -50,10 +50,10 @@ def test_removed_status_panel_leaves_metadata_and_recognition_beside_cover(edito
     metadata, recognition, cover = (_box(widget, body) for widget in (
         editor.metadata_card, editor.recognition_card, editor.cover_gallery))
     assert metadata.top() == cover.top()
-    assert metadata.right() == recognition.right()
-    assert metadata.left() == recognition.left()
-    assert 4 <= recognition.top() - metadata.bottom() <= 12
-    assert recognition.bottom() == cover.bottom()
+    assert cover.right() == recognition.right()
+    assert cover.left() == recognition.left()
+    assert 4 <= recognition.top() - cover.bottom() <= 12
+    assert recognition.bottom() == metadata.bottom()
     assert 4 <= cover.left() - metadata.right() <= 12
     assert editor.cover_main_preview.size().toTuple() == (248, 248)
     assert editor.recognition_values['fields'].text() == '5/5'
@@ -64,12 +64,8 @@ def test_removed_status_panel_leaves_metadata_and_recognition_beside_cover(edito
 def test_source_comparison_heading_reuses_actual_library_legend_asset(editor):
     title = next(label for label in editor.findChildren(QLabel, 'EditorSectionTitle')
                  if label.text().startswith('Porównanie źródeł'))
-    icon = title.parentWidget().findChild(QLabel, 'EditorSectionIcon')
-    assert icon is not None
-    assert icon.pixmap().toImage() == library_icon('legend', '#bdcbd3', 18).pixmap(18, 18).toImage()
-    header_icons = editor.findChildren(QLabel, 'EditorSectionIcon')
-    assert len(header_icons) == 4
-    assert all(icon.pixmap().size().toTuple() == (18, 18) for icon in header_icons)
+    assert title.parentWidget().layout().itemAt(0).widget() is editor.source_legend_button
+    assert editor.source_legend_button.icon().pixmap(18, 18).toImage() == library_icon('legend', '#bdcbd3', 18).pixmap(18, 18).toImage()
 
 
 @pytest.mark.parametrize('theme', ['dark', 'light'])
@@ -117,8 +113,8 @@ def test_required_missing_fields_are_red_with_approved_problem_circle_and_recove
     assert edge.red() > 180 and edge.red() > edge.green() * 2 and edge.red() > edge.blue() * 1.5
     widget.setText(initial)
     editor._refresh_all()
-    assert marker.property('statusKind') == 'ok' and marker.isVisible()
-    assert marker.pixmap().toImage() == library_icon('status_ready', '#35d893', 20).pixmap(20, 20).toImage()
+    assert marker.property('statusKind') == 'ok' and marker.isHidden()
+    assert marker.pixmap().isNull()
     assert line.property('missingRequired') is False
     assert line.palette().color(QPalette.ColorRole.Base) != QColor('#29151b')
 

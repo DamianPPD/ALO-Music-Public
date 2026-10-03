@@ -39,7 +39,7 @@ def _close(dialog):
     dialog.close()
 
 
-def test_metadata_and_recognition_column_matches_cover_height_at_multiple_widths(tmp_path: Path):
+def test_metadata_matches_cover_and_recognition_column_height_at_multiple_widths(tmp_path: Path):
     app = _app()
     dialog = MetadataEditorDialog(_track(tmp_path))
     try:
@@ -49,7 +49,7 @@ def test_metadata_and_recognition_column_matches_cover_height_at_multiple_widths
             app.processEvents()
             heights = (
                 dialog.metadata_column.height(),
-                dialog.cover_gallery.height(),
+                dialog.cover_recognition_column.height(),
             )
             assert max(heights) - min(heights) <= 2
             assert dialog.comment.mapTo(dialog.metadata_card, dialog.comment.rect().topLeft()).y() < dialog.metadata_card.height()
@@ -311,13 +311,13 @@ def test_warning_marker_belongs_to_value_shell_before_source_badge(tmp_path: Pat
         assert shell.mapTo(dialog, shell.rect().topRight()).x() < badge.mapTo(dialog, badge.rect().topLeft()).x()
         assert not marker.isHidden()
         dialog.year.setText('2009')
-        assert not marker.isHidden()
+        assert marker.isHidden()
         assert marker.property('statusKind') == 'ok'
     finally:
         _close(dialog)
 
 
-def test_selected_cover_proposal_has_small_check_badge(tmp_path: Path):
+def test_selected_cover_proposal_has_small_corner_marker(tmp_path: Path):
     dialog = MetadataEditorDialog(_track(tmp_path))
     try:
         pixmap = QPixmap(40, 40)
@@ -326,7 +326,7 @@ def test_selected_cover_proposal_has_small_check_badge(tmp_path: Path):
         dialog._rebuild_cover_proposals()
         dialog._select_cover_choice('source', record_undo=False)
         card = dialog._cover_proposal_labels['source'].parentWidget()
-        badge = card.findChild(QLabel, 'CoverProposalSelectedBadge')
+        badge = card.findChild(QLabel, 'CoverProposalSelectedMarker')
         assert card.property('selected') is True
         assert badge is not None
         assert not badge.isHidden()

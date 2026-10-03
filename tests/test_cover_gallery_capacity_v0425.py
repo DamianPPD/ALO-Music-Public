@@ -85,7 +85,7 @@ def test_last_two_manual_slots_keep_old_choices_and_update_selected_cover(tmp_pa
             assert editor.cover_save_state()['manual_cover_path'] == str(expected_path)
             card = editor._cover_proposal_labels[key].parentWidget()
             assert card.property('selected') is True
-            assert not card.findChild(QLabel, 'CoverProposalSelectedBadge').isHidden()
+            assert not card.findChild(QLabel, 'CoverProposalSelectedMarker').isHidden()
         images = {key: editor._cover_candidate_pixmaps[key].toImage() for key in (*original, *manual_keys)}
         assert not editor.choose_cover_button.isEnabled()
         editor.choose_cover_button.click()

@@ -122,14 +122,15 @@ def test_user_genre_chip_changes_are_manual_undoable_and_slash_is_parsed(tmp_pat
         _close(dialog)
 
 
-def test_field_markers_use_ready_and_problem_circle_states(tmp_path: Path):
+def test_field_markers_show_only_problem_circles(tmp_path: Path):
     app = _app()
     dialog = MetadataEditorDialog(_track(tmp_path, artist=None, year=None))
     try:
         dialog.show()
         app.processEvents()
         assert dialog._field_status_icons['title'].property('statusKind') == 'ok'
-        assert dialog._field_status_icons['title'].pixmap().width() >= 20
+        assert dialog._field_status_icons['title'].pixmap().isNull()
+        assert dialog._field_status_icons['title'].isHidden()
         assert dialog._field_status_icons['year'].pixmap().width() >= 20
         assert dialog._field_status_icons['artist'].pixmap().width() >= 20
         assert dialog._field_status_icons['year'].property('statusKind') == 'critical'

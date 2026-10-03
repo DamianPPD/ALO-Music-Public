@@ -2814,3 +2814,56 @@ QDialog#MetadataEditorDialog QFrame#SourceComparisonCard QWidget#EditorSectionHe
 QDialog#MetadataEditorDialog QFrame#PrimaryMetadataCard QLabel#EditorSectionTitle,
 QDialog#MetadataEditorDialog QFrame#SourceComparisonCard QLabel#EditorSectionTitle { color:#243b47; }
 '''
+
+METADATA_EDITOR_REFINEMENT_STYLE = r'''
+QDialog#MetadataEditorDialog QWidget#EditorCoverRecognitionColumn { background:transparent; }
+/* Same two-line mark used by the Library's technical section. */
+QDialog#MetadataEditorDialog QLabel#LibrarySectionMark {
+    background:transparent; border:0; border-top:1px solid #91adbe; border-bottom:1px solid #91adbe;
+}
+QDialog#MetadataEditorDialog QToolButton#SourceLegendInfoButton {
+    background:transparent; border:0; border-radius:3px; padding:0;
+    min-width:20px; max-width:20px; min-height:20px; max-height:20px;
+}
+QDialog#MetadataEditorDialog QToolButton#SourceLegendInfoButton:hover { background:#17343d; }
+QDialog#MetadataEditorDialog QToolButton#SourceLegendInfoButton::menu-indicator {
+    image:none; width:0; height:0;
+}
+QDialog#MetadataEditorDialog QPushButton#SingleTrackOnlineButton,
+QDialog#MetadataEditorDialog QPushButton#SingleTrackAudioButton {
+    min-height:0px; max-height:36px; padding:0 13px; border-radius:7px;
+    border:1px solid; font-weight:760;
+}
+QDialog#MetadataEditorDialog QPushButton#SingleTrackOnlineButton {
+    background:#052530; border-color:#12bdd5; color:#edfdff;
+}
+QDialog#MetadataEditorDialog QPushButton#SingleTrackOnlineButton:hover {
+    background:#08434f; border-color:#74e9fc;
+}
+QDialog#MetadataEditorDialog QPushButton#SingleTrackOnlineButton:pressed {
+    background:#041a24; border-color:#069bab;
+}
+QDialog#MetadataEditorDialog QPushButton#SingleTrackAudioButton {
+    background:#191c3e; border-color:#7478d8; color:#eeefff;
+}
+QDialog#MetadataEditorDialog QPushButton#SingleTrackAudioButton:hover {
+    background:#292f60; border-color:#b6beff;
+}
+QDialog#MetadataEditorDialog QPushButton#SingleTrackAudioButton:pressed {
+    background:#10132e; border-color:#5d62ba;
+}
+QDialog#MetadataEditorDialog QPushButton#SingleTrackOnlineButton:disabled {
+    background:#101d24; border-color:#36505b; color:#91a5ae;
+}
+QDialog#MetadataEditorDialog QPushButton#SingleTrackAudioButton:disabled {
+    background:#191c2b; border-color:#404661; color:#9297b2;
+}
+QDialog#MetadataEditorDialog QFrame#CoverProposalCard[selected="true"] {
+    background:#0d151c; border:1px solid #293944;
+}
+QDialog#MetadataEditorDialog QLabel#CoverProposalSelectedMarker {
+    background:transparent; border:0; padding:0; margin:0;
+}
+'''
+DARK_STYLE += METADATA_EDITOR_REFINEMENT_STYLE
+LIGHT_STYLE += METADATA_EDITOR_REFINEMENT_STYLE

@@ -34,13 +34,13 @@ def test_editor_section_headers_match_reference_wording_and_icons():
         assert text in EDITOR
     assert "setObjectName('EditorSectionTitle')" in EDITOR
     assert "color:#e7eef3;" in THEME
-    assert "icon_factory(icon_name, icon_color, icon_size)" in EDITOR
-    assert "'legend'," in EDITOR and 'icon_factory=library_icon' in EDITOR
+    assert "mark.setObjectName('LibrarySectionMark')" in EDITOR
+    assert "self.source_legend_button.setIcon(library_icon('legend'" in EDITOR
 
 
 def test_editor_online_and_bottom_actions_use_real_icons():
     assert "QPushButton('Rozpoznaj online')" in EDITOR
-    assert "_set_editor_button_icon(self.scan_online_button, 'search', '#e9fdff'" in EDITOR
+    assert "_set_editor_button_icon(self.scan_online_button, 'editor_online_recognize', '#74e9fc'" in EDITOR
     assert "QPushButton('Przywróć dane sprzed online')" in EDITOR
     assert "_set_editor_button_icon(self.restore_pre_online_button, 'undo', '#dce8ef'" in EDITOR
     assert "QPushButton('Cofnij ostatnią zmianę')" in EDITOR
@@ -53,8 +53,8 @@ def test_editor_online_and_bottom_actions_use_real_icons():
 
 def test_cover_panel_is_compact_grid_like_reference():
     assert "self.cover_main_preview.setFixedSize(248, 248)" in EDITOR
-    assert "self.cover_selected_badge = QLabel(''," in EDITOR
-    assert "self.cover_selected_badge.setPixmap(editor_icon('status'" in EDITOR
+    assert 'self.cover_selected_badge' not in EDITOR
+    assert "selected_badge.setObjectName('CoverProposalSelectedMarker')" in EDITOR
     assert "self.choose_cover_button = QPushButton('Dodaj')" in EDITOR
     assert "self.search_cover_button = QPushButton('Szukaj okładki online')" in EDITOR
     assert "self.cover_browse_button = QPushButton('Wyszukaj')" not in EDITOR

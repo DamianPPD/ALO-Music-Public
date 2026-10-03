@@ -41,7 +41,8 @@ def test_metadata_editor_builds_new_compact_workspace_without_network(tmp_path: 
         assert dialog.status_button.text() == 'DO SPRAWDZENIA'
         assert not hasattr(dialog, 'ready_button')
         assert dialog._field_status_icons['artist'].text() == ''
-        assert dialog._field_status_icons['artist'].pixmap() is not None and not dialog._field_status_icons['artist'].pixmap().isNull()
+        assert dialog._field_status_icons['artist'].pixmap().isNull()
+        assert dialog._field_status_icons['artist'].isHidden()
         assert dialog._field_status_icons['year'].text() == ''
         assert dialog._field_status_icons['year'].pixmap() is not None and not dialog._field_status_icons['year'].pixmap().isNull()
         assert dialog.recognition_bar.height() == 6
