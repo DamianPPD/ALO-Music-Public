@@ -186,14 +186,16 @@ for width, height in ((1540, 1000), (1420, 900), (1180, 760)):
     assert grid.count() == 4
     assert {grid.getItemPosition(i)[:2] for i in range(4)} == {(0, 0), (0, 1), (1, 0), (1, 1)}
     proposals = editor.cover_proposals_host
-    assert abs(proposals.width() - proposals.height()) <= 1
+    assert proposals.height() >= proposals.width()
     cards = {(grid.getItemPosition(i)[0], grid.getItemPosition(i)[1]):
              grid.itemAt(i).widget().rect().translated(grid.itemAt(i).widget().mapTo(proposals, QPoint()))
              for i in range(4)}
     tl, tr, bl, br = [cards[key] for key in ((0, 0), (0, 1), (1, 0), (1, 1))]
     assert abs(tl.left() - (proposals.width() - tr.right() - 1)) <= 1
     assert abs(tl.top() - (proposals.height() - bl.bottom() - 1)) <= 1
-    assert abs((tr.left() - tl.right()) - (bl.top() - tl.bottom())) <= 1
+    actions_top = editor.choose_cover_button.parentWidget().mapTo(editor.cover_gallery, QPoint()).y()
+    assert 0 <= actions_top - proposals.mapTo(editor.cover_gallery, proposals.rect().bottomLeft()).y() <= 14
+    assert all(100 <= preview.width() <= 104 for preview in editor._cover_proposal_labels.values())
     parent = editor.cover_gallery
     bottom = proposals.mapTo(parent, proposals.rect().bottomLeft()).y()
     buttons = (editor.choose_cover_button, editor.search_cover_button)

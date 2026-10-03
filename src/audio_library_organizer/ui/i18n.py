@@ -488,6 +488,9 @@ def _english_count_agreement(text: str) -> str:
 def translate_static_text(text: str, language: str) -> str:
     if language != 'en':
         return text
+    genre_tab = re.fullmatch(r'(Gatunki ALO|Moje gatunki)  (\d+)', text)
+    if genre_tab:
+        return TEXT_MAP_EN[genre_tab.group(1)] + '  ' + genre_tab.group(2)
     if text in TEXT_MAP_EN:
         return TEXT_MAP_EN[text]
     dynamic = _dynamic_en(text)
@@ -576,7 +579,7 @@ def apply_static_language(root, language: str) -> None:
             except Exception:
                 pass
 
-        if isinstance(widget, (QLabel, QAbstractButton, QGroupBox)):
+        if isinstance(widget, (QLabel, QAbstractButton, QGroupBox)) and not widget.property('literalText'):
             try:
                 current = widget.text()
                 original = _remembered_text(widget, '_alo_pl_text', current, language)
@@ -673,6 +676,18 @@ def apply_static_language(root, language: str) -> None:
 
 # v0.4.5 destination libraries, duplicate comparison and version-family UI.
 TEXT_MAP_EN.update({
+    'Gatunki': 'Genres',
+    'Zarządzaj listą używaną w podpowiedziach pola Gatunek.': 'Manage the list used for Genre field suggestions.',
+    'Wyszukaj gatunek…': 'Search genres…',
+    'Gatunki ALO': 'ALO genres', 'Moje gatunki': 'My genres',
+    'Lista bazowa ALO — tylko do odczytu.': 'ALO base list — read only.',
+    'Wpisz własny gatunek…': 'Enter a custom genre…',
+    '+ Dodaj': '+ Add', 'Usuń gatunek': 'Remove genre',
+    'Wpisz nazwę gatunku.': 'Enter a genre name.',
+    'Ten gatunek jest już na liście.': 'This genre is already on the list.',
+    '✓ Aktualnie wybrane': '✓ Currently selected',
+    'Pierwszy gatunek jest główny i decyduje o folderze. Kliknij ×, aby usunąć.': 'The first genre is primary and determines the folder. Click × to remove.',
+    'Kliknij prawym przyciskiem, aby ustawić jako główny. Kliknij ×, aby usunąć.': 'Right-click to set as primary. Click × to remove.',
     'Folder biblioteki / zapisu': 'Library / output folder',
     'Wybierz folder zapisu': 'Choose output folder',
     'Wybierz folder biblioteki / zapisu': 'Choose library / output folder',

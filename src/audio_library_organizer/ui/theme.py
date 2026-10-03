@@ -1,3 +1,6 @@
+GENRE_ACCENT = '#5f7d95'
+AUDIO_ID_ACCENT = '#a3a8ff'
+
 APP_STYLE = r'''
 QWidget { background:#10141a; color:#eef3f7; font-family:"Segoe UI"; font-size:10pt; }
 QMainWindow { background:#0c1015; }
@@ -2914,8 +2917,78 @@ QDialog#MetadataEditorDialog QLabel#CoverMainPreview {
     background:#070d12; border:1px solid #293944; border-radius:8px;
 }
 QDialog#MetadataEditorDialog QFrame#CoverProposalCard {
-    min-width:96px; max-width:96px; min-height:96px; max-height:96px;
+    min-width:106px; max-width:106px; min-height:106px; max-height:106px;
 }
 '''
 DARK_STYLE += METADATA_EDITOR_REFINEMENT_STYLE
 LIGHT_STYLE += METADATA_EDITOR_REFINEMENT_STYLE
+
+# Controlled genres and scoped Audio ID styling; existing inputs keep their style.
+CONTROLLED_GENRE_STYLE = r'''
+QFrame#GenreChip {
+    background:#19212a; border:1px solid #34424e; border-left:2px solid __GENRE_ACCENT__;
+    border-radius:3px; padding:0;
+}
+QLabel#GenreTagLabel {
+    background:transparent; border:0; color:#d9e1e8; padding:0;
+    font-size:8.5pt; font-weight:500;
+}
+QToolButton#GenreTagRemove {
+    background:transparent; border:0; border-radius:0; color:#99a6b2; padding:0;
+    min-width:0; max-width:16px; min-height:0; max-height:18px; font-size:11pt;
+}
+QToolButton#GenreTagRemove:hover { color:#f0b0b8; background:transparent; }
+QTabWidget#GenreSettingsTabs::pane {
+    background:#111a23; border:1px solid #34424e; border-radius:4px;
+}
+QTabWidget#GenreSettingsTabs QTabBar::tab {
+    background:#15212b; color:#aebdca; border:1px solid #34424e;
+    border-radius:3px; padding:6px 10px; margin-right:5px;
+}
+QTabWidget#GenreSettingsTabs QTabBar::tab:selected { color:#edf3f8; border-color:__GENRE_ACCENT__; }
+QPushButton#GenreAddButton { border-color:__GENRE_ACCENT__; }
+QDialog#MetadataEditorDialog QTableWidget#SourceComparisonTable {
+    selection-background-color:#153b2b; selection-color:#f2fff7;
+}
+QDialog#MetadataEditorDialog QTableWidget#SourceComparisonTable::item:selected {
+    background:#153b2b; color:#f2fff7;
+}
+QDialog#MetadataEditorDialog QWidget#UseSourceDataCell[selected="true"] { background:#153b2b; }
+QDialog#MetadataEditorDialog QPushButton#UseSourceDataButton {
+    min-width:0; max-width:400px;
+}
+QDialog#MetadataEditorDialog QPushButton#UseSourceDataButton[selected="true"] {
+    background:#193e2d; border-color:#416b54; color:#b6dfc6;
+}
+QDialog#MetadataEditorDialog QFrame#AudioRecognitionPanel {
+    background:#11151f; border:1px solid #575b91; border-left:2px solid #7076b7; border-radius:7px;
+}
+QDialog#MetadataEditorDialog QFrame#AudioRecognitionSummary {
+    background:#151927; border:1px solid #4c5183; border-radius:6px;
+}
+QDialog#MetadataEditorDialog QLabel#AudioRecognitionPhase,
+QDialog#MetadataEditorDialog QLabel#AudioRecognitionSummaryHeading { color:__AUDIO_ACCENT__; }
+QDialog#MetadataEditorDialog QLabel#AudioRecognitionSummaryMeta { color:#a8b0cf; }
+QDialog#MetadataEditorDialog QPushButton#AudioRecognitionConfirmButton,
+QDialog#MetadataEditorDialog QPushButton#AudioRecognitionShowCandidates,
+QDialog#MetadataEditorDialog QPushButton#AudioRecognitionRetry {
+    background:#191e2d; border-color:#555b91; color:#c4c8f4;
+}
+QDialog#MetadataEditorDialog QPushButton#AudioRecognitionConfirmButton:hover,
+QDialog#MetadataEditorDialog QPushButton#AudioRecognitionShowCandidates:hover,
+QDialog#MetadataEditorDialog QPushButton#AudioRecognitionRetry:hover {
+    background:#242a40; border-color:#9299e0;
+}
+QDialog#MetadataEditorDialog QToolButton#MetadataSourceBadge[sourceKind="audio_recognition"],
+QDialog#MetadataEditorDialog QLabel#SourceLegendBadge[sourceKind="audio_recognition"] {
+    color:__AUDIO_ACCENT__; background:#20253d; border:1px solid __AUDIO_ACCENT__;
+}
+QDialog#MetadataEditorDialog QFrame#AudioRecognitionSummary[emptyResult="true"] QPushButton#AudioRecognitionRetry {
+    background:#29191f; border-color:#75414d; color:#ffb4bd;
+}
+QDialog#MetadataEditorDialog QFrame#AudioRecognitionSummary[emptyResult="true"] QPushButton#AudioRecognitionRetry:hover {
+    background:#3b202a; border-color:#b65a6d;
+}
+'''.replace('__GENRE_ACCENT__', GENRE_ACCENT).replace('__AUDIO_ACCENT__', AUDIO_ID_ACCENT)
+DARK_STYLE += CONTROLLED_GENRE_STYLE
+LIGHT_STYLE += CONTROLLED_GENRE_STYLE

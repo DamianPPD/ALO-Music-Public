@@ -109,7 +109,7 @@ def test_track_header_copy_remains_available_across_real_a_b_a_editor_navigation
         window.close()
 
 
-def test_settings_render_six_ordered_configuration_sections_without_quick_access_duplicate(tmp_path: Path):
+def test_settings_render_ordered_configuration_sections_with_separate_genres(tmp_path: Path):
     app = _app()
     store = QSettings(str(tmp_path / 'settings.ini'), QSettings.Format.IniFormat)
     page = SettingsPage(_settings(tmp_path), store)
@@ -125,6 +125,7 @@ def test_settings_render_six_ordered_configuration_sections_without_quick_access
         assert section_names == [
             'library',
             'naming',
+            'genres',
             'online',
             'integrations',
             'interface',

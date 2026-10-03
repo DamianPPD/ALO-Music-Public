@@ -54,6 +54,7 @@ from audio_library_organizer.ui.confidence import ConfidenceWidget
 from audio_library_organizer.ui.player import CompactPlayerBar
 from audio_library_organizer.ui.widgets import ClickableCoverLabel, SelectableElidedLineEdit, show_cover_preview
 from audio_library_organizer.ui.genre_input import GenreChipInput
+from audio_library_organizer.ui.theme import AUDIO_ID_ACCENT
 from audio_library_organizer.ui.i18n import ui_text, language_for, apply_static_language, localized_no_cover_name
 
 
@@ -135,18 +136,13 @@ class RecognitionDetailsButton(QToolButton):
 
 
 class CoverProposalsHost(QFrame):
-    """Keep the two-by-two grid square at each available column width."""
+    """Center two rows of fixed square thumbnails in the available height."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        policy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        policy.setHeightForWidth(True)
-        self.setSizePolicy(policy)
-        self.setMinimumSize(218, 218)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.setMinimumSize(236, 236)
         self.setMaximumWidth(288)
-
-    def heightForWidth(self, width):
-        return max(218, min(288, width))
 
 
 class RecognitionDetailsPopup(QFrame):
@@ -221,11 +217,26 @@ class MissingCompleteGraphic(QWidget):
         painter.drawLine(30, 35, 35, 39); painter.drawLine(35, 39, 46, 28)
 
 
+def _source_bundle_option(option, index):
+    styled = QStyleOptionViewItem(option)
+    styled.state &= ~(QStyle.StateFlag.State_Selected | QStyle.StateFlag.State_HasFocus)
+    if index.data(Qt.ItemDataRole.UserRole + 1):
+        styled.state |= QStyle.StateFlag.State_Selected
+    return styled
+
+
+class SourceBundleDelegate(QStyledItemDelegate):
+    """Paint the last applied bundle, independently of transient table selection."""
+
+    def paint(self, painter, option, index):
+        super().paint(painter, _source_bundle_option(option, index), index)
+
+
 class SourceNameDelegate(QStyledItemDelegate):
     """Paint the source name in its provider color even under Qt's item stylesheet."""
 
     def paint(self, painter, option, index):
-        styled = QStyleOptionViewItem(option)
+        styled = _source_bundle_option(option, index)
         self.initStyleOption(styled, index)
         label = styled.text
         icon = QIcon(styled.icon)
@@ -258,7 +269,13 @@ class SourceComparisonTable(QTableWidget):
 
     def resize_columns(self):
         header = self.horizontalHeader()
-        fixed = {0: 208, 4: 58, 5: 95, 6: 126}
+        action_width = 126
+        for row in range(self.rowCount()):
+            cell = self.cellWidget(row, 6)
+            button = cell.findChild(QPushButton, 'UseSourceDataButton') if cell else None
+            if button is not None:
+                action_width = max(action_width, button.width() + 14)
+        fixed = {0: 208, 4: 58, 5: 95, 6: action_width}
         for column, width in fixed.items():
             header.resizeSection(column, width)
         available = self.viewport().width() - sum(fixed.values())
@@ -592,7 +609,7 @@ class MetadataEditorDialog(QDialog):
         'MusicBrainz': '#b36cff',
         'Apple / iTunes': '#ff6670',
         'Analiza audio': '#ef5b64',
-        AUDIO_SOURCE: '#20c5c3',
+        AUDIO_SOURCE: AUDIO_ID_ACCENT,
         'Nazwa pliku': '#9aa6b2',
         'Ręcznie': '#ffb84d',
     }
@@ -635,6 +652,7 @@ class MetadataEditorDialog(QDialog):
         self._field_value_shells: dict[str, QFrame] = {}
         self._current_sources = dict(track.field_sources or {})
         self._source_values = deepcopy(track.field_source_values or {})
+        self._last_applied_source: str | None = None
         self._cover_network = QNetworkAccessManager(self)
         self._cover_request_serial = 0
         self._cover_candidate_states: dict[str, str] = {}
@@ -839,7 +857,7 @@ class MetadataEditorDialog(QDialog):
         phase_header.setContentsMargins(0, 0, 0, 0)
         phase_header.setSpacing(6)
         self.audio_phase_icon = QLabel()
-        self.audio_phase_icon.setPixmap(editor_icon('audio_recognize', '#20c5c3', 17).pixmap(17, 17))
+        self.audio_phase_icon.setPixmap(editor_icon('audio_recognize', AUDIO_ID_ACCENT, 17).pixmap(17, 17))
         self.audio_phase_icon.setFixedSize(17, 17)
         phase_header.addWidget(self.audio_phase_icon)
         phase_header.addWidget(self.audio_phase, 1)
@@ -885,7 +903,7 @@ class MetadataEditorDialog(QDialog):
         summary.setSpacing(8)
         self.audio_summary_icon = QLabel()
         self.audio_summary_icon.setObjectName('AudioRecognitionSummaryIcon')
-        self.audio_summary_icon.setPixmap(editor_icon('audio_recognize', '#20c5c3', 17).pixmap(17, 17))
+        self.audio_summary_icon.setPixmap(editor_icon('audio_recognize', AUDIO_ID_ACCENT, 17).pixmap(17, 17))
         self.audio_summary_icon.setFixedSize(23, 23)
         summary.addWidget(self.audio_summary_icon)
         summary_text = QVBoxLayout()
@@ -893,7 +911,7 @@ class MetadataEditorDialog(QDialog):
         heading_row = QHBoxLayout()
         heading_row.setSpacing(4)
         summary_check = QLabel()
-        summary_check.setPixmap(editor_icon('check', '#67dcd8', 13).pixmap(13, 13))
+        summary_check.setPixmap(editor_icon('check', AUDIO_ID_ACCENT, 13).pixmap(13, 13))
         summary_check.setFixedSize(13, 13)
         heading_row.addWidget(summary_check)
         self.audio_summary_heading = QLabel('Źródło audio zatwierdzone')
@@ -915,7 +933,7 @@ class MetadataEditorDialog(QDialog):
         self.audio_retry_button = QPushButton('Rozpoznaj ponownie')
         self.audio_retry_button.setObjectName('AudioRecognitionRetry')
         self.audio_retry_button.setFixedHeight(30)
-        _set_editor_button_icon(self.audio_retry_button, 'audio_recognize', '#b5f3f2', 15)
+        _set_editor_button_icon(self.audio_retry_button, 'audio_recognize', AUDIO_ID_ACCENT, 15)
         self.audio_retry_button.clicked.connect(lambda: self.audio_scan_requested.emit(self))
         summary.addWidget(self.audio_retry_button)
         ap.addWidget(self.audio_summary)
@@ -943,7 +961,7 @@ class MetadataEditorDialog(QDialog):
         self.audio_empty_retry = QPushButton('Rozpoznaj ponownie')
         self.audio_empty_retry.setObjectName('AudioRecognitionRetry')
         self.audio_empty_retry.setFixedHeight(30)
-        _set_editor_button_icon(self.audio_empty_retry, 'audio_recognize', '#b5f3f2', 15)
+        _set_editor_button_icon(self.audio_empty_retry, 'audio_recognize', '#f34d64', 15)
         self.audio_empty_retry.clicked.connect(lambda: self.audio_scan_requested.emit(self))
         empty_row.addWidget(self.audio_empty_retry)
         ap.addWidget(self.audio_empty_status)
@@ -1220,13 +1238,12 @@ class MetadataEditorDialog(QDialog):
         self.cover_proposals_grid.setContentsMargins(7, 7, 7, 7)
         self.cover_proposals_grid.setHorizontalSpacing(6)
         self.cover_proposals_grid.setVerticalSpacing(6)
-        self.cover_proposals_grid.setColumnMinimumWidth(0, 96)
-        self.cover_proposals_grid.setColumnMinimumWidth(1, 96)
+        self.cover_proposals_grid.setColumnMinimumWidth(0, 108)
+        self.cover_proposals_grid.setColumnMinimumWidth(1, 108)
         for index in range(2):
             self.cover_proposals_grid.setRowStretch(index, 1)
             self.cover_proposals_grid.setColumnStretch(index, 1)
-        cover_side.addWidget(self.cover_proposals_host, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
-        cover_side.addStretch(1)
+        cover_side.addWidget(self.cover_proposals_host, 1)
         cover_top.addLayout(cover_side, 1)
         gl.addLayout(cover_top, 1)
 
@@ -1354,6 +1371,7 @@ class MetadataEditorDialog(QDialog):
         self.source_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.source_table.setAlternatingRowColors(True)
         self.source_table.setIconSize(QSize(12, 12))
+        self.source_table.setItemDelegate(SourceBundleDelegate(self.source_table))
         self.source_table.setItemDelegateForColumn(0, SourceNameDelegate(self.source_table))
         self.source_table.setWordWrap(False)
         self.source_table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -1795,9 +1813,9 @@ class MetadataEditorDialog(QDialog):
             if item:
                 is_approved = self._audio_hit_is_approved(hit)
                 item.setText('' if is_approved else '○')
-                item.setIcon(editor_icon('check', '#20c5c3', 13) if is_approved else QIcon())
+                item.setIcon(editor_icon('check', AUDIO_ID_ACCENT, 13) if is_approved else QIcon())
                 item.setToolTip(ui_text(self, 'Źródło audio zatwierdzone') if is_approved else '')
-                item.setForeground(QColor('#20c5c3'))
+                item.setForeground(QColor(AUDIO_ID_ACCENT))
 
     def _audio_hit_is_approved(self, hit: AcoustIDHit) -> bool:
         approved = self.track.audio_recognition or {}
@@ -2187,18 +2205,30 @@ class MetadataEditorDialog(QDialog):
                 value = self._source_values.get(field_name, {}).get(source)
                 shown = self._display_source_value(field_name, value) if value not in (None, '') else '—'
                 self.source_table.setItem(row, column, QTableWidgetItem(shown))
-            use_button = QPushButton(ui_text(self, 'Użyj danych'))
+            selected = source == self._last_applied_source
+            caption = '✓ Aktualnie wybrane' if selected else 'Użyj danych'
+            use_button = QPushButton(ui_text(self, caption))
             use_button.setObjectName('UseSourceDataButton')
-            use_button.setFixedSize(82, 18)
+            use_button.setProperty('selected', selected)
+            use_button.setProperty('_alo_pl_text', caption)
             use_button.setToolTip(ui_text(self, f'Zastosuj dostępne dane ze źródła: {display_names.get(source, source)}'))
             use_button.clicked.connect(lambda _checked=False, s=source: self._apply_source_bundle(s))
             cell = QWidget()
             cell.setObjectName('UseSourceDataCell')
+            cell.setProperty('selected', selected)
             cell_layout = QHBoxLayout(cell)
             cell_layout.setContentsMargins(7, 3, 7, 3)
             cell_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             cell_layout.addWidget(use_button)
             self.source_table.setCellWidget(row, 6, cell)
+            # Measure after parenting, when the editor's font/style is resolved.
+            use_button.ensurePolished()
+            use_button.setFixedSize(max(82, use_button.fontMetrics().horizontalAdvance(use_button.text()) + 18), 18)
+            for column in range(6):
+                self.source_table.item(row, column).setData(Qt.ItemDataRole.UserRole + 1, selected)
+                if selected:
+                    self.source_table.item(row, column).setBackground(QColor('#153b2b'))
+        self.source_table.resize_columns()
         self.source_table.resize_to_rows()
 
     def _apply_source_bundle(self, source: str) -> None:
@@ -2217,7 +2247,10 @@ class MetadataEditorDialog(QDialog):
         finally:
             self._suspend_tracking = False
         self._filename_manual = False
+        self._last_applied_source = source
         self._refresh_all()
+        self._refresh_source_comparison()
+        self.source_table.clearSelection()
         self._observe_state()
 
     @staticmethod
@@ -2731,7 +2764,7 @@ class MetadataEditorDialog(QDialog):
         self.choose_cover_button.setProperty('_alo_pl_tooltip', tooltip)
         self.choose_cover_button.setToolTip(ui_text(self, tooltip))
 
-        preview_size = 90
+        preview_size = 102
         columns = 2
 
         for index, (key, title) in enumerate(visible_entries):
@@ -2739,7 +2772,7 @@ class MetadataEditorDialog(QDialog):
             card.setObjectName('CoverProposalCard')
             card.setProperty('selected', key == getattr(self, '_selected_cover_key', ''))
             card.setToolTip(ui_text(self, title))
-            card.setMinimumSize(preview_size + 6, preview_size + 6)
+            card.setFixedSize(preview_size + 6, preview_size + 6)
             lay = QVBoxLayout(card)
             lay.setContentsMargins(3, 3, 3, 3)
             lay.setSpacing(0)
@@ -2761,7 +2794,7 @@ class MetadataEditorDialog(QDialog):
             selected_badge.raise_()
             self._cover_proposal_labels[key] = preview
             row, col = divmod(index, columns)
-            self.cover_proposals_grid.addWidget(card, row, col)
+            self.cover_proposals_grid.addWidget(card, row, col, Qt.AlignmentFlag.AlignCenter)
             self._refresh_cover_proposal_widget(key)
 
     def _refresh_cover_proposal_widget(self, key: str) -> None:

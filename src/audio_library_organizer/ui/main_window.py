@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 from audio_library_organizer import __version__
 from audio_library_organizer.domain.settings import AppSettings, LibraryPaths
 from audio_library_organizer.domain.provider_settings import ProviderSettings
+from audio_library_organizer.domain.genres import GenreSettings
 from audio_library_organizer.domain.preferences import (
     AppPreferences,
     NameNormalizationRule,
@@ -62,9 +63,10 @@ from audio_library_organizer.ui.player import PlayerBar
 from audio_library_organizer.ui.workers import ScanWorker, IdentificationWorker, AudioIdentificationWorker, ExportWorker
 from audio_library_organizer.ui.assets import asset_path
 from audio_library_organizer.ui.icons import alo_icon, start_icon
-from audio_library_organizer.ui.theme import style_for_theme
+from audio_library_organizer.ui.theme import style_for_theme, GENRE_ACCENT
 from audio_library_organizer.ui.i18n import tr, apply_static_language, ui_text
 from audio_library_organizer.ui.widgets import StatCard
+from audio_library_organizer.ui.genre_settings import GenreSettingsWidget
 from audio_library_organizer.domain.models import TrackRecord
 
 def _icon_label(name: str, color: str = '#68d9a0', size: int = 22) -> QLabel:
@@ -291,6 +293,7 @@ class SettingsPage(QWidget):
         section_specs = (
             ('library', 'Biblioteka', 'Wybierz główną lokalizację biblioteki ALO.', 'library', '#67d8ef'),
             ('naming', 'Nazewnictwo plików', 'Ustal sposób tworzenia nazw plików wynikowych.', 'metadata', '#c7a9ff'),
+            ('genres', 'Gatunki', 'Zarządzaj listą używaną w podpowiedziach pola Gatunek.', 'metadata', GENRE_ACCENT),
             ('online', 'Rozpoznawanie online', 'Dostosuj sposób korzystania ze źródeł internetowych.', 'recognize', '#57d8ff'),
             ('integrations', 'Integracje i klucze API', 'Połącz ALO ze źródłami używanymi podczas rozpoznawania utworów.', 'integration', '#77dffc'),
             ('interface', 'Interfejs', 'Dostosuj język i zachowanie programu.', 'settings', '#78d9e6'),
@@ -303,6 +306,9 @@ class SettingsPage(QWidget):
             self.settings_sections[name] = section
             self.section_layouts[name] = section_layout
             lay.addWidget(section)
+
+        self.genre_settings = GenreSettingsWidget(store)
+        self.section_layouts['genres'].addWidget(self.genre_settings)
 
         appearance = QFrame(); appearance.setObjectName('AppearanceCard')
         al = QVBoxLayout(appearance); al.setContentsMargins(16, 14, 16, 14); al.setSpacing(9)
@@ -1517,7 +1523,7 @@ class MainWindow(QMainWindow):
                     current_track, self,
                     filename_template=ProviderSettings.from_store(self.qt_settings).filename_template,
                     player_bar=self.player,
-                    genre_suggestions=self.library.genre_suggestions(),
+                    genre_suggestions=GenreSettings.from_store(self.qt_settings).suggestions(),
                     normalize_names=self.preferences.normalize_names,
                     name_rules=self.preferences.name_rules,
                     navigation_index=current_index,

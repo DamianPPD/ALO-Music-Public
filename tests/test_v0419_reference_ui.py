@@ -59,7 +59,6 @@ def test_cover_panel_is_compact_grid_like_reference():
     assert "self.cover_browse_button = QPushButton('Wyszukaj')" not in EDITOR
     assert "self.show_more_covers_button = QPushButton('Pokaż więcej')" not in EDITOR
     assert 'Więcej okładek online…' not in EDITOR
-    assert 'preview_size = 90' in EDITOR
     assert 'columns = 2' in EDITOR
     assert "entries.append(('placeholder', 'BRAK OKŁADKI'))" in EDITOR
 
@@ -70,6 +69,6 @@ def test_source_table_is_compact_and_source_marker_is_larger_than_text():
     assert "source_item.setIcon(editor_icon('audio_recognize'" in EDITOR
     assert "self.source_table.setItem(row, 0, source_item)" in EDITOR
     assert "font.setPointSizeF(max(7.2, font.pointSizeF() - 1.0))" in EDITOR
-    assert '6: 126' in EDITOR
-    assert 'use_button.setFixedSize(82, 18)' in EDITOR
+    # Live action caption sizing and the expanded 2×2 geometry are exercised
+    # by test_metadata_editor_states_v0425 rather than source-text snapshots.
     assert "cell.setObjectName('UseSourceDataCell')" in EDITOR

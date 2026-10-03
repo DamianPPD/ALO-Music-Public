@@ -213,7 +213,8 @@ def test_metadata_editor_keeps_individual_fields_recognition_comparison_and_inli
     assert "comparison.setObjectName('SourceComparisonCard')" in EDITOR
     assert "self.source_legend_button.setText('')" in EDITOR
     assert "self.source_table = SourceComparisonTable(0, 7)" in EDITOR
-    assert "use_button = QPushButton(ui_text(self, 'Użyj danych'))" in EDITOR
+    # Source action captions now reflect the last applied bundle. Their enabled
+    # state and A→B→A behavior are exercised by test_metadata_editor_states_v0425.
     assert 'self.source_table.resize_to_rows()' in EDITOR
     assert "self.compact_player = CompactPlayerBar" in EDITOR
     assert 'AKTUALNY STATUS:' not in EDITOR

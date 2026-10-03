@@ -5,9 +5,11 @@ import re
 
 from mutagen.id3 import TCON
 
+from audio_library_organizer.domain.genres import GenreSettings
 from audio_library_organizer.metadata.genre import genre_items
 from audio_library_organizer.ui.i18n import ui_text
 
+# Preserve the existing Library filter vocabulary; editor choices use GenreSettings.
 DEFAULT_GENRES = (
     'House', 'Deep House', 'Progressive House', 'Funky House', 'Tech House',
     'Trance', 'Progressive Trance', 'Vocal Trance', 'Psy-Trance',
@@ -66,6 +68,7 @@ def _suggestion_genres(value: str | None) -> list[str]:
 
 
 def build_genre_suggestions(values: Iterable[str | None], query: str = '') -> list[str]:
+    """Sanitize legacy values used by the Library's genre filter."""
     seen: set[str] = set()
     result: list[str] = []
     for value in tuple(values) + DEFAULT_GENRES:
@@ -80,10 +83,24 @@ def build_genre_suggestions(values: Iterable[str | None], query: str = '') -> li
     return result
 
 
+def controlled_genre_suggestions(values: Iterable[str | None]) -> list[str]:
+    """Use explicitly configured choices, preserving names such as R&B / Soul."""
+    clean = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        name = value.strip()
+        sanitized = _suggestion_genres(name)
+        if sanitized == genre_items(name, limit=50):
+            clean.append(name)
+        else:
+            clean.extend(sanitized)
+    return GenreSettings(tuple(clean)).suggestions()
+
+
 try:
     from PySide6.QtCore import Qt, Signal, QStringListModel
-    from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLineEdit, QToolButton, QCompleter, QLabel
-    from audio_library_organizer.ui.icons import alo_icon
+    from PySide6.QtWidgets import QWidget, QFrame, QHBoxLayout, QVBoxLayout, QLineEdit, QToolButton, QCompleter, QLabel
     _QT = True
 except ImportError:
     QWidget = object
@@ -91,6 +108,35 @@ except ImportError:
 
 
 if _QT:
+    class GenreTag(QFrame):
+        removed = Signal(str)
+
+        def __init__(self, name: str, *, removable: bool = False, parent=None):
+            super().__init__(parent)
+            self.setObjectName('GenreChip')
+            self.setProperty('genreName', name)
+            self.setFixedHeight(25)
+            row = QHBoxLayout(self)
+            row.setContentsMargins(8, 0, 5 if removable else 8, 0)
+            row.setSpacing(5)
+            label = QLabel(name)
+            label.setObjectName('GenreTagLabel')
+            label.setProperty('literalText', True)
+            label.setTextFormat(Qt.TextFormat.PlainText)
+            row.addWidget(label)
+            if removable:
+                remove = QToolButton()
+                remove.setObjectName('GenreTagRemove')
+                remove.setText('×')
+                remove.setFixedSize(16, 18)
+                remove.setCursor(Qt.CursorShape.PointingHandCursor)
+                remove.setProperty('_alo_pl_tooltip', 'Usuń gatunek')
+                remove.setToolTip(ui_text(self, 'Usuń gatunek'))
+                remove.setAccessibleName(ui_text(self, 'Usuń gatunek') + ': ' + name)
+                remove.clicked.connect(lambda: self.removed.emit(name))
+                row.addWidget(remove)
+
+
     class GenreChipInput(QWidget):
         """Compact multi-genre editor with autocomplete and removable chips."""
 
@@ -101,7 +147,7 @@ if _QT:
             super().__init__(parent)
             self.max_items = max(1, int(max_items))
             self._items: list[str] = []
-            self._all_suggestions = build_genre_suggestions(suggestions)
+            self._all_suggestions = controlled_genre_suggestions(suggestions)
 
             root = QVBoxLayout(self); root.setContentsMargins(0, 0, 0, 0); root.setSpacing(4)
             self.chip_host = QWidget(); self.chip_row = QHBoxLayout(self.chip_host); self.chip_row.setContentsMargins(0, 0, 0, 0); self.chip_row.setSpacing(5)
@@ -124,7 +170,7 @@ if _QT:
             self._rebuild_chips(emit=False)
 
         def set_suggestions(self, suggestions: Iterable[str | None]) -> None:
-            self._all_suggestions = build_genre_suggestions(suggestions)
+            self._all_suggestions = controlled_genre_suggestions(suggestions)
             self.model.setStringList(self._all_suggestions)
 
         def genres(self) -> tuple[str, ...]:
@@ -170,13 +216,15 @@ if _QT:
                 item = self.chip_row.takeAt(0)
                 widget = item.widget()
                 if widget is not None:
+                    widget.hide()
+                    widget.setParent(None)
                     widget.deleteLater()
             for index, genre in enumerate(self._items):
-                chip = QToolButton(); chip.setObjectName('GenreChip'); chip.setText(f'{genre} ×')
-                chip.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-                chip.setIcon(alo_icon('status' if index == 0 else 'cancel', '#62df98' if index == 0 else '#8da1ad', 13))
-                chip.setToolTip(ui_text(self, 'Pierwszy gatunek jest główny i decyduje o folderze. Kliknij, aby usunąć.' if index == 0 else 'Kliknij prawym przyciskiem, aby ustawić jako główny. Kliknij, aby usunąć.'))
-                chip.clicked.connect(lambda _=False, i=index: self._remove(i))
+                chip = GenreTag(genre, removable=True, parent=self.chip_host)
+                tooltip = 'Pierwszy gatunek jest główny i decyduje o folderze. Kliknij ×, aby usunąć.' if index == 0 else 'Kliknij prawym przyciskiem, aby ustawić jako główny. Kliknij ×, aby usunąć.'
+                chip.setProperty('_alo_pl_tooltip', tooltip)
+                chip.setToolTip(ui_text(self, tooltip))
+                chip.removed.connect(lambda _name, i=index: self._remove(i))
                 chip.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                 chip.customContextMenuRequested.connect(lambda _pos, i=index: self._move_first(i))
                 self.chip_row.insertWidget(self.chip_row.count() - 1, chip)

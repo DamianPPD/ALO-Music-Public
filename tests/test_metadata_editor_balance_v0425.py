@@ -72,12 +72,12 @@ def test_cover_actions_keep_their_bottom_position_across_cover_and_metrics_chang
     assert len(editor.cover_info_values) == 5
 
 
-def test_larger_four_thumbnails_have_symmetric_square_geometry(editor):
+def test_larger_four_thumbnails_are_symmetric_in_the_available_gallery_height(editor):
     _covers(editor)
     QApplication.instance().processEvents()
     grid, host = editor.cover_proposals_grid, editor.cover_proposals_host
     assert grid.count() == 4
-    assert abs(host.width() - host.height()) <= 1
+    assert host.height() >= host.width()
     boxes = {(grid.getItemPosition(i)[0], grid.getItemPosition(i)[1]): _box(grid.itemAt(i).widget(), host)
              for i in range(4)}
     assert set(boxes) == {(0, 0), (0, 1), (1, 0), (1, 1)}
@@ -85,9 +85,8 @@ def test_larger_four_thumbnails_have_symmetric_square_geometry(editor):
     tl, tr, bl, br = (boxes[key] for key in ((0, 0), (0, 1), (1, 0), (1, 1)))
     assert abs(tl.left() - (host.width() - tr.right() - 1)) <= 1
     assert abs(tl.top() - (host.height() - bl.bottom() - 1)) <= 1
-    assert abs((tr.left() - tl.right()) - (bl.top() - tl.bottom())) <= 1
     assert tr.top() == tl.top() and br.bottom() == bl.bottom()
-    assert all(label.width() >= 90 for label in editor._cover_proposal_labels.values())
+    assert all(100 <= label.width() <= 104 for label in editor._cover_proposal_labels.values())
     markers = host.findChildren(QLabel, 'CoverProposalSelectedMarker')
     assert sum(marker.isVisible() for marker in markers) == 1
 
@@ -119,7 +118,7 @@ def test_audio_source_badge_has_the_same_bordered_shape_as_tag(editor, theme):
     app.processEvents()
     audio, tag = (editor._source_buttons[key] for key in ('title', 'year'))
     assert audio.property('sourceKind') == 'audio_recognition'
-    assert audio.property('sourceColor') == '#20c5c3'
+    assert audio.property('sourceColor') == '#a3a8ff'
     assert audio.font() == tag.font()
     assert audio.height() == tag.height()
     for button in (audio, tag):

@@ -75,7 +75,11 @@ def test_ui_controls_do_not_use_font_glyphs_as_icons():
     for path in ui_root.glob('*.py'):
         if path.name == 'i18n.py':
             continue  # legacy translation aliases are not rendered controls
-        found = sorted(forbidden.intersection(path.read_text(encoding='utf-8')))
+        source = path.read_text(encoding='utf-8')
+        if path.name == 'metadata_editor.py':
+            # Explicitly approved status text, not a replacement for an icon.
+            source = source.replace("'✓ Aktualnie wybrane'", "''")
+        found = sorted(forbidden.intersection(source))
         if found:
             offenders[path.name] = found
     assert offenders == {}

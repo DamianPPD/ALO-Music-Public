@@ -8,7 +8,7 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from PySide6.QtCore import QBuffer, QIODevice, Qt
 from PySide6.QtGui import QColor, QImage, QPixmap
 from PySide6.QtNetwork import QNetworkReply
-from PySide6.QtWidgets import QApplication, QLabel, QToolButton, QWidgetAction
+from PySide6.QtWidgets import QApplication, QLabel, QToolButton, QWidgetAction, QFrame
 
 from audio_library_organizer.domain.models import TrackRecord
 from audio_library_organizer.domain.settings import AppSettings, LibraryPaths
@@ -93,10 +93,9 @@ def test_genre_chips_always_show_full_name_and_remove_only_clicked_genre():
     field = GenreChipInput('Trance / Vocal Trance')
     field.show()
     app.processEvents()
-    chips = field.findChildren(QToolButton, 'GenreChip')
-    assert [chip.text() for chip in chips] == ['Trance ×', 'Vocal Trance ×']
-    assert all(chip.toolButtonStyle() == Qt.ToolButtonStyle.ToolButtonTextBesideIcon for chip in chips)
-    chips[1].click()
+    chips = field.findChildren(QFrame, 'GenreChip')
+    assert [chip.findChild(QLabel, 'GenreTagLabel').text() for chip in chips] == ['Trance', 'Vocal Trance']
+    chips[1].findChild(QToolButton, 'GenreTagRemove').click()
     assert field.genres() == ('Trance',)
     assert field.text() == 'Trance'
     field.close()
@@ -109,8 +108,8 @@ def test_user_genre_chip_changes_are_manual_undoable_and_slash_is_parsed(tmp_pat
         dialog.show()
         app.processEvents()
         before = len(dialog._undo_stack)
-        chips = dialog.genre.findChildren(QToolButton, 'GenreChip')
-        chips[1].click()
+        chips = dialog.genre.findChildren(QFrame, 'GenreChip')
+        chips[1].findChild(QToolButton, 'GenreTagRemove').click()
         assert dialog.genre.genres() == ('Trance',)
         assert dialog._current_sources['genre'] == 'Ręcznie'
         assert len(dialog._undo_stack) > before
@@ -304,7 +303,7 @@ def test_source_legend_colors_provider_text_not_whole_row(tmp_path: Path):
             'Apple': '#ff6670',
             'RĘCZNIE': '#ffb84d',
             'ANALIZA': '#ef5b64',
-            'ROZPOZNANIE AUDIO': '#20c5c3',
+            'ROZPOZNANIE AUDIO': '#a3a8ff',
             'NAZWA': '#9aa6b2',
         }
     finally:
