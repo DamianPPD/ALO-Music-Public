@@ -163,34 +163,30 @@ def test_main_window_previous_next_keeps_order_geometry_and_dark_native_palette(
 
 
 @pytest.mark.parametrize('language', ['pl', 'en'])
-def test_recognition_disclosure_hides_only_its_body_and_preserves_data(editor, app, language):
+def test_recognition_popup_preserves_data_without_changing_workspace(editor, app, language):
     apply_static_language(editor, language)
-    toggle = editor.findChild(QToolButton, 'EditorRecognitionToggle')
-    body = editor.findChild(QWidget, 'EditorRecognitionDetails')
+    toggle = editor.recognition_details_button
+    body = editor.recognition_details_popup
     assert toggle is not None and body is not None
     assert not toggle.isChecked() and body.isHidden()
-    collapsed_height = editor.recognition_card.height()
-    assert collapsed_height <= 52
+    geometry = editor.cover_gallery.geometry()
     before = {key: value.text() for key, value in editor.recognition_values.items()}
     before_state = editor._capture_editor_state()
-    closed_icon = toggle.icon().pixmap(16, 16).toImage()
     toggle.click()
     _settle(app)
     assert body.isVisible() and toggle.isChecked()
-    assert editor.recognition_card.height() > collapsed_height + 50
+    assert editor.cover_gallery.geometry() == geometry
     assert all(value.isVisible() for value in editor.recognition_values.values())
-    assert toggle.icon().pixmap(16, 16).toImage() != closed_icon
-    assert toggle.toolTip() == ('Zwiń szczegóły' if language == 'pl' else 'Collapse details')
-    toggle.click()
+    assert toggle.toolTip() == ('Szczegóły rozpoznania' if language == 'pl' else 'Identification details')
+    body.hide()
     _settle(app)
-    assert body.isHidden() and editor.recognition_card.height() == collapsed_height
-    assert toggle.icon().pixmap(16, 16).toImage() == closed_icon
-    assert toggle.toolTip() == ('Rozwiń szczegóły' if language == 'pl' else 'Expand details')
+    assert body.isHidden() and not toggle.isChecked()
+    assert editor.cover_gallery.geometry() == geometry
     assert {key: value.text() for key, value in editor.recognition_values.items()} == before
     assert editor._capture_editor_state() == before_state
 
 
-def test_source_legend_control_is_on_the_right_and_chevron_tracks_menu(editor, app):
+def test_source_legend_follows_title_and_menu_keeps_comparison_expanded(editor, app):
     title = next(label for label in editor.findChildren(QLabel, 'EditorSectionTitle')
                  if label.text().startswith('Porównanie źródeł'))
     mark = title.parentWidget().findChild(QLabel, 'LibrarySectionMark')
@@ -198,7 +194,7 @@ def test_source_legend_control_is_on_the_right_and_chevron_tracks_menu(editor, a
     assert mark is not None
     assert mark.mapTo(editor, QPoint()).x() < title.mapTo(editor, QPoint()).x()
     assert button.mapTo(editor, QPoint()).x() > title.mapTo(editor, title.rect().topRight()).x()
-    assert button.width() >= 40  # room for the existing legend glyph and a separate chevron
+    assert button.width() <= 26
     assert button.popupMode() == QToolButton.ToolButtonPopupMode.InstantPopup
     assert len(button.menu().actions()) == 9
     closed = button.icon().pixmap(button.iconSize()).toImage()
@@ -206,13 +202,13 @@ def test_source_legend_control_is_on_the_right_and_chevron_tracks_menu(editor, a
     try:
         menu.popup(button.mapToGlobal(QPoint(0, button.height())))
         _settle(app)
-        assert menu.isVisible() and button.property('expanded') is True
-        assert button.icon().pixmap(button.iconSize()).toImage() != closed
+        assert menu.isVisible() and editor.source_comparison_toggle.isChecked()
+        assert button.icon().pixmap(button.iconSize()).toImage() == closed
         assert editor.source_table.isVisible()
     finally:
         menu.close()
         _settle(app)
-    assert button.property('expanded') is False
+    assert editor.source_comparison_toggle.isChecked()
     assert button.icon().pixmap(button.iconSize()).toImage() == closed
 
 
@@ -232,8 +228,8 @@ def test_compact_info_layout_does_not_stretch_comment(editor, app, language, siz
     for value in editor.cover_info_values.values():
         assert value.geometry().height() >= value.fontMetrics().height()
     assert editor.metadata_card.mapTo(editor, QPoint()).y() == editor.cover_gallery.mapTo(editor, QPoint()).y()
-    gap = editor.recognition_card.mapTo(editor, QPoint()).y() - editor.cover_gallery.mapTo(editor, editor.cover_gallery.rect().bottomLeft()).y()
-    assert 4 <= gap <= 12
+    assert editor.recognition_details_popup.isHidden()
+    assert not editor.content_scroll.widget().isAncestorOf(editor.recognition_details_popup)
     assert editor.save_button.isVisible() and editor.status_button.isVisible()
 
 

@@ -2822,19 +2822,52 @@ QDialog#MetadataEditorDialog QLabel#LibrarySectionMark {
     background:transparent; border:0; border-top:1px solid #91adbe; border-bottom:1px solid #91adbe;
 }
 QDialog#MetadataEditorDialog QToolButton#SourceLegendInfoButton {
-    background:#151f27; border:1px solid #34434b; border-radius:6px; padding:0;
-    min-width:48px; max-width:48px; min-height:28px; max-height:28px;
+    background:transparent; border:0; border-radius:3px; padding:0;
+    min-width:22px; max-width:22px; min-height:20px; max-height:20px;
 }
-QDialog#MetadataEditorDialog QToolButton#SourceLegendInfoButton:hover { background:#1a3029; border-color:#4da27a; }
+QDialog#MetadataEditorDialog QToolButton#SourceLegendInfoButton:hover { background:#17343d; }
 QDialog#MetadataEditorDialog QToolButton#SourceLegendInfoButton::menu-indicator {
     image:none; width:0; height:0;
 }
 QDialog#MetadataEditorDialog QWidget#EditorRecognitionDetails { background:transparent; }
-QDialog#MetadataEditorDialog QToolButton#EditorRecognitionToggle {
+QDialog#MetadataEditorDialog QToolButton#SourceComparisonToggle {
     background:transparent; border:0; border-radius:3px; padding:0;
     min-width:24px; max-width:24px; min-height:22px; max-height:22px;
 }
-QDialog#MetadataEditorDialog QToolButton#EditorRecognitionToggle:hover { background:#17343d; }
+QDialog#MetadataEditorDialog QToolButton#SourceComparisonToggle:hover { background:#17343d; }
+QDialog#MetadataEditorDialog QWidget#RecognitionResultRow { background:transparent; }
+QDialog#MetadataEditorDialog QLabel#RecognitionResultStatus { background:transparent; color:#9bb4c2; font-size:9pt; }
+QDialog#MetadataEditorDialog QToolButton#EditorRecognitionDetailsButton {
+    background:transparent; color:#bdcfd8; border:1px solid #304650; border-radius:4px; padding:0 7px;
+}
+QDialog#MetadataEditorDialog QToolButton#EditorRecognitionDetailsButton:hover { background:#17343d; color:#eef8fc; }
+QDialog#MetadataEditorDialog QFrame#RecognitionDetailsPopup {
+    background:#0b141b; border:1px solid #35515f; border-radius:6px;
+}
+QDialog#MetadataEditorDialog QFrame#RecognitionDetailsPopup QLabel { background:transparent; border:0; }
+QDialog#MetadataEditorDialog QScrollArea#RecognitionDetailsScroll,
+QDialog#MetadataEditorDialog QScrollArea#RecognitionDetailsScroll > QWidget,
+QDialog#MetadataEditorDialog QScrollArea#RecognitionDetailsScroll QWidget#EditorRecognitionDetails {
+    background:#0b141b; border:0;
+}
+QDialog#MetadataEditorDialog QScrollArea#RecognitionDetailsScroll QScrollBar:vertical {
+    background:#101920; width:10px; margin:0; border:0;
+}
+QDialog#MetadataEditorDialog QScrollArea#RecognitionDetailsScroll QScrollBar::handle:vertical {
+    background:#3b5662; min-height:24px; border-radius:4px;
+}
+QDialog#MetadataEditorDialog QScrollArea#RecognitionDetailsScroll QScrollBar::add-line:vertical,
+QDialog#MetadataEditorDialog QScrollArea#RecognitionDetailsScroll QScrollBar::sub-line:vertical { height:0; }
+QDialog#MetadataEditorDialog QScrollArea#RecognitionDetailsScroll QScrollBar::add-page:vertical,
+QDialog#MetadataEditorDialog QScrollArea#RecognitionDetailsScroll QScrollBar::sub-page:vertical { background:transparent; }
+QDialog#MetadataEditorDialog QLabel#CoverInformationLabel,
+QDialog#MetadataEditorDialog QLabel#CoverInformationValue { font-size:7.8pt; }
+QDialog#MetadataEditorDialog QFrame#RecognitionDetailsPopup QLabel#LibrarySectionMark {
+    border-top:1px solid #91adbe; border-bottom:1px solid #91adbe;
+}
+QDialog#MetadataEditorDialog QFrame#RecognitionDetailsPopup QLabel#RecognitionFieldName { color:#9bb4c2; }
+QDialog#MetadataEditorDialog QFrame#RecognitionDetailsPopup QLabel#RecognitionFieldValue { color:#e4eff5; }
+QDialog#MetadataEditorDialog QFrame#RecognitionDetailsPopup QLabel#EditorSectionTitle { color:#e1ebf1; }
 QDialog#MetadataEditorDialog QPushButton#SingleTrackOnlineButton,
 QDialog#MetadataEditorDialog QPushButton#SingleTrackAudioButton {
     min-height:0px; max-height:36px; padding:0 13px; border-radius:7px;

@@ -41,7 +41,7 @@ def test_cover_proposals_fit_two_columns_two_rows_without_extra_placeholders(tmp
         assert len(positions) == min(count + 1, 4)  # "Brak okładki" always occupies a visible tile.
         assert list(editor._cover_proposal_labels).count('placeholder') == 1
         assert 'placeholder' in editor._cover_candidate_pixmaps
-        assert editor.cover_main_preview.size().width() == 248
+        assert editor.cover_main_preview.size().width() == 288
         if count:
             key = next(iter(editor._cover_candidate_urls))
             editor._select_cover_choice(key, record_undo=False)

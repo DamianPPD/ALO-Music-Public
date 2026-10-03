@@ -42,22 +42,20 @@ def _box(widget, parent):
 
 @pytest.mark.parametrize('language', ['pl', 'en'])
 @pytest.mark.parametrize('width,height', [(1540, 1000), (1420, 900), (1180, 760)])
-def test_recognition_is_compact_below_cover_without_workspace_overlap(editor, language, width, height):
+def test_recognition_popup_keeps_cover_workspace_compact_without_overlap(editor, language, width, height):
     apply_static_language(editor, language)
     editor.refresh_audio_language()
     editor.resize(width, height)
     QApplication.instance().processEvents()
     body = editor.content_scroll.widget()
-    metadata, cover, recognition = (_box(w, body) for w in (
-        editor.metadata_card, editor.cover_gallery, editor.recognition_card))
+    metadata, cover = (_box(w, body) for w in (
+        editor.metadata_card, editor.cover_gallery))
     assert metadata.top() == cover.top()
-    assert cover.left() == recognition.left() and cover.right() == recognition.right()
-    assert 4 <= recognition.top() - cover.bottom() <= 12
+    assert not body.isAncestorOf(editor.recognition_details_popup)
+    assert editor.recognition_details_popup.isHidden()
     assert 4 <= cover.left() - metadata.right() <= 12
     assert 60 <= editor.comment.height() <= 82
-    assert editor.recognition_card.height() <= editor.recognition_card.sizeHint().height() + 2
-    assert editor.recognition_card.height() < 240
-    assert editor.cover_main_preview.size().toTuple() == (248, 248)
+    assert editor.cover_main_preview.size().toTuple() == (288, 288)
     assert editor.recognition_values['fields'].text() == '5/5'
     assert not editor.findChild(QFrame, 'MetadataStatusCompact')
     assert editor.save_button.isVisible() and editor.status_button.isVisible()
@@ -83,7 +81,7 @@ def test_only_problematic_fields_have_visible_status_icons_and_recover(editor, f
 
 def test_regular_sections_reuse_the_two_line_library_header_style(editor):
     marks = editor.findChildren(QLabel, 'LibrarySectionMark')
-    assert len(marks) == 5  # metadata, cover, recognition, result filename and comparison
+    assert len(marks) == 5  # four layout sections and the recognition popup
     for mark in marks:
         assert mark.size().toTuple() == (20, 7)
         assert mark.pixmap().isNull()
@@ -101,15 +99,17 @@ def test_comment_input_fills_its_row_without_an_artificial_empty_gap(editor):
     assert shell.height() - top - editor.comment.height() <= 5
 
 
-def test_comparison_has_a_section_mark_and_right_legend_control_with_the_existing_menu(editor):
+def test_comparison_has_a_section_mark_inline_legend_and_right_chevron(editor):
     title = next(label for label in editor.findChildren(QLabel, 'EditorSectionTitle')
                  if label.text().startswith('Porównanie źródeł'))
     header = title.parentWidget()
     assert header.layout().itemAt(0).widget().objectName() == 'LibrarySectionMark'
-    assert not header.findChildren(QToolButton)
-    assert editor.source_legend_button.mapTo(editor, QPoint()).x() > title.mapTo(editor, title.rect().topRight()).x()
+    assert header.findChildren(QToolButton) == [editor.source_legend_button]
+    legend_gap = editor.source_legend_button.mapTo(editor, QPoint()).x() - title.mapTo(editor, title.rect().topRight()).x()
+    assert 2 <= legend_gap <= 14
+    assert editor.source_comparison_toggle.mapTo(editor, QPoint()).x() > editor.source_legend_button.mapTo(editor, QPoint()).x() + 40
     assert not header.findChildren(QLabel, 'EditorSectionIcon')
-    legend = editor.source_legend_button.icon().pixmap(QSize(38, 18), 3.0).toImage().copy(0, 0, 54, 54)
+    legend = editor.source_legend_button.icon().pixmap(QSize(18, 18), 3.0).toImage()
     assert legend == library_icon('legend', '#bdcbd3', 18).pixmap(QSize(18, 18), 3.0).toImage()
     assert len(editor.source_legend_button.menu().actions()) == 9
 

@@ -3,8 +3,8 @@ from __future__ import annotations
 from copy import copy, deepcopy
 from pathlib import Path
 
-from PySide6.QtCore import Property, Qt, QTimer, QUrl, Signal, Slot, QRegularExpression, QSize, QRectF, QPointF, QBuffer, QByteArray, QIODevice
-from PySide6.QtGui import QAction, QPixmap, QIcon, QColor, QPainter, QPen, QPolygonF, QRegularExpressionValidator, QDesktopServices, QImageReader
+from PySide6.QtCore import Property, Qt, QTimer, QUrl, Signal, Slot, QRegularExpression, QSize, QRectF, QPoint, QPointF, QBuffer, QByteArray, QIODevice, QObject, QEvent
+from PySide6.QtGui import QAction, QPixmap, QIcon, QColor, QPalette, QPainter, QPen, QPolygonF, QRegularExpressionValidator, QDesktopServices, QImageReader
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
     QDialog,
@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
     QWidgetAction,
 )
 
-from audio_library_organizer import __version__
+from audio_library_organizer import __version__, crash_debug
 from audio_library_organizer.domain.models import TrackRecord
 from audio_library_organizer.domain.candidates import AcoustIDHit
 from audio_library_organizer.jobs.audio_identification import SOURCE as AUDIO_SOURCE, approve_audio_source
@@ -52,6 +52,68 @@ from audio_library_organizer.ui.player import CompactPlayerBar
 from audio_library_organizer.ui.widgets import ClickableCoverLabel, SelectableElidedLineEdit, show_cover_preview
 from audio_library_organizer.ui.genre_input import GenreChipInput
 from audio_library_organizer.ui.i18n import ui_text, language_for, apply_static_language, localized_no_cover_name
+
+
+def _editor_surface_palette(widget: QWidget) -> None:
+    # QSS unpolish restores the palette saved before the first polish. Give
+    # the editor's large backing surfaces a dark fallback before that snapshot.
+    palette = widget.palette()
+    for role in (QPalette.ColorRole.Window, QPalette.ColorRole.Base):
+        palette.setColor(role, QColor('#10141a'))
+    widget.setPalette(palette)
+
+
+class RecognitionDetailsPopup(QFrame):
+    closed = Signal()
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        self.closed.emit()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape:
+            self.hide()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
+
+class _EditorSurfaceTrace(QObject):
+    """Observe surface transitions without changing painting or event delivery."""
+
+    def __init__(self, editor, surfaces):
+        super().__init__(editor)
+        self.editor_id = id(editor)
+        self.pending_paint = {name for _widget, name in surfaces}
+        for widget, name in surfaces:
+            widget.setProperty('_alo_editor_surface', name)
+            widget.installEventFilter(self)
+            self._record(widget, 'constructed')
+
+    def _record(self, widget, stage):
+        color = widget.palette().color(widget.backgroundRole())
+        crash_debug.record('editor.surface', editor_id=self.editor_id,
+                           surface=widget.property('_alo_editor_surface'), stage=stage,
+                           object_name=widget.objectName(), widget_class=widget.metaObject().className(),
+                           background=color.name(), background_alpha=color.alpha(),
+                           background_role=widget.backgroundRole().name,
+                           visible=widget.isVisible(), size=[widget.width(), widget.height()],
+                           auto_fill=widget.autoFillBackground(),
+                           styled_background=widget.testAttribute(Qt.WidgetAttribute.WA_StyledBackground),
+                           opaque_paint=widget.testAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent),
+                           native_window=bool(widget.internalWinId()))
+
+    def eventFilter(self, widget, event):
+        kind = event.type()
+        surface = widget.property('_alo_editor_surface')
+        if kind in (QEvent.Type.Show, QEvent.Type.Hide, QEvent.Type.PaletteChange,
+                    QEvent.Type.StyleChange, QEvent.Type.WinIdChange, QEvent.Type.Resize):
+            self.pending_paint.add(surface)
+            self._record(widget, kind.name)
+        elif kind == QEvent.Type.Paint and surface in self.pending_paint:
+            self.pending_paint.discard(surface)
+            self._record(widget, 'Paint')
+        return False
 
 
 class MissingCompleteGraphic(QWidget):
@@ -459,6 +521,7 @@ class MetadataEditorDialog(QDialog):
     def __init__(self, track: TrackRecord, parent=None, *, filename_template: str = DEFAULT_FILENAME_TEMPLATE, player_bar=None, genre_suggestions=(), normalize_names: bool = True, name_rules=None, navigation_index: int = 0, navigation_total: int = 1):
         super().__init__(parent)
         self.setObjectName('MetadataEditorDialog')
+        _editor_surface_palette(self)
         self.track = track
         self.navigation_total = max(1, int(navigation_total))
         self.navigation_index = max(0, min(int(navigation_index), self.navigation_total - 1))
@@ -557,6 +620,8 @@ class MetadataEditorDialog(QDialog):
         root.addLayout(heading_row)
 
         self.content_scroll = QScrollArea()
+        _editor_surface_palette(self.content_scroll)
+        _editor_surface_palette(self.content_scroll.viewport())
         self.content_scroll.setObjectName('MetadataContentScroll')
         self.content_scroll.setStyleSheet('''
             QScrollBar:vertical { background:#101920; width:10px; margin:0; border:0; }
@@ -570,6 +635,8 @@ class MetadataEditorDialog(QDialog):
         self.content_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.content_scroll.setMinimumHeight(180)
         content_host = QWidget()
+        content_host.setObjectName('MetadataEditorContent')
+        _editor_surface_palette(content_host)
         content = QVBoxLayout(content_host)
         content.setContentsMargins(0, 0, 6, 0)
         content.setSpacing(9)
@@ -650,6 +717,26 @@ class MetadataEditorDialog(QDialog):
         self._update_online_lock_button()
         content.addWidget(pre_online)
         self.set_online_scan_busy(False)
+
+        recognition_result = QWidget()
+        recognition_result.setObjectName('RecognitionResultRow')
+        result_row = QHBoxLayout(recognition_result)
+        result_row.setContentsMargins(2, 0, 0, 0)
+        result_row.setSpacing(8)
+        self.recognition_result_status = QLabel()
+        self.recognition_result_status.setObjectName('RecognitionResultStatus')
+        result_row.addWidget(self.recognition_result_status)
+        self.recognition_details_button = self.recognition_toggle = QToolButton()
+        self.recognition_details_button.setObjectName('EditorRecognitionDetailsButton')
+        self.recognition_details_button.setText('Szczegóły')
+        self.recognition_details_button.setToolTip('Szczegóły rozpoznania')
+        self.recognition_details_button.setAccessibleName('Szczegóły rozpoznania')
+        self.recognition_details_button.setCheckable(True)
+        self.recognition_details_button.setFixedHeight(24)
+        self.recognition_details_button.clicked.connect(self._toggle_recognition_details)
+        result_row.addWidget(self.recognition_details_button)
+        result_row.addStretch(1)
+        content.addWidget(recognition_result)
 
         audio_panel = self.audio_panel = QFrame()
         audio_panel.setObjectName('AudioRecognitionPanel')
@@ -790,7 +877,7 @@ class MetadataEditorDialog(QDialog):
         self.suspicious_warning.setVisible(any('Duża różnica' in reason for reason in track.match_reasons))
         content.addWidget(self.suspicious_warning)
 
-        # Metadata on the left; covers and compact recognition on the right.
+        # Metadata on the left; covers on the right. Recognition lives in a popup.
         workspace = QHBoxLayout()
         workspace.setSpacing(10)
         self.metadata_column = QWidget()
@@ -858,20 +945,16 @@ class MetadataEditorDialog(QDialog):
         form.addRow(self._field_label('Komentarz'), self._field_input('comment', self.comment))
         metadata_column_layout.addWidget(metadata, 0, Qt.AlignmentFlag.AlignTop)
 
-        recognition = self.recognition_card = QFrame()
-        recognition.setObjectName('RecognitionInfoCompact')
+        recognition = self.recognition_card = self.recognition_details_popup = RecognitionDetailsPopup(
+            self, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        _editor_surface_palette(recognition)
+        recognition.setObjectName('RecognitionDetailsPopup')
+        recognition.setFixedWidth(min(540, max(1, available.width() - 32)))
         recognition.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         ril = QVBoxLayout(recognition)
         ril.setContentsMargins(10, 8, 10, 8)
         ril.setSpacing(5)
-        ri_title = _section_header('Informacje o rozpoznaniu')
-        self.recognition_toggle = QToolButton()
-        self.recognition_toggle.setObjectName('EditorRecognitionToggle')
-        self.recognition_toggle.setCheckable(True)
-        self.recognition_toggle.setFixedSize(24, 22)
-        self.recognition_toggle.setIconSize(QSize(16, 16))
-        self.recognition_toggle.setAccessibleName('Informacje o rozpoznaniu')
-        ri_title.layout().addWidget(self.recognition_toggle)
+        ri_title = _section_header('Szczegóły rozpoznania')
         ril.addWidget(ri_title)
         self.recognition_details_body = QWidget()
         self.recognition_details_body.setObjectName('EditorRecognitionDetails')
@@ -879,6 +962,8 @@ class MetadataEditorDialog(QDialog):
         recognition_body_layout.setContentsMargins(0, 0, 0, 0)
         recognition_body_layout.setSpacing(5)
         recognition_details = QGridLayout()
+        self._recognition_details_grid = recognition_details
+        self._recognition_detail_lines = []
         recognition_details.setHorizontalSpacing(20)
         recognition_details.setVerticalSpacing(5)
         recognition_details.setColumnStretch(0, 1)
@@ -904,6 +989,7 @@ class MetadataEditorDialog(QDialog):
             line.addStretch(1)
             line.addWidget(value)
             recognition_details.addLayout(line, row, 0)
+            self._recognition_detail_lines.append(line)
             self.recognition_values[key] = value
 
         for row, (key, label) in enumerate((('audio_status', 'Rozpoznanie audio'), ('audio_score', 'Dopasowanie'), ('audio_result', 'Wynik audio'))):
@@ -920,6 +1006,7 @@ class MetadataEditorDialog(QDialog):
             line.addStretch(1)
             line.addWidget(value)
             recognition_details.addLayout(line, row, 1)
+            self._recognition_detail_lines.append(line)
             self.recognition_values[key] = value
 
         confidence_row = QHBoxLayout()
@@ -932,15 +1019,24 @@ class MetadataEditorDialog(QDialog):
         self.recognition_confidence.setObjectName('RecognitionConfidencePercent')
         confidence_row.addWidget(self.recognition_confidence)
         recognition_details.addLayout(confidence_row, 3, 1)
+        self._recognition_detail_lines.append(confidence_row)
         self.recognition_bar = QProgressBar()
         self.recognition_bar.setObjectName('RecognitionConfidenceBar')
         self.recognition_bar.setRange(0, 100)
         self.recognition_bar.setTextVisible(False)
         self.recognition_bar.setFixedHeight(6)
         recognition_body_layout.addWidget(self.recognition_bar)
-        ril.addWidget(self.recognition_details_body)
-        self.recognition_toggle.toggled.connect(self._toggle_recognition_details)
-        self._toggle_recognition_details(False)
+        self.recognition_details_scroll = QScrollArea()
+        self.recognition_details_scroll.setObjectName('RecognitionDetailsScroll')
+        self.recognition_details_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.recognition_details_scroll.setWidgetResizable(True)
+        self.recognition_details_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.recognition_details_scroll.setWidget(self.recognition_details_body)
+        for surface in (self.recognition_details_scroll, self.recognition_details_scroll.viewport(), self.recognition_details_body):
+            _editor_surface_palette(surface)
+        ril.addWidget(self.recognition_details_scroll)
+        recognition.closed.connect(lambda: self.recognition_details_button.setChecked(False))
+        self.finished.connect(lambda _result: recognition.hide())
         workspace.addWidget(self.metadata_column, 3, Qt.AlignmentFlag.AlignTop)
 
         gallery = self.cover_gallery = QFrame()
@@ -960,16 +1056,16 @@ class MetadataEditorDialog(QDialog):
         self.cover_main_preview = ClickableCoverLabel('Brak okładki')
         self.cover_main_preview.setObjectName('CoverMainPreview')
         self.cover_main_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.cover_main_preview.setFixedSize(248, 248)
+        self.cover_main_preview.setFixedSize(288, 288)
         self.cover_main_preview.clicked.connect(self._preview_selected_cover)
         cover_main_col.addWidget(self.cover_main_preview, 0, Qt.AlignmentFlag.AlignLeft)
 
         self.cover_info = QFrame()
         self.cover_info.setObjectName('CoverInformationPanel')
-        self.cover_info.setFixedWidth(248)
+        self.cover_info.setFixedWidth(288)
         self.cover_info.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Maximum)
         info_layout = QVBoxLayout(self.cover_info)
-        info_layout.setContentsMargins(8, 3, 8, 3)
+        info_layout.setContentsMargins(6, 1, 6, 1)
         info_layout.setSpacing(1)
         self.cover_info_heading = QLabel('Informacje o okładce')
         self.cover_info_heading.setObjectName('CoverInformationHeading')
@@ -984,18 +1080,23 @@ class MetadataEditorDialog(QDialog):
         info_grid.setVerticalSpacing(0)
         self.cover_info_labels = {}
         self.cover_info_values = {}
-        for row, (key, title) in enumerate((('source', 'Źródło'), ('resolution', 'Rozdzielczość'),
-                                            ('type', 'Typ'), ('format', 'Format'), ('size', 'Rozmiar pliku'))):
+        for key, title, row, column in (('source', 'Źródło', 0, 0),
+                                      ('format', 'Format', 0, 2),
+                                      ('type', 'Typ', 1, 0),
+                                      ('resolution', 'Rozdzielczość', 2, 0),
+                                      ('size', 'Rozmiar pliku', 2, 2)):
             label = QLabel(title)
             label.setObjectName('CoverInformationLabel')
             value = QLabel('—')
             value.setObjectName('CoverInformationValue')
+            value.setWordWrap(key in {'source', 'type', 'resolution'})
             value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             self.cover_info_labels[key] = label
             self.cover_info_values[key] = value
-            info_grid.addWidget(label, row, 0)
-            info_grid.addWidget(value, row, 1)
+            info_grid.addWidget(label, row, column)
+            info_grid.addWidget(value, row, column + 1, 1, 3 if key == 'type' else 1)
         info_grid.setColumnStretch(1, 1)
+        info_grid.setColumnStretch(3, 1)
         info_layout.addLayout(info_grid)
         cover_main_col.addWidget(self.cover_info, 0, Qt.AlignmentFlag.AlignLeft)
         cover_main_col.addStretch(1)
@@ -1056,7 +1157,6 @@ class MetadataEditorDialog(QDialog):
         self._selected_cover_key = 'placeholder'
         self._selected_external_url = track.cover_art_url
         cover_recognition_layout.addWidget(gallery)
-        cover_recognition_layout.addWidget(recognition)
         workspace.addWidget(self.cover_recognition_column, 2, Qt.AlignmentFlag.AlignTop)
         content.addLayout(workspace)
 
@@ -1097,8 +1197,9 @@ class MetadataEditorDialog(QDialog):
         self.source_legend_button = QToolButton()
         self.source_legend_button.setObjectName('SourceLegendInfoButton')
         self.source_legend_button.setText('')
-        self.source_legend_button.setIconSize(QSize(38, 18))
-        self.source_legend_button.setFixedSize(48, 28)
+        self.source_legend_button.setIcon(library_icon('legend', '#bdcbd3', 18))
+        self.source_legend_button.setIconSize(QSize(18, 18))
+        self.source_legend_button.setFixedSize(22, 20)
         self.source_legend_button.setProperty('iconStyle', 'thin')
         self.source_legend_button.setToolTip('Legenda źródeł — kliknij')
         self.source_legend_button.setAccessibleName('Legenda źródeł')
@@ -1130,12 +1231,17 @@ class MetadataEditorDialog(QDialog):
             legend_menu.addAction(action)
         self.source_legend_button.setMenu(legend_menu)
         self.source_legend_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        legend_menu.aboutToShow.connect(lambda: self._set_source_legend_open(True))
-        legend_menu.aboutToHide.connect(lambda: self._set_source_legend_open(False))
-        self._set_source_legend_open(False)
         compare_title = _section_header('Porównanie źródeł  (pomocniczo)')
+        compare_title.layout().insertWidget(2, self.source_legend_button)
         compare_head.addWidget(compare_title, 1)
-        compare_head.addWidget(self.source_legend_button, 0, Qt.AlignmentFlag.AlignRight)
+        self.source_comparison_toggle = QToolButton()
+        self.source_comparison_toggle.setObjectName('SourceComparisonToggle')
+        self.source_comparison_toggle.setCheckable(True)
+        self.source_comparison_toggle.setChecked(True)
+        self.source_comparison_toggle.setFixedSize(24, 22)
+        self.source_comparison_toggle.setIconSize(QSize(16, 16))
+        self.source_comparison_toggle.toggled.connect(self._toggle_source_comparison)
+        compare_head.addWidget(self.source_comparison_toggle, 0, Qt.AlignmentFlag.AlignRight)
         comparison_layout.addLayout(compare_head)
 
         self.source_table = SourceComparisonTable(0, 7)
@@ -1159,6 +1265,7 @@ class MetadataEditorDialog(QDialog):
         header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
         self.source_table.resize_columns()
         comparison_layout.addWidget(self.source_table)
+        self._toggle_source_comparison(True)
         comparison.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         content.addWidget(comparison)
         content.addStretch(1)
@@ -1212,28 +1319,69 @@ class MetadataEditorDialog(QDialog):
         self.finished.connect(lambda _result: self._restore_live_cover_preview())
         self._update_ready_button()
         self._refresh_url_action()
+        self._background_trace = _EditorSurfaceTrace(self, (
+            (self, 'dialog'), (self.content_scroll, 'scroll'),
+            (self.content_scroll.viewport(), 'viewport'),
+            (self.content_scroll.widget(), 'content'),
+            (self.recognition_details_popup, 'recognition-popup'),
+        ))
         # show()/exec() creates the native window before its usual polish pass.
         # Resolve the theme palette first so navigation never exposes Qt's light default.
         self.ensurePolished()
 
     def _toggle_recognition_details(self, expanded: bool) -> None:
-        self.recognition_details_body.setVisible(expanded)
-        self.recognition_toggle.setIcon(library_icon('collapse' if expanded else 'expand', '#a8bdca', 16))
-        caption = 'Zwiń szczegóły' if expanded else 'Rozwiń szczegóły'
-        self.recognition_toggle.setProperty('_alo_pl_tooltip', caption)
-        self.recognition_toggle.setToolTip(ui_text(self, caption))
+        popup = self.recognition_details_popup
+        if not expanded:
+            popup.hide()
+            return
+        popup.ensurePolished()
+        self._resize_recognition_details()
+        popup.show()
+        popup.setFocus()
 
-    def _set_source_legend_open(self, expanded: bool) -> None:
-        # Reuse both actual Library assets; Qt's native menu arrow stays suppressed.
-        pixmap = QPixmap(38 * 3, 18 * 3)
-        pixmap.setDevicePixelRatio(3.0)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        painter.drawPixmap(0, 0, library_icon('legend', '#bdcbd3', 18).pixmap(QSize(18, 18), 3.0))
-        painter.drawPixmap(24, 2, library_icon('collapse' if expanded else 'expand', '#a8bdca', 14).pixmap(QSize(14, 14), 3.0))
-        painter.end()
-        self.source_legend_button.setIcon(QIcon(pixmap))
-        self.source_legend_button.setProperty('expanded', expanded)
+    def _resize_recognition_details(self) -> None:
+        popup = self.recognition_details_popup
+        scroll = self.recognition_details_scroll
+        body = self.recognition_details_body
+        available = self.recognition_details_button.screen().availableGeometry()
+        popup.setFixedWidth(min(540, max(1, available.width() - 32)))
+        # Use one column on narrow screens; hiding a horizontal scrollbar would
+        # otherwise make the right-hand values inaccessible.
+        grid = self._recognition_details_grid
+        narrow = popup.width() < 480
+        for index, line in enumerate(self._recognition_detail_lines):
+            grid.removeItem(line)
+            line.invalidate()
+            grid.addLayout(line, index if narrow else index % 4, 0 if narrow else index // 4)
+        grid.setColumnStretch(1, 0 if narrow else 1)
+        grid.invalidate()
+        margins = popup.layout().contentsMargins()
+        body_width = popup.contentsRect().width() - margins.left() - margins.right()
+        header_height = popup.layout().itemAt(0).sizeHint().height()
+        overhead = (margins.top() + margins.bottom() + 2 * popup.frameWidth()
+                    + header_height + popup.layout().spacing())
+        max_body_height = max(1, min(360, available.height() - 32) - overhead)
+        body.layout().invalidate()
+        body_height = body.layout().totalHeightForWidth(body_width)
+        if body_height > max_body_height:
+            body_width -= scroll.verticalScrollBar().sizeHint().width()
+            body_height = body.layout().totalHeightForWidth(max(1, body_width))
+        body.setMinimumHeight(body_height)
+        scroll.setFixedHeight(min(body_height, max_body_height))
+        popup.adjustSize()
+        popup.layout().activate()
+        anchor = self.recognition_details_button.mapToGlobal(QPoint(0, self.recognition_details_button.height() + 4))
+        x = min(max(anchor.x(), available.left()), max(available.left(), available.right() - popup.width() + 1))
+        y = min(max(anchor.y(), available.top()), max(available.top(), available.bottom() - popup.height() + 1))
+        popup.move(x, y)
+
+    def _toggle_source_comparison(self, expanded: bool) -> None:
+        self.source_table.setVisible(expanded)
+        self.source_comparison_toggle.setIcon(library_icon('collapse' if expanded else 'expand', '#a8bdca', 16))
+        caption = 'Zwiń porównanie źródeł' if expanded else 'Rozwiń porównanie źródeł'
+        self.source_comparison_toggle.setProperty('_alo_pl_tooltip', caption)
+        self.source_comparison_toggle.setToolTip(ui_text(self, caption))
+        self.source_comparison_toggle.setAccessibleName(ui_text(self, caption))
 
     @staticmethod
     def _track_value_map(track: TrackRecord) -> dict[str, object]:
@@ -1851,6 +1999,8 @@ class MetadataEditorDialog(QDialog):
             duration = f'{total // 60:02d}:{total % 60:02d}'
         bitrate = f'{self.track.bitrate_kbps} kb/s' if self.track.bitrate_kbps else '—'
         self.recognition_values['source'].setText(ui_text(self, source_display))
+        summary = (ui_text(self, 'Źródło audio zatwierdzone') + ' · ' if self.track.audio_recognition else '')
+        self.recognition_result_status.setText(summary + ui_text(self, 'Główne źródło') + ': ' + ui_text(self, source_display))
         source_color = self.SOURCE_COLORS.get(source, '#d5e2e8')
         self.recognition_values['source'].setProperty('sourceColor', source_color)
         self.recognition_values['source'].setStyleSheet(
@@ -1878,6 +2028,8 @@ class MetadataEditorDialog(QDialog):
             element.setProperty('confidenceKind', kind)
             element.style().unpolish(element)
             element.style().polish(element)
+        if self.recognition_details_popup.isVisible():
+            self._resize_recognition_details()
 
     def _refresh_current_status_banner(self) -> None:
         # Status jest celowo prezentowany tylko na dolnym przycisku edytora.
@@ -2221,6 +2373,8 @@ class MetadataEditorDialog(QDialog):
         return self._run_close_guard(attention_when_clean=True)
 
     def _request_navigation(self, delta: int) -> None:
+        crash_debug.record('editor.navigation.request', editor_id=id(self), delta=int(delta),
+                           index=self.navigation_index, total=self.navigation_total)
         target = self.navigation_index + int(delta)
         if target < 0 or target >= self.navigation_total:
             return
@@ -2251,6 +2405,10 @@ class MetadataEditorDialog(QDialog):
             event.accept()
         else:
             event.ignore()
+
+    def hideEvent(self, event):
+        self.recognition_details_popup.hide()
+        super().hideEvent(event)
 
     @staticmethod
     def _external_cover_url(track: TrackRecord) -> str | None:

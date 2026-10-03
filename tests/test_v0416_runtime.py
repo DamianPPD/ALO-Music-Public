@@ -37,7 +37,7 @@ def test_metadata_editor_builds_new_compact_workspace_without_network(tmp_path: 
         assert dialog.source_legend_button.text() == ''
         assert not dialog.source_legend_button.icon().isNull()
         assert dialog.source_legend_button.property('iconStyle') == 'thin'
-        assert dialog.cover_main_preview.width() == 248
+        assert dialog.cover_main_preview.width() == 288
         assert dialog.status_button.text() == 'DO SPRAWDZENIA'
         assert not hasattr(dialog, 'ready_button')
         assert dialog._field_status_icons['artist'].text() == ''

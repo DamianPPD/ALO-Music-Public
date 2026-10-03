@@ -182,7 +182,7 @@ def test_settings_have_api_help_and_compact_contact_footer_only_in_settings():
 
 def test_metadata_editor_has_large_cover_proposals_and_keeps_explicit_placeholder_choice():
     assert 'Okładka (wybierana z listy)' in EDITOR
-    assert 'self.cover_main_preview.setFixedSize(248, 248)' in EDITOR
+    assert 'self.cover_main_preview.setFixedSize(288, 288)' in EDITOR
     assert "self.choose_cover_button = QPushButton('Dodaj')" in EDITOR
     assert "self.search_cover_button = QPushButton('Szukaj okładki online')" in EDITOR
     assert 'Więcej okładek online…' not in EDITOR
@@ -209,7 +209,7 @@ def test_metadata_editor_keeps_individual_fields_recognition_comparison_and_inli
         assert label in EDITOR
     assert "metadata.setObjectName('PrimaryMetadataCard')" in EDITOR
     assert "status_card.setObjectName('MetadataStatusCompact')" not in EDITOR
-    assert "recognition.setObjectName('RecognitionInfoCompact')" in EDITOR
+    assert "recognition.setObjectName('RecognitionDetailsPopup')" in EDITOR
     assert "comparison.setObjectName('SourceComparisonCard')" in EDITOR
     assert "self.source_legend_button.setText('')" in EDITOR
     assert "self.source_table = SourceComparisonTable(0, 7)" in EDITOR

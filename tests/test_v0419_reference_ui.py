@@ -27,7 +27,7 @@ def test_top_toolbar_keeps_workflow_actions_with_single_start_accent():
 def test_editor_section_headers_match_reference_wording_and_icons():
     for text in (
         "Metadane utworu",
-        "Informacje o rozpoznaniu",
+        "Szczegóły rozpoznania",
         "Okładka (wybierana z listy)",
         "Porównanie źródeł  (pomocniczo)",
     ):
@@ -51,7 +51,7 @@ def test_editor_online_and_bottom_actions_use_real_icons():
 
 
 def test_cover_panel_is_compact_grid_like_reference():
-    assert "self.cover_main_preview.setFixedSize(248, 248)" in EDITOR
+    assert "self.cover_main_preview.setFixedSize(288, 288)" in EDITOR
     assert 'self.cover_selected_badge' not in EDITOR
     assert "selected_badge.setObjectName('CoverProposalSelectedMarker')" in EDITOR
     assert "self.choose_cover_button = QPushButton('Dodaj')" in EDITOR

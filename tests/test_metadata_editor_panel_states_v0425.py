@@ -41,21 +41,20 @@ def _box(widget, parent):
 
 
 @pytest.mark.parametrize('width,height', [(1540, 1000), (1180, 760)])
-def test_removed_status_panel_leaves_recognition_below_cover(editor, width, height):
+def test_removed_status_and_recognition_panels_leave_compact_workspace(editor, width, height):
     editor.resize(width, height)
     QApplication.instance().processEvents()
     assert not editor.findChild(QFrame, 'MetadataStatusCompact')
     assert 'Status pliku' not in [label.text() for label in editor.findChildren(QLabel)]
     body = editor.content_scroll.widget()
-    metadata, recognition, cover = (_box(widget, body) for widget in (
-        editor.metadata_card, editor.recognition_card, editor.cover_gallery))
+    metadata, cover = (_box(widget, body) for widget in (
+        editor.metadata_card, editor.cover_gallery))
     assert metadata.top() == cover.top()
-    assert cover.right() == recognition.right()
-    assert cover.left() == recognition.left()
-    assert 4 <= recognition.top() - cover.bottom() <= 12
+    assert editor.recognition_details_popup.isHidden()
+    assert not body.isAncestorOf(editor.recognition_details_popup)
     assert 60 <= editor.comment.height() <= 82
     assert 4 <= cover.left() - metadata.right() <= 12
-    assert editor.cover_main_preview.size().toTuple() == (248, 248)
+    assert editor.cover_main_preview.size().toTuple() == (288, 288)
     assert editor.recognition_values['fields'].text() == '5/5'
     assert editor.filename_override.text()
     assert editor.recognition_bar.height() == 6
@@ -65,7 +64,7 @@ def test_source_comparison_heading_reuses_actual_library_legend_asset(editor):
     title = next(label for label in editor.findChildren(QLabel, 'EditorSectionTitle')
                  if label.text().startswith('Porównanie źródeł'))
     assert title.parentWidget().layout().itemAt(0).widget().objectName() == 'LibrarySectionMark'
-    legend = editor.source_legend_button.icon().pixmap(QSize(38, 18), 3.0).toImage().copy(0, 0, 54, 54)
+    legend = editor.source_legend_button.icon().pixmap(QSize(18, 18), 3.0).toImage()
     assert legend == library_icon('legend', '#bdcbd3', 18).pixmap(QSize(18, 18), 3.0).toImage()
 
 
@@ -86,6 +85,13 @@ def test_section_titles_have_readable_contrast_on_actual_panel_backgrounds(edito
         QApplication.instance().processEvents()
         # Compose transparent headers with their real panel background.
         panel = header.parentWidget()
+        if panel is editor.recognition_details_popup:
+            panel.ensurePolished()
+            background = panel.grab().toImage().pixelColor(4, 16)
+            foreground = title.palette().color(QPalette.ColorRole.WindowText)
+            levels = sorted((luminance(foreground), luminance(background)))
+            assert (levels[1] + 0.05) / (levels[0] + 0.05) >= 4.5, (theme, title.text())
+            continue
         sample = panel.mapTo(editor, QPoint(4, 16))  # plain panel background, away from the right legend control
         ratio = editor.devicePixelRatioF()
         rendered = editor.grab().toImage()

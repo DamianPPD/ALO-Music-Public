@@ -27,7 +27,7 @@ def test_metadata_editor_only_flags_required_main_fields_red_and_low_confidence_
     assert 'missingRequired="true"' in THEME
     assert "element.setProperty('confidenceKind', kind)" in EDITOR
     assert 'RecognitionConfidenceBar[confidenceKind="low"]' in THEME
-    assert "recognition.setObjectName('RecognitionInfoCompact')" in EDITOR
+    assert "recognition.setObjectName('RecognitionDetailsPopup')" in EDITOR
     assert "self.recognition_bar.setObjectName('RecognitionConfidenceBar')" in EDITOR
     assert "self.recognition_confidence.setObjectName('RecognitionConfidencePercent')" in EDITOR
 
