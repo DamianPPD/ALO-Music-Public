@@ -3,7 +3,7 @@ import os
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
 import pytest
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QPoint, QSize, Qt
 from PySide6.QtGui import QColor, QPalette, QPixmap
 from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication, QFrame, QLabel, QToolButton
@@ -54,7 +54,7 @@ def test_recognition_is_compact_below_cover_without_workspace_overlap(editor, la
     assert cover.left() == recognition.left() and cover.right() == recognition.right()
     assert 4 <= recognition.top() - cover.bottom() <= 12
     assert 4 <= cover.left() - metadata.right() <= 12
-    assert abs(metadata.bottom() - recognition.bottom()) <= 2
+    assert 60 <= editor.comment.height() <= 82
     assert editor.recognition_card.height() <= editor.recognition_card.sizeHint().height() + 2
     assert editor.recognition_card.height() < 240
     assert editor.cover_main_preview.size().toTuple() == (248, 248)
@@ -83,7 +83,7 @@ def test_only_problematic_fields_have_visible_status_icons_and_recover(editor, f
 
 def test_regular_sections_reuse_the_two_line_library_header_style(editor):
     marks = editor.findChildren(QLabel, 'LibrarySectionMark')
-    assert len(marks) == 4  # metadata, cover, recognition and result filename
+    assert len(marks) == 5  # metadata, cover, recognition, result filename and comparison
     for mark in marks:
         assert mark.size().toTuple() == (20, 7)
         assert mark.pixmap().isNull()
@@ -101,14 +101,16 @@ def test_comment_input_fills_its_row_without_an_artificial_empty_gap(editor):
     assert shell.height() - top - editor.comment.height() <= 5
 
 
-def test_comparison_has_one_leading_legend_icon_with_the_existing_menu(editor):
+def test_comparison_has_a_section_mark_and_right_legend_control_with_the_existing_menu(editor):
     title = next(label for label in editor.findChildren(QLabel, 'EditorSectionTitle')
                  if label.text().startswith('Porównanie źródeł'))
     header = title.parentWidget()
-    assert header.layout().itemAt(0).widget() is editor.source_legend_button
-    assert header.findChildren(QToolButton) == [editor.source_legend_button]
+    assert header.layout().itemAt(0).widget().objectName() == 'LibrarySectionMark'
+    assert not header.findChildren(QToolButton)
+    assert editor.source_legend_button.mapTo(editor, QPoint()).x() > title.mapTo(editor, title.rect().topRight()).x()
     assert not header.findChildren(QLabel, 'EditorSectionIcon')
-    assert editor.source_legend_button.icon().pixmap(18, 18).toImage() == library_icon('legend', '#bdcbd3', 18).pixmap(18, 18).toImage()
+    legend = editor.source_legend_button.icon().pixmap(QSize(38, 18), 3.0).toImage().copy(0, 0, 54, 54)
+    assert legend == library_icon('legend', '#bdcbd3', 18).pixmap(QSize(18, 18), 3.0).toImage()
     assert len(editor.source_legend_button.menu().actions()) == 9
 
 

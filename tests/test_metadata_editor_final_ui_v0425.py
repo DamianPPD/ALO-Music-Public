@@ -25,7 +25,7 @@ def _close(editor):
 
 
 @pytest.mark.parametrize('count', (0, 1, 2, 3, 4, 5))
-def test_cover_proposals_fit_two_columns_three_rows_without_extra_placeholders(tmp_path, count):
+def test_cover_proposals_fit_two_columns_two_rows_without_extra_placeholders(tmp_path, count):
     editor = _editor(tmp_path)
     try:
         editor._cover_candidate_urls = {f'external:Discogs {i}': f'https://example.test/{i}.jpg' for i in range(count)}
@@ -36,9 +36,9 @@ def test_cover_proposals_fit_two_columns_three_rows_without_extra_placeholders(t
         editor._rebuild_cover_proposals()
         positions = [editor.cover_proposals_grid.getItemPosition(i)[:2]
                      for i in range(editor.cover_proposals_grid.count())]
-        assert len(positions) <= 6
-        assert all(col in (0, 1) and row in (0, 1, 2) for row, col in positions)
-        assert len(positions) == count + 1  # "Brak okładki" always occupies a tile.
+        assert len(positions) <= 4
+        assert all(col in (0, 1) and row in (0, 1) for row, col in positions)
+        assert len(positions) == min(count + 1, 4)  # "Brak okładki" always occupies a visible tile.
         assert list(editor._cover_proposal_labels).count('placeholder') == 1
         assert 'placeholder' in editor._cover_candidate_pixmaps
         assert editor.cover_main_preview.size().width() == 248

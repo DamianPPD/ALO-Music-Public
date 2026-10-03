@@ -30,9 +30,9 @@ def test_full_online_gallery_keeps_no_cover_visible_and_selectable(tmp_path, mon
     try:
         assert list(editor._cover_candidate_urls) == [f'external:Provider {n}' for n in range(5)]
         assert list(editor._cover_proposal_labels)[-1] == 'placeholder'
-        assert editor.cover_proposals_grid.count() == 6
-        assert [editor.cover_proposals_grid.getItemPosition(n)[:2] for n in range(6)] == [
-            (0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)]
+        assert editor.cover_proposals_grid.count() == 4
+        assert [editor.cover_proposals_grid.getItemPosition(n)[:2] for n in range(4)] == [
+            (0, 0), (0, 1), (1, 0), (1, 1)]
         assert editor.findChild(QPushButton, 'CoverShowMoreAction') is None
         editor._cover_proposal_labels['placeholder'].clicked.emit()
         assert editor._selected_cover_key == 'placeholder'
@@ -64,20 +64,22 @@ def test_last_two_manual_slots_keep_old_choices_and_update_selected_cover(tmp_pa
         editor.show()
         app.processEvents()
         editor.choose_cover_button.click()
-        assert len(editor._cover_proposal_labels) == 5
+        assert len(editor._cover_proposal_labels) == 4
         assert list(editor._cover_candidate_urls) == list(original)
         assert editor.cover_info_values['source'].text() == 'Ręcznie'
         assert editor.cover_info_values['resolution'].text() == '50 × 30 px'
         editor.choose_cover_button.click()
-        manual_keys = [key for key in editor._cover_proposal_labels if key.startswith('manual')]
+        manual_keys = list(editor._manual_cover_paths)
         assert len(manual_keys) == 2
-        assert len(editor._cover_proposal_labels) == 6
-        assert all(key in editor._cover_proposal_labels for key in original)
-        assert [editor.cover_proposals_grid.getItemPosition(n)[:2] for n in range(6)] == [
-            (0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)]
-        assert editor.cover_proposal_count.text() == 'Propozycje (6)'
+        assert len(editor._cover_proposal_labels) == 4
+        assert all(key in editor._cover_candidate_pixmaps for key in original)
+        assert [editor.cover_proposals_grid.getItemPosition(n)[:2] for n in range(4)] == [
+            (0, 0), (0, 1), (1, 0), (1, 1)]
+        assert editor.cover_proposal_count.text() == 'Propozycje (4)'
         for key, resolution, expected_path in ((manual_keys[0], '50 × 30 px', first),
                                                (manual_keys[1], '60 × 35 px', second)):
+            editor._select_cover_choice(key, record_undo=False)
+            editor._select_cover_choice('placeholder', record_undo=False)
             editor._cover_proposal_labels[key].clicked.emit()
             assert editor._selected_cover_key == key
             assert editor.cover_info_values['resolution'].text() == resolution
@@ -89,7 +91,7 @@ def test_last_two_manual_slots_keep_old_choices_and_update_selected_cover(tmp_pa
         images = {key: editor._cover_candidate_pixmaps[key].toImage() for key in (*original, *manual_keys)}
         assert not editor.choose_cover_button.isEnabled()
         editor.choose_cover_button.click()
-        assert len(editor._cover_proposal_labels) == 6
+        assert len(editor._cover_proposal_labels) == 4
         for key, image in images.items():
             assert editor._cover_candidate_pixmaps[key].toImage() == image
     finally:

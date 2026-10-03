@@ -2822,13 +2822,19 @@ QDialog#MetadataEditorDialog QLabel#LibrarySectionMark {
     background:transparent; border:0; border-top:1px solid #91adbe; border-bottom:1px solid #91adbe;
 }
 QDialog#MetadataEditorDialog QToolButton#SourceLegendInfoButton {
-    background:transparent; border:0; border-radius:3px; padding:0;
-    min-width:20px; max-width:20px; min-height:20px; max-height:20px;
+    background:#151f27; border:1px solid #34434b; border-radius:6px; padding:0;
+    min-width:48px; max-width:48px; min-height:28px; max-height:28px;
 }
-QDialog#MetadataEditorDialog QToolButton#SourceLegendInfoButton:hover { background:#17343d; }
+QDialog#MetadataEditorDialog QToolButton#SourceLegendInfoButton:hover { background:#1a3029; border-color:#4da27a; }
 QDialog#MetadataEditorDialog QToolButton#SourceLegendInfoButton::menu-indicator {
     image:none; width:0; height:0;
 }
+QDialog#MetadataEditorDialog QWidget#EditorRecognitionDetails { background:transparent; }
+QDialog#MetadataEditorDialog QToolButton#EditorRecognitionToggle {
+    background:transparent; border:0; border-radius:3px; padding:0;
+    min-width:24px; max-width:24px; min-height:22px; max-height:22px;
+}
+QDialog#MetadataEditorDialog QToolButton#EditorRecognitionToggle:hover { background:#17343d; }
 QDialog#MetadataEditorDialog QPushButton#SingleTrackOnlineButton,
 QDialog#MetadataEditorDialog QPushButton#SingleTrackAudioButton {
     min-height:0px; max-height:36px; padding:0 13px; border-radius:7px;

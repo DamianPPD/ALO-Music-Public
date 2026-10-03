@@ -795,18 +795,20 @@ class MetadataEditorDialog(QDialog):
         workspace.setSpacing(10)
         self.metadata_column = QWidget()
         self.metadata_column.setObjectName('MetadataEditorColumn')
+        self.metadata_column.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         metadata_column_layout = QVBoxLayout(self.metadata_column)
         metadata_column_layout.setContentsMargins(0, 0, 0, 0)
         metadata_column_layout.setSpacing(8)
         self.cover_recognition_column = QWidget()
         self.cover_recognition_column.setObjectName('EditorCoverRecognitionColumn')
+        self.cover_recognition_column.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         cover_recognition_layout = QVBoxLayout(self.cover_recognition_column)
         cover_recognition_layout.setContentsMargins(0, 0, 0, 0)
         cover_recognition_layout.setSpacing(8)
 
         metadata = self.metadata_card = QFrame()
         metadata.setObjectName('PrimaryMetadataCard')
-        metadata.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        metadata.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         form = QFormLayout(metadata)
         form.setContentsMargins(10, 8, 10, 8)
         form.setVerticalSpacing(5)
@@ -828,7 +830,7 @@ class MetadataEditorDialog(QDialog):
         self.album = QLineEdit(track.album or '')
         self.discogs_url = QLineEdit(track.discogs_url or '')
         self.comment = QTextEdit(track.comment or '')
-        self.comment.setMinimumHeight(66)
+        self.comment.setFixedHeight(66)
         self.comment.setPlaceholderText('Dodaj komentarz…')
 
         for field_name, label, widget in (
@@ -854,21 +856,34 @@ class MetadataEditorDialog(QDialog):
         url_row.addWidget(self.open_url_button)
         form.addRow(self._field_label('Discogs URL'), url_host)
         form.addRow(self._field_label('Komentarz'), self._field_input('comment', self.comment))
-        metadata_column_layout.addWidget(metadata, 1)
+        metadata_column_layout.addWidget(metadata, 0, Qt.AlignmentFlag.AlignTop)
 
         recognition = self.recognition_card = QFrame()
         recognition.setObjectName('RecognitionInfoCompact')
+        recognition.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         ril = QVBoxLayout(recognition)
         ril.setContentsMargins(10, 8, 10, 8)
         ril.setSpacing(5)
         ri_title = _section_header('Informacje o rozpoznaniu')
+        self.recognition_toggle = QToolButton()
+        self.recognition_toggle.setObjectName('EditorRecognitionToggle')
+        self.recognition_toggle.setCheckable(True)
+        self.recognition_toggle.setFixedSize(24, 22)
+        self.recognition_toggle.setIconSize(QSize(16, 16))
+        self.recognition_toggle.setAccessibleName('Informacje o rozpoznaniu')
+        ri_title.layout().addWidget(self.recognition_toggle)
         ril.addWidget(ri_title)
+        self.recognition_details_body = QWidget()
+        self.recognition_details_body.setObjectName('EditorRecognitionDetails')
+        recognition_body_layout = QVBoxLayout(self.recognition_details_body)
+        recognition_body_layout.setContentsMargins(0, 0, 0, 0)
+        recognition_body_layout.setSpacing(5)
         recognition_details = QGridLayout()
         recognition_details.setHorizontalSpacing(20)
         recognition_details.setVerticalSpacing(5)
         recognition_details.setColumnStretch(0, 1)
         recognition_details.setColumnStretch(1, 1)
-        ril.addLayout(recognition_details)
+        recognition_body_layout.addLayout(recognition_details)
         self.recognition_values = {}
         for row, (key, label) in enumerate((
             ('source', 'Główne źródło'),
@@ -922,12 +937,15 @@ class MetadataEditorDialog(QDialog):
         self.recognition_bar.setRange(0, 100)
         self.recognition_bar.setTextVisible(False)
         self.recognition_bar.setFixedHeight(6)
-        ril.addWidget(self.recognition_bar)
-        workspace.addWidget(self.metadata_column, 3)
+        recognition_body_layout.addWidget(self.recognition_bar)
+        ril.addWidget(self.recognition_details_body)
+        self.recognition_toggle.toggled.connect(self._toggle_recognition_details)
+        self._toggle_recognition_details(False)
+        workspace.addWidget(self.metadata_column, 3, Qt.AlignmentFlag.AlignTop)
 
         gallery = self.cover_gallery = QFrame()
         gallery.setObjectName('CoverGallery')
-        gallery.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        gallery.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         gl = QVBoxLayout(gallery)
         gl.setContentsMargins(10, 8, 10, 8)
         gl.setSpacing(6)
@@ -938,7 +956,7 @@ class MetadataEditorDialog(QDialog):
         cover_top.setSpacing(10)
 
         cover_main_col = QVBoxLayout()
-        cover_main_col.setSpacing(7)
+        cover_main_col.setSpacing(4)
         self.cover_main_preview = ClickableCoverLabel('Brak okładki')
         self.cover_main_preview.setObjectName('CoverMainPreview')
         self.cover_main_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -949,9 +967,10 @@ class MetadataEditorDialog(QDialog):
         self.cover_info = QFrame()
         self.cover_info.setObjectName('CoverInformationPanel')
         self.cover_info.setFixedWidth(248)
+        self.cover_info.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Maximum)
         info_layout = QVBoxLayout(self.cover_info)
-        info_layout.setContentsMargins(8, 6, 8, 6)
-        info_layout.setSpacing(3)
+        info_layout.setContentsMargins(8, 3, 8, 3)
+        info_layout.setSpacing(1)
         self.cover_info_heading = QLabel('Informacje o okładce')
         self.cover_info_heading.setObjectName('CoverInformationHeading')
         info_layout.addWidget(self.cover_info_heading)
@@ -962,7 +981,7 @@ class MetadataEditorDialog(QDialog):
         info_grid = QGridLayout()
         info_grid.setContentsMargins(0, 0, 0, 0)
         info_grid.setHorizontalSpacing(6)
-        info_grid.setVerticalSpacing(2)
+        info_grid.setVerticalSpacing(0)
         self.cover_info_labels = {}
         self.cover_info_values = {}
         for row, (key, title) in enumerate((('source', 'Źródło'), ('resolution', 'Rozdzielczość'),
@@ -979,6 +998,7 @@ class MetadataEditorDialog(QDialog):
         info_grid.setColumnStretch(1, 1)
         info_layout.addLayout(info_grid)
         cover_main_col.addWidget(self.cover_info, 0, Qt.AlignmentFlag.AlignLeft)
+        cover_main_col.addStretch(1)
 
         self.choose_cover_button = QPushButton('Dodaj')
         self.choose_cover_button.setObjectName('CoverSmallAction')
@@ -1035,9 +1055,9 @@ class MetadataEditorDialog(QDialog):
         self._cover_proposal_labels: dict[str, ClickableCoverLabel] = {}
         self._selected_cover_key = 'placeholder'
         self._selected_external_url = track.cover_art_url
-        cover_recognition_layout.addWidget(gallery, 1)
+        cover_recognition_layout.addWidget(gallery)
         cover_recognition_layout.addWidget(recognition)
-        workspace.addWidget(self.cover_recognition_column, 2)
+        workspace.addWidget(self.cover_recognition_column, 2, Qt.AlignmentFlag.AlignTop)
         content.addLayout(workspace)
 
         naming = QFrame()
@@ -1077,9 +1097,8 @@ class MetadataEditorDialog(QDialog):
         self.source_legend_button = QToolButton()
         self.source_legend_button.setObjectName('SourceLegendInfoButton')
         self.source_legend_button.setText('')
-        self.source_legend_button.setIcon(library_icon('legend', '#bdcbd3', 18))
-        self.source_legend_button.setIconSize(QSize(18, 18))
-        self.source_legend_button.setFixedSize(20, 20)
+        self.source_legend_button.setIconSize(QSize(38, 18))
+        self.source_legend_button.setFixedSize(48, 28)
         self.source_legend_button.setProperty('iconStyle', 'thin')
         self.source_legend_button.setToolTip('Legenda źródeł — kliknij')
         self.source_legend_button.setAccessibleName('Legenda źródeł')
@@ -1111,10 +1130,12 @@ class MetadataEditorDialog(QDialog):
             legend_menu.addAction(action)
         self.source_legend_button.setMenu(legend_menu)
         self.source_legend_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        compare_title = _section_header('Porównanie źródeł  (pomocniczo)',
-                                        icon_widget=self.source_legend_button)
-        compare_head.addWidget(compare_title)
-        compare_head.addStretch(1)
+        legend_menu.aboutToShow.connect(lambda: self._set_source_legend_open(True))
+        legend_menu.aboutToHide.connect(lambda: self._set_source_legend_open(False))
+        self._set_source_legend_open(False)
+        compare_title = _section_header('Porównanie źródeł  (pomocniczo)')
+        compare_head.addWidget(compare_title, 1)
+        compare_head.addWidget(self.source_legend_button, 0, Qt.AlignmentFlag.AlignRight)
         comparison_layout.addLayout(compare_head)
 
         self.source_table = SourceComparisonTable(0, 7)
@@ -1140,6 +1161,7 @@ class MetadataEditorDialog(QDialog):
         comparison_layout.addWidget(self.source_table)
         comparison.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         content.addWidget(comparison)
+        content.addStretch(1)
 
         self.compact_player = None
         if player_bar is not None:
@@ -1190,6 +1212,28 @@ class MetadataEditorDialog(QDialog):
         self.finished.connect(lambda _result: self._restore_live_cover_preview())
         self._update_ready_button()
         self._refresh_url_action()
+        # show()/exec() creates the native window before its usual polish pass.
+        # Resolve the theme palette first so navigation never exposes Qt's light default.
+        self.ensurePolished()
+
+    def _toggle_recognition_details(self, expanded: bool) -> None:
+        self.recognition_details_body.setVisible(expanded)
+        self.recognition_toggle.setIcon(library_icon('collapse' if expanded else 'expand', '#a8bdca', 16))
+        caption = 'Zwiń szczegóły' if expanded else 'Rozwiń szczegóły'
+        self.recognition_toggle.setProperty('_alo_pl_tooltip', caption)
+        self.recognition_toggle.setToolTip(ui_text(self, caption))
+
+    def _set_source_legend_open(self, expanded: bool) -> None:
+        # Reuse both actual Library assets; Qt's native menu arrow stays suppressed.
+        pixmap = QPixmap(38 * 3, 18 * 3)
+        pixmap.setDevicePixelRatio(3.0)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.drawPixmap(0, 0, library_icon('legend', '#bdcbd3', 18).pixmap(QSize(18, 18), 3.0))
+        painter.drawPixmap(24, 2, library_icon('collapse' if expanded else 'expand', '#a8bdca', 14).pixmap(QSize(14, 14), 3.0))
+        painter.end()
+        self.source_legend_button.setIcon(QIcon(pixmap))
+        self.source_legend_button.setProperty('expanded', expanded)
 
     @staticmethod
     def _track_value_map(track: TrackRecord) -> dict[str, object]:
@@ -2396,18 +2440,25 @@ class MetadataEditorDialog(QDialog):
         entries.extend(external_entries)
         entries.extend((key, 'WŁASNA') for key in self._manual_cover_paths)
         entries.append(('placeholder', 'BRAK OKŁADKI'))
-        self.cover_proposal_count.setText(ui_text(self, f'Propozycje ({len(entries)})'))
+        # Limit only the visible grid. Keep the active cover and "no cover"
+        # reachable without discarding loaded candidates or changing acquisition.
+        visible_entries = entries[:-1][:3]
+        selected_key = getattr(self, '_selected_cover_key', '')
+        selected_entry = next((entry for entry in entries[:-1] if entry[0] == selected_key), None)
+        if selected_entry is not None and selected_entry not in visible_entries:
+            visible_entries[-1:] = [selected_entry]
+        visible_entries.append(entries[-1])
+        self.cover_proposal_count.setText(ui_text(self, f'Propozycje ({len(visible_entries)})'))
         full = len(entries) >= 6
         self.choose_cover_button.setEnabled(not full)
         tooltip = 'Osiągnięto limit 6 okładek' if full else 'Wybierz własny plik okładki'
         self.choose_cover_button.setProperty('_alo_pl_tooltip', tooltip)
         self.choose_cover_button.setToolTip(ui_text(self, tooltip))
 
-        count = len(entries)
         preview_size = 78
         columns = 2
 
-        for index, (key, title) in enumerate(entries):
+        for index, (key, title) in enumerate(visible_entries):
             card = QFrame()
             card.setObjectName('CoverProposalCard')
             card.setProperty('selected', key == getattr(self, '_selected_cover_key', ''))
@@ -2606,6 +2657,8 @@ class MetadataEditorDialog(QDialog):
             self.manual_cover_path = self._manual_cover_paths[key]
         elif key in {'source', 'placeholder'}:
             self.cover_choice = key
+        if key not in self._cover_proposal_labels:
+            self._rebuild_cover_proposals()
         self._update_cover_main_preview()
         if not self._suspend_tracking:
             self._refresh_dirty_state()

@@ -152,7 +152,7 @@ def test_valid_tag_query_stops_before_filename_fallback(tmp_path: Path):
     assert provider.queries == [('Tagged Artist', 'Tagged Title')]
 
 
-def test_cover_panel_has_one_online_search_and_six_tiles_including_no_cover(tmp_path: Path, monkeypatch):
+def test_cover_panel_has_one_online_search_and_four_visible_tiles_including_no_cover(tmp_path: Path, monkeypatch):
     app = _app()
     monkeypatch.setattr(MetadataEditorDialog, '_load_candidate_cover', lambda *args: None)
     sources = {f'Source {index}': f'https://example.test/{index}.jpg' for index in range(6)}
@@ -167,7 +167,8 @@ def test_cover_panel_has_one_online_search_and_six_tiles_including_no_cover(tmp_
         assert not hasattr(dialog, 'show_more_covers_button')
         assert list(dialog._cover_candidate_urls) == [f'external:Source {n}' for n in range(5)]
         assert list(dialog._cover_proposal_labels)[-1] == 'placeholder'
-        assert dialog.cover_proposals_grid.count() == 6
+        assert list(dialog._cover_proposal_labels) == [f'external:Source {n}' for n in range(3)] + ['placeholder']
+        assert dialog.cover_proposals_grid.count() == 4
     finally:
         _close(dialog)
 
@@ -182,7 +183,8 @@ def test_fewer_online_covers_still_include_no_cover_without_extra_controls(tmp_p
         dialog.show()
         app.processEvents()
         assert not hasattr(dialog, 'show_more_covers_button')
-        assert dialog.cover_proposals_grid.count() == 5
+        assert list(dialog._cover_candidate_urls) == [f'external:Source {n}' for n in range(4)]
+        assert dialog.cover_proposals_grid.count() == 4
         assert 'placeholder' in dialog._cover_proposal_labels
     finally:
         _close(dialog)

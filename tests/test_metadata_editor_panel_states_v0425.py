@@ -3,7 +3,7 @@ import os
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
 import pytest
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QPoint, QSize, Qt
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication, QFrame, QLabel, QMessageBox
@@ -53,7 +53,7 @@ def test_removed_status_panel_leaves_recognition_below_cover(editor, width, heig
     assert cover.right() == recognition.right()
     assert cover.left() == recognition.left()
     assert 4 <= recognition.top() - cover.bottom() <= 12
-    assert recognition.bottom() == metadata.bottom()
+    assert 60 <= editor.comment.height() <= 82
     assert 4 <= cover.left() - metadata.right() <= 12
     assert editor.cover_main_preview.size().toTuple() == (248, 248)
     assert editor.recognition_values['fields'].text() == '5/5'
@@ -64,8 +64,9 @@ def test_removed_status_panel_leaves_recognition_below_cover(editor, width, heig
 def test_source_comparison_heading_reuses_actual_library_legend_asset(editor):
     title = next(label for label in editor.findChildren(QLabel, 'EditorSectionTitle')
                  if label.text().startswith('Porównanie źródeł'))
-    assert title.parentWidget().layout().itemAt(0).widget() is editor.source_legend_button
-    assert editor.source_legend_button.icon().pixmap(18, 18).toImage() == library_icon('legend', '#bdcbd3', 18).pixmap(18, 18).toImage()
+    assert title.parentWidget().layout().itemAt(0).widget().objectName() == 'LibrarySectionMark'
+    legend = editor.source_legend_button.icon().pixmap(QSize(38, 18), 3.0).toImage().copy(0, 0, 54, 54)
+    assert legend == library_icon('legend', '#bdcbd3', 18).pixmap(QSize(18, 18), 3.0).toImage()
 
 
 @pytest.mark.parametrize('theme', ['dark', 'light'])
@@ -85,7 +86,7 @@ def test_section_titles_have_readable_contrast_on_actual_panel_backgrounds(edito
         QApplication.instance().processEvents()
         # Compose transparent headers with their real panel background.
         panel = header.parentWidget()
-        sample = panel.mapTo(editor, QPoint(panel.width() - 16, 16))
+        sample = panel.mapTo(editor, QPoint(4, 16))  # plain panel background, away from the right legend control
         ratio = editor.devicePixelRatioF()
         rendered = editor.grab().toImage()
         background = rendered.pixelColor(round(sample.x() * ratio), round(sample.y() * ratio))

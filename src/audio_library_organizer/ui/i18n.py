@@ -416,6 +416,7 @@ def _dynamic_en(text: str) -> str:
         (r'^Biblioteka „(.+)” została wyzerowana\. Możesz dodać nowe pliki do skanowania\.$', r'Library “\1” has been reset. You can add new files to scan.'),
         (r'^Nazwa nowego folderu \((\d+) utworów\):$', r'New folder name (\1 tracks):'),
         (r'^Propozycje \((\d+)\)$', r'Suggestions (\1)'),
+        (r'^Plik (\d+) z (\d+)$', r'File \1 of \2'),
         (r'^(\d+) do sprawdzenia$', r'\1 need review'),
         (r'^(.+): błąd providerów — sprawdź komunikat w danych utworu\.$', r'\1: provider error — see track details.'),
         (r'^(\d+) grup duplikatów$', r'\1 duplicate groups'),

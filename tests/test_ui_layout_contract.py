@@ -212,7 +212,6 @@ def test_metadata_editor_keeps_individual_fields_recognition_comparison_and_inli
     assert "recognition.setObjectName('RecognitionInfoCompact')" in EDITOR
     assert "comparison.setObjectName('SourceComparisonCard')" in EDITOR
     assert "self.source_legend_button.setText('')" in EDITOR
-    assert "self.source_legend_button.setIcon(library_icon('legend'" in EDITOR
     assert "self.source_table = SourceComparisonTable(0, 7)" in EDITOR
     assert "use_button = QPushButton(ui_text(self, 'Użyj danych'))" in EDITOR
     assert 'self.source_table.resize_to_rows()' in EDITOR

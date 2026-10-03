@@ -35,7 +35,6 @@ def test_editor_section_headers_match_reference_wording_and_icons():
     assert "setObjectName('EditorSectionTitle')" in EDITOR
     assert "color:#e7eef3;" in THEME
     assert "mark.setObjectName('LibrarySectionMark')" in EDITOR
-    assert "self.source_legend_button.setIcon(library_icon('legend'" in EDITOR
 
 
 def test_editor_online_and_bottom_actions_use_real_icons():

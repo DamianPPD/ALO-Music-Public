@@ -39,7 +39,7 @@ def _close(dialog):
     dialog.close()
 
 
-def test_metadata_matches_cover_and_recognition_column_height_at_multiple_widths(tmp_path: Path):
+def test_metadata_and_cover_columns_align_at_top_without_stretching_comment(tmp_path: Path):
     app = _app()
     dialog = MetadataEditorDialog(_track(tmp_path))
     try:
@@ -47,11 +47,8 @@ def test_metadata_matches_cover_and_recognition_column_height_at_multiple_widths
             dialog.resize(width, 920)
             dialog.show()
             app.processEvents()
-            heights = (
-                dialog.metadata_column.height(),
-                dialog.cover_recognition_column.height(),
-            )
-            assert max(heights) - min(heights) <= 2
+            assert dialog.metadata_column.y() == dialog.cover_recognition_column.y()
+            assert 60 <= dialog.comment.height() <= 82
             assert dialog.comment.mapTo(dialog.metadata_card, dialog.comment.rect().topLeft()).y() < dialog.metadata_card.height()
     finally:
         _close(dialog)

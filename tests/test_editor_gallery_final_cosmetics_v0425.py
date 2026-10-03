@@ -26,7 +26,7 @@ def _image(path, width=42):
 
 
 @pytest.mark.parametrize('count', range(8))
-def test_online_results_never_exceed_five_covers_plus_no_cover(tmp_path, monkeypatch, count):
+def test_online_results_keep_backend_capacity_but_show_four_tiles(tmp_path, monkeypatch, count):
     QApplication.instance() or QApplication([])
     monkeypatch.setattr(MetadataEditorDialog, '_load_candidate_cover', lambda *args: None)
     sources = {f'Source {n}': f'https://example.test/{n}.jpg' for n in range(count)}
@@ -35,15 +35,15 @@ def test_online_results_never_exceed_five_covers_plus_no_cover(tmp_path, monkeyp
     try:
         assert list(editor._cover_candidate_urls) == [f'external:Source {n}' for n in range(min(count, 5))]
         assert list(editor._cover_proposal_labels) == [
-            *(f'external:Source {n}' for n in range(min(count, 5))), 'placeholder']
-        assert editor.cover_proposals_grid.count() == min(count, 5) + 1
-        assert editor.cover_proposal_count.text() == f'Propozycje ({min(count, 5) + 1})'
+            *(f'external:Source {n}' for n in range(min(count, 3))), 'placeholder']
+        assert editor.cover_proposals_grid.count() == min(count + 1, 4)
+        assert editor.cover_proposal_count.text() == f'Propozycje ({min(count + 1, 4)})'
         assert editor.choose_cover_button.isEnabled() == (count < 5)
         assert editor.findChild(QPushButton, 'CoverShowMoreAction') is None
         if count >= 5:
-            assert [editor.cover_proposals_grid.getItemPosition(i)[:2] for i in range(6)] == [
-                (0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)]
-            assert editor.cover_proposal_count.text() == 'Propozycje (6)'
+            assert [editor.cover_proposals_grid.getItemPosition(i)[:2] for i in range(4)] == [
+                (0, 0), (0, 1), (1, 0), (1, 1)]
+            assert editor.cover_proposal_count.text() == 'Propozycje (4)'
     finally:
         _close(editor)
 
@@ -61,7 +61,7 @@ def test_online_slots_reserve_embedded_and_selected_manual_cover(tmp_path, monke
     try:
         assert list(editor._cover_candidate_urls) == [f'external:Source {n}' for n in range(3)]
         assert list(editor._cover_proposal_labels) == [
-            'source', 'external:Source 0', 'external:Source 1', 'external:Source 2', 'manual', 'placeholder']
+            'source', 'external:Source 0', 'manual', 'placeholder']
         assert editor._selected_cover_key == 'manual'
         assert not editor.choose_cover_button.isEnabled()
         editor._select_cover_choice('placeholder', record_undo=False)
@@ -70,7 +70,7 @@ def test_online_slots_reserve_embedded_and_selected_manual_cover(tmp_path, monke
         _close(editor)
 
 
-def test_existing_selected_online_cover_stays_available_at_six_tile_limit(tmp_path, monkeypatch):
+def test_existing_selected_online_cover_stays_visible_at_four_tile_limit(tmp_path, monkeypatch):
     QApplication.instance() or QApplication([])
     monkeypatch.setattr(MetadataEditorDialog, '_load_candidate_cover', lambda *args: None)
     sources = {f'Source {n}': f'https://example.test/{n}.jpg' for n in range(7)}
@@ -84,7 +84,8 @@ def test_existing_selected_online_cover_stays_available_at_six_tile_limit(tmp_pa
             'external:Source 3', 'external:Source 6',
         ]
         assert editor._selected_cover_key == 'external:Source 6'
-        assert len(editor._cover_proposal_labels) == 6
+        assert list(editor._cover_proposal_labels) == [
+            'external:Source 0', 'external:Source 1', 'external:Source 6', 'placeholder']
         assert 'placeholder' in editor._cover_proposal_labels
     finally:
         _close(editor)
@@ -115,14 +116,15 @@ def test_add_from_computer_fills_slot_five_and_six_then_disables_button(tmp_path
         app.processEvents()
         assert editor.cover_proposals_grid.count() == 4
         editor.choose_cover_button.click()
-        assert editor.cover_proposals_grid.count() == 5
+        assert editor.cover_proposals_grid.count() == 4
         assert editor.choose_cover_button.isEnabled()
         assert 'manual' in editor._cover_proposal_labels
         editor.choose_cover_button.click()
-        assert editor.cover_proposals_grid.count() == 6
+        assert editor.cover_proposals_grid.count() == 4
         assert list(editor._cover_proposal_labels)[-1] == 'placeholder'
-        assert {'manual', 'manual:1'} <= set(editor._cover_proposal_labels)
-        assert all(key in editor._cover_proposal_labels for key in editor._cover_candidate_urls)
+        assert {'manual', 'manual:1'} <= set(editor._manual_cover_paths)
+        assert 'manual:1' in editor._cover_proposal_labels
+        assert all(key in editor._cover_candidate_pixmaps for key in editor._cover_candidate_urls)
         assert editor._selected_cover_key == 'manual:1'
         assert editor.cover_info_values['resolution'].text() == '60 × 32 px'
         assert not editor.choose_cover_button.isEnabled()
@@ -131,7 +133,7 @@ def test_add_from_computer_fills_slot_five_and_six_then_disables_button(tmp_path
                   for key in (*editor._cover_candidate_urls, 'manual', 'manual:1')}
         editor.choose_cover_button.click()
         assert len(opened) == 2
-        assert editor.cover_proposals_grid.count() == 6
+        assert editor.cover_proposals_grid.count() == 4
         assert all(editor._cover_candidate_pixmaps[key].toImage() == image for key, image in images.items())
         apply_static_language(editor, 'en')
         editor.refresh_audio_language()
