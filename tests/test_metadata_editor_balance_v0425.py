@@ -93,15 +93,15 @@ def test_larger_four_thumbnails_have_symmetric_square_geometry(editor):
 
 
 @pytest.mark.parametrize('language', ['pl', 'en'])
-def test_comparison_has_library_list_asset_and_directional_chevron_in_one_control(editor, language):
+def test_comparison_has_only_a_directional_chevron_on_the_right(editor, language):
     apply_static_language(editor, language)
     app = QApplication.instance()
     app.processEvents()
     button = editor.source_comparison_toggle
     arrow = button.findChild(QLabel, 'SourceComparisonChevron')
     assert arrow is not None and arrow.isVisible()
-    assert button.icon().pixmap(16, 16).toImage() == library_icon('legend', '#a8bdca', 16).pixmap(16, 16).toImage()
-    assert button.width() <= 48 and button.height() <= 24
+    assert button.icon().isNull()
+    assert button.width() <= 26 and button.height() <= 24
     assert button.menu() is None
     for checked, asset in ((True, 'collapse'), (False, 'expand'), (True, 'collapse')):
         button.setChecked(checked)
@@ -109,7 +109,7 @@ def test_comparison_has_library_list_asset_and_directional_chevron_in_one_contro
         assert editor.source_table.isVisible() == checked
         assert arrow.isVisible() and button.rect().contains(arrow.geometry())
         assert arrow.pixmap().toImage() == library_icon(asset, '#a8bdca', 14).pixmap(14, 14).toImage()
-        assert not button.icon().isNull()
+        assert button.icon().isNull()
 
 
 @pytest.mark.parametrize('theme', ['dark', 'light'])

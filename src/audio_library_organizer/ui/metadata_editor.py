@@ -111,7 +111,8 @@ class RecognitionDetailsButton(QToolButton):
                  color='#bdcfd8', chevron_name='RecognitionDetailsChevron'):
         super().__init__(parent)
         self._chevron_color = color
-        self.setIcon(library_icon(icon_name, color, icon_size))
+        if icon_name is not None:
+            self.setIcon(library_icon(icon_name, color, icon_size))
         self.setIconSize(QSize(icon_size, icon_size))
         self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -127,7 +128,9 @@ class RecognitionDetailsButton(QToolButton):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self._chevron.move(self.width() - self._chevron.width() - 7,
+        x = ((self.width() - self._chevron.width()) // 2 if self.icon().isNull()
+             else self.width() - self._chevron.width() - 7)
+        self._chevron.move(x,
                            (self.height() - self._chevron.height()) // 2)
 
 
@@ -1188,7 +1191,7 @@ class MetadataEditorDialog(QDialog):
         cover_main_col.addWidget(self.cover_info, 0, Qt.AlignmentFlag.AlignLeft)
         cover_main_col.addStretch(1)
 
-        self.choose_cover_button = QPushButton('Dodaj')
+        self.choose_cover_button = QPushButton('Dodaj okładkę z pliku')
         self.choose_cover_button.setObjectName('CoverSmallAction')
         _set_editor_button_icon(self.choose_cover_button, 'upload', '#d9e6ee', 17)
         self.choose_cover_button.setToolTip('Wybierz własny plik okładki')
@@ -1286,12 +1289,13 @@ class MetadataEditorDialog(QDialog):
         comparison_layout.setContentsMargins(8, 6, 8, 6)
         comparison_layout.setSpacing(4)
         compare_head = QHBoxLayout()
-        self.source_legend_button = QToolButton()
+        self.source_legend_button = RecognitionDetailsButton(
+            icon_name='legend', icon_size=18, color='#bdcbd3', chevron_name='SourceLegendChevron')
         self.source_legend_button.setObjectName('SourceLegendInfoButton')
         self.source_legend_button.setText('')
         self.source_legend_button.setIcon(library_icon('legend', '#bdcbd3', 18))
         self.source_legend_button.setIconSize(QSize(18, 18))
-        self.source_legend_button.setFixedSize(22, 20)
+        self.source_legend_button.setFixedSize(42, 20)
         self.source_legend_button.setProperty('iconStyle', 'thin')
         self.source_legend_button.setToolTip('Legenda źródeł — kliknij')
         self.source_legend_button.setAccessibleName('Legenda źródeł')
@@ -1323,16 +1327,17 @@ class MetadataEditorDialog(QDialog):
             legend_menu.addAction(action)
         self.source_legend_button.setMenu(legend_menu)
         self.source_legend_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        legend_menu.aboutToShow.connect(lambda: self.source_legend_button._refresh_chevron(True))
+        legend_menu.aboutToHide.connect(lambda: self.source_legend_button._refresh_chevron(False))
         compare_title = _section_header('Porównanie źródeł  (pomocniczo)')
         compare_title.layout().insertWidget(2, self.source_legend_button)
         compare_head.addWidget(compare_title, 1)
         self.source_comparison_toggle = RecognitionDetailsButton(
-            icon_name='legend', icon_size=16, color='#a8bdca', chevron_name='SourceComparisonChevron')
+            icon_name=None, color='#a8bdca', chevron_name='SourceComparisonChevron')
         self.source_comparison_toggle.setObjectName('SourceComparisonToggle')
         self.source_comparison_toggle.setCheckable(True)
         self.source_comparison_toggle.setChecked(True)
-        self.source_comparison_toggle.setFixedSize(46, 22)
-        self.source_comparison_toggle.setIconSize(QSize(16, 16))
+        self.source_comparison_toggle.setFixedSize(24, 22)
         self.source_comparison_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.source_comparison_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         self.source_comparison_toggle.toggled.connect(self._toggle_source_comparison)

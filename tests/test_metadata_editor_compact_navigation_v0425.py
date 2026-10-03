@@ -194,7 +194,7 @@ def test_source_legend_follows_title_and_menu_keeps_comparison_expanded(editor, 
     assert mark is not None
     assert mark.mapTo(editor, QPoint()).x() < title.mapTo(editor, QPoint()).x()
     assert button.mapTo(editor, QPoint()).x() > title.mapTo(editor, title.rect().topRight()).x()
-    assert button.width() <= 26
+    assert button.width() <= 42
     assert button.popupMode() == QToolButton.ToolButtonPopupMode.InstantPopup
     assert len(button.menu().actions()) == 9
     closed = button.icon().pixmap(button.iconSize()).toImage()

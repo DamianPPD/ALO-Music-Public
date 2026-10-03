@@ -2824,8 +2824,8 @@ QDialog#MetadataEditorDialog QLabel#LibrarySectionMark {
     background:transparent; border:0; border-top:1px solid #91adbe; border-bottom:1px solid #91adbe;
 }
 QDialog#MetadataEditorDialog QToolButton#SourceLegendInfoButton {
-    background:transparent; border:0; border-radius:3px; padding:0;
-    min-width:22px; max-width:22px; min-height:20px; max-height:20px;
+    background:transparent; border:0; border-radius:3px; padding:0 22px 0 2px;
+    min-width:18px; max-width:18px; min-height:20px; max-height:20px;
 }
 QDialog#MetadataEditorDialog QToolButton#SourceLegendInfoButton:hover { background:#17343d; }
 QDialog#MetadataEditorDialog QToolButton#SourceLegendInfoButton::menu-indicator {
@@ -2833,8 +2833,8 @@ QDialog#MetadataEditorDialog QToolButton#SourceLegendInfoButton::menu-indicator 
 }
 QDialog#MetadataEditorDialog QWidget#EditorRecognitionDetails { background:transparent; }
 QDialog#MetadataEditorDialog QToolButton#SourceComparisonToggle {
-    background:transparent; border:0; border-radius:3px; padding:0 22px 0 4px;
-    min-width:20px; max-width:20px; min-height:22px; max-height:22px;
+    background:transparent; border:0; border-radius:3px; padding:0;
+    min-width:24px; max-width:24px; min-height:22px; max-height:22px;
 }
 QDialog#MetadataEditorDialog QToolButton#SourceComparisonToggle:hover { background:#17343d; }
 QDialog#MetadataEditorDialog QWidget#RecognitionResultRow { background:transparent; }
@@ -2843,6 +2843,7 @@ QDialog#MetadataEditorDialog QToolButton#EditorRecognitionDetailsButton {
     background:transparent; color:#bdcfd8; border:1px solid #304650; border-radius:4px; padding:0 25px 0 7px;
 }
 QDialog#MetadataEditorDialog QLabel#RecognitionDetailsChevron,
+QDialog#MetadataEditorDialog QLabel#SourceLegendChevron,
 QDialog#MetadataEditorDialog QLabel#SourceComparisonChevron,
 QDialog#MetadataEditorDialog QLabel#OutputFilenameIcon { background:transparent; border:0; padding:0; }
 QDialog#MetadataEditorDialog QWidget#CoverActions { background:transparent; border:0; }

@@ -122,7 +122,7 @@ def test_comparison_chevron_is_painted_and_legend_stays_above_table(editor, lang
             app.processEvents()
         assert toggle.isVisible()
         assert editor.source_table.isVisible() == expanded
-        assert toggle.icon().pixmap(16, 16).toImage() == library_icon('legend', '#a8bdca', 16).pixmap(16, 16).toImage()
+        assert toggle.icon().isNull()
         assert arrow.pixmap().toImage() == library_icon(asset, '#a8bdca', 14).pixmap(14, 14).toImage()
         painted = toggle.grab().toImage()
         assert any(painted.pixelColor(x, y).value() > 100
@@ -140,7 +140,7 @@ def test_cover_action_captions_follow_live_language_changes(editor):
     for language in ('pl', 'en', 'pl'):
         apply_static_language(editor, language)
         editor.refresh_audio_language()
-        assert editor.choose_cover_button.text() == ('Dodaj' if language == 'pl' else 'Add')
+        assert editor.choose_cover_button.text() == ('Dodaj okładkę z pliku' if language == 'pl' else 'Add cover from file')
         assert editor.search_cover_button.text() == (
             'Szukaj okładki online' if language == 'pl' else 'Search for cover art online')
 
@@ -161,7 +161,7 @@ app = QApplication([])
 app.setStyleSheet(style_for_theme('dark'))
 editor = MetadataEditorDialog(TrackRecord(path=Path('/tmp/gallery.mp3')))
 apply_static_language(editor, LANG)
-assert editor.choose_cover_button.text() == ('Dodaj' if LANG == 'pl' else 'Add')
+assert editor.choose_cover_button.text() == ('Dodaj okładkę z pliku' if LANG == 'pl' else 'Add cover from file')
 assert editor.search_cover_button.text() == ('Szukaj okładki online' if LANG == 'pl' else 'Search for cover art online')
 image = QPixmap(80, 80)
 image.fill(QColor('#456789'))

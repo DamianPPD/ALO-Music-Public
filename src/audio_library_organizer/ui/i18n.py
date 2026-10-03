@@ -769,6 +769,7 @@ TEXT_MAP_EN.update({
     'Pewność': 'Confidence', 'Okładka (wybierana z listy)': 'Cover art (choose from list)',
     'Wybierz własny plik okładki': 'Choose your own cover image',
     'Dodaj': 'Add',
+    'Dodaj okładkę z pliku': 'Add cover from file',
     'Szukaj okładki online': 'Search for cover art online',
     'Odśwież propozycje okładek przez ponowne rozpoznanie online': 'Refresh cover suggestions by identifying online again',
     'Przywróć nazwę z metadanych': 'Restore filename from metadata',

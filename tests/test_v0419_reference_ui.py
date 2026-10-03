@@ -54,7 +54,7 @@ def test_cover_panel_is_compact_grid_like_reference():
     assert "self.cover_main_preview.setFixedSize(288, 288)" in EDITOR
     assert 'self.cover_selected_badge' not in EDITOR
     assert "selected_badge.setObjectName('CoverProposalSelectedMarker')" in EDITOR
-    assert "self.choose_cover_button = QPushButton('Dodaj')" in EDITOR
+    assert "self.choose_cover_button = QPushButton('Dodaj okładkę z pliku')" in EDITOR
     assert "self.search_cover_button = QPushButton('Szukaj okładki online')" in EDITOR
     assert "self.cover_browse_button = QPushButton('Wyszukaj')" not in EDITOR
     assert "self.show_more_covers_button = QPushButton('Pokaż więcej')" not in EDITOR

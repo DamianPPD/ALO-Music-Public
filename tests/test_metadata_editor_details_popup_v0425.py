@@ -279,7 +279,7 @@ def test_source_header_has_small_legend_after_title_and_independent_chevron(edit
     legend_left = legend.mapTo(editor, QPoint()).x()
     assert 2 <= legend_left - title_right <= 14
     assert legend.iconSize().toTuple() == (18, 18)
-    assert legend.width() <= 26 and legend.height() <= 24
+    assert legend.width() <= 42 and legend.height() <= 24
     assert legend.icon().pixmap(QSize(18, 18), 3.0).toImage() == library_icon('legend', '#bdcbd3', 18).pixmap(QSize(18, 18), 3.0).toImage()
     assert toggle.mapTo(editor, QPoint()).x() > legend.mapTo(editor, legend.rect().topRight()).x() + 40
     assert toggle.menu() is None and toggle.text() == ''
@@ -287,19 +287,19 @@ def test_source_header_has_small_legend_after_title_and_independent_chevron(edit
     arrow = toggle.findChild(QLabel, 'SourceComparisonChevron')
     assert arrow is not None and arrow.isVisible()
     open_icon = arrow.pixmap().toImage()
-    list_icon = toggle.icon().pixmap(16, 16).toImage()
+    assert toggle.icon().isNull()
     rows = editor.source_table.rowCount()
     toggle.click()
     app.processEvents()
     assert not toggle.isChecked() and editor.source_table.isHidden()
     assert arrow.pixmap().toImage() != open_icon
-    assert toggle.icon().pixmap(16, 16).toImage() == list_icon
+    assert toggle.icon().isNull()
     assert editor.source_table.rowCount() == rows
     toggle.click()
     app.processEvents()
     assert editor.source_table.isVisible() and toggle.isChecked()
     assert arrow.pixmap().toImage() == open_icon
-    assert toggle.icon().pixmap(16, 16).toImage() == list_icon
+    assert toggle.icon().isNull()
     menu = legend.menu()
     try:
         menu.popup(legend.mapToGlobal(QPoint(0, legend.height())))
