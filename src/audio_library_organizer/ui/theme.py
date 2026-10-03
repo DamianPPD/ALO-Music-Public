@@ -2917,7 +2917,7 @@ QDialog#MetadataEditorDialog QLabel#CoverMainPreview {
     background:#070d12; border:1px solid #293944; border-radius:8px;
 }
 QDialog#MetadataEditorDialog QFrame#CoverProposalCard {
-    min-width:106px; max-width:106px; min-height:106px; max-height:106px;
+    min-width:118px; max-width:118px; min-height:118px; max-height:118px;
 }
 '''
 DARK_STYLE += METADATA_EDITOR_REFINEMENT_STYLE

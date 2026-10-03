@@ -195,7 +195,7 @@ for width, height in ((1540, 1000), (1420, 900), (1180, 760)):
     assert abs(tl.top() - (proposals.height() - bl.bottom() - 1)) <= 1
     actions_top = editor.choose_cover_button.parentWidget().mapTo(editor.cover_gallery, QPoint()).y()
     assert 0 <= actions_top - proposals.mapTo(editor.cover_gallery, proposals.rect().bottomLeft()).y() <= 14
-    assert all(100 <= preview.width() <= 104 for preview in editor._cover_proposal_labels.values())
+    assert all(112 <= preview.width() <= 117 for preview in editor._cover_proposal_labels.values())
     parent = editor.cover_gallery
     bottom = proposals.mapTo(parent, proposals.rect().bottomLeft()).y()
     buttons = (editor.choose_cover_button, editor.search_cover_button)

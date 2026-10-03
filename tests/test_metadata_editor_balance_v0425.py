@@ -86,7 +86,7 @@ def test_larger_four_thumbnails_are_symmetric_in_the_available_gallery_height(ed
     assert abs(tl.left() - (host.width() - tr.right() - 1)) <= 1
     assert abs(tl.top() - (host.height() - bl.bottom() - 1)) <= 1
     assert tr.top() == tl.top() and br.bottom() == bl.bottom()
-    assert all(100 <= label.width() <= 104 for label in editor._cover_proposal_labels.values())
+    assert all(112 <= label.width() <= 117 for label in editor._cover_proposal_labels.values())
     markers = host.findChildren(QLabel, 'CoverProposalSelectedMarker')
     assert sum(marker.isVisible() for marker in markers) == 1
 

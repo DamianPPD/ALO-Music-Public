@@ -28,8 +28,8 @@ def test_editor_section_headers_match_reference_wording_and_icons():
     for text in (
         "Metadane utworu",
         "Szczegóły rozpoznania",
-        "Okładka (wybierana z listy)",
-        "Porównanie źródeł  (pomocniczo)",
+        "Wybór okładki",
+        "Porównanie źródeł",
     ):
         assert text in EDITOR
     assert "setObjectName('EditorSectionTitle')" in EDITOR

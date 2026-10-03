@@ -181,7 +181,7 @@ def test_settings_have_api_help_and_compact_contact_footer_only_in_settings():
 
 
 def test_metadata_editor_has_large_cover_proposals_and_keeps_explicit_placeholder_choice():
-    assert 'Okładka (wybierana z listy)' in EDITOR
+    assert 'Wybór okładki' in EDITOR
     assert 'self.cover_main_preview.setFixedSize(288, 288)' in EDITOR
     assert "self.choose_cover_button = QPushButton('Dodaj okładkę z pliku')" in EDITOR
     assert "self.search_cover_button = QPushButton('Szukaj okładki online')" in EDITOR

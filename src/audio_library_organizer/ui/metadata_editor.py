@@ -141,8 +141,17 @@ class CoverProposalsHost(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.setMinimumSize(236, 236)
+        self.setMinimumSize(260, 260)
         self.setMaximumWidth(288)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setPen(QPen(QColor('#293944'), 1))
+        x, y = self.width() // 2, self.height() // 2
+        painter.drawLine(x, 12, x, self.height() - 13)
+        painter.drawLine(12, y, self.width() - 13, y)
+        painter.end()
 
 
 class RecognitionDetailsPopup(QFrame):
@@ -1152,7 +1161,7 @@ class MetadataEditorDialog(QDialog):
         gl = QVBoxLayout(gallery)
         gl.setContentsMargins(10, 8, 10, 8)
         gl.setSpacing(6)
-        gh = _section_header('Okładka (wybierana z listy)')
+        gh = _section_header('Wybór okładki')
         gl.addWidget(gh)
 
         cover_top = QHBoxLayout()
@@ -1238,8 +1247,8 @@ class MetadataEditorDialog(QDialog):
         self.cover_proposals_grid.setContentsMargins(7, 7, 7, 7)
         self.cover_proposals_grid.setHorizontalSpacing(6)
         self.cover_proposals_grid.setVerticalSpacing(6)
-        self.cover_proposals_grid.setColumnMinimumWidth(0, 108)
-        self.cover_proposals_grid.setColumnMinimumWidth(1, 108)
+        self.cover_proposals_grid.setColumnMinimumWidth(0, 120)
+        self.cover_proposals_grid.setColumnMinimumWidth(1, 120)
         for index in range(2):
             self.cover_proposals_grid.setRowStretch(index, 1)
             self.cover_proposals_grid.setColumnStretch(index, 1)
@@ -1346,7 +1355,7 @@ class MetadataEditorDialog(QDialog):
         self.source_legend_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         legend_menu.aboutToShow.connect(lambda: self.source_legend_button._refresh_chevron(True))
         legend_menu.aboutToHide.connect(lambda: self.source_legend_button._refresh_chevron(False))
-        compare_title = _section_header('Porównanie źródeł  (pomocniczo)')
+        compare_title = _section_header('Porównanie źródeł')
         compare_title.layout().insertWidget(2, self.source_legend_button)
         compare_head.addWidget(compare_title, 1)
         self.source_comparison_toggle = RecognitionDetailsButton(
@@ -2764,7 +2773,7 @@ class MetadataEditorDialog(QDialog):
         self.choose_cover_button.setProperty('_alo_pl_tooltip', tooltip)
         self.choose_cover_button.setToolTip(ui_text(self, tooltip))
 
-        preview_size = 102
+        preview_size = 114
         columns = 2
 
         for index, (key, title) in enumerate(visible_entries):

@@ -22,7 +22,7 @@ def editor(tmp_path):
     track = TrackRecord(path=tmp_path / 'states.mp3', artist='Artist', title='Title',
                         year='2008', genre='House', bpm=128,
                         field_sources={'title': AUDIO_SOURCE},
-                        field_source_values={'title': {'Discogs': 'Discogs title', 'MusicBrainz': 'MB title', AUDIO_SOURCE: 'Audio title'},
+                        field_source_values={'title': {'Tag': 'Tag title', 'Discogs': 'Discogs title', 'MusicBrainz': 'MB title', AUDIO_SOURCE: 'Audio title'},
                                              'artist': {'Discogs': 'Discogs artist', 'MusicBrainz': 'MB artist'}},
                         audio_recognition={'recording_id': 'r1', 'artist': 'Artist', 'title': 'Title', 'score': .88})
     dialog = MetadataEditorDialog(track)
@@ -45,7 +45,8 @@ def test_last_applied_source_highlight_moves_and_previous_source_remains_clickab
     app = QApplication.instance()
     apply_static_language(editor, language)
     selected = '✓ Aktualnie wybrane' if language == 'pl' else '✓ Currently selected'
-    for source, wanted in [('Discogs', 'Discogs title'), ('MusicBrainz', 'MB title'), ('Discogs', 'Discogs title')]:
+    for source, wanted in [('Tag', 'Tag title'), ('MusicBrainz', 'MB title'), ('Tag', 'Tag title'),
+                           ('Discogs', 'Discogs title'), ('MusicBrainz', 'MB title'), ('Discogs', 'Discogs title')]:
         row = _row(editor, source)
         button = editor.source_table.cellWidget(row, 6).findChild(QPushButton, 'UseSourceDataButton')
         assert button.isEnabled()
@@ -86,7 +87,9 @@ def test_audio_panel_uses_dark_indigo_and_empty_result_stays_red(editor):
     assert error.red() > error.green() + 60 and error.red() > error.blue() + 30
 
 
-def test_cover_grid_uses_available_height_with_larger_centered_four_proposals(editor):
+@pytest.mark.parametrize('width', [1540, 1420])
+def test_cover_grid_uses_available_height_with_larger_centered_four_proposals(editor, width):
+    editor.resize(width, 1000)
     image = QPixmap(300, 300)
     image.fill(QColor('#345678'))
     editor._cover_candidate_pixmaps['source'] = image
@@ -98,7 +101,7 @@ def test_cover_grid_uses_available_height_with_larger_centered_four_proposals(ed
     host, grid = editor.cover_proposals_host, editor.cover_proposals_grid
     assert grid.count() == 4
     assert {grid.getItemPosition(i)[:2] for i in range(4)} == {(0, 0), (0, 1), (1, 0), (1, 1)}
-    assert all(100 <= preview.width() <= 104 for preview in editor._cover_proposal_labels.values())
+    assert all(112 <= preview.width() <= 117 for preview in editor._cover_proposal_labels.values())
     boxes = [grid.itemAt(i).widget().geometry() for i in range(4)]
     assert len({box.size().toTuple() for box in boxes}) == 1
     assert abs(boxes[0].top() - (host.height() - boxes[2].bottom() - 1)) <= 2
@@ -111,3 +114,26 @@ def test_cover_grid_uses_available_height_with_larger_centered_four_proposals(ed
     assert abs(editor.metadata_card.height() - editor.cover_gallery.height()) <= 1
     markers = host.findChildren(QLabel, 'CoverProposalSelectedMarker')
     assert sum(marker.isVisible() for marker in markers) == 1
+    picture = host.grab().toImage()
+    x, y = host.width() // 2, host.height() // 2
+    separator = '#293944'
+    assert picture.pixelColor(x, 20).name() == separator
+    assert picture.pixelColor(20, y).name() == separator
+    assert picture.pixelColor(x + 1, 20).name() != separator
+    assert picture.pixelColor(x, 4).name() != separator
+    assert picture.pixelColor(4, y).name() != separator
+
+
+@pytest.mark.parametrize('language,cover_title,source_title', [
+    ('pl', 'Wybór okładki', 'Porównanie źródeł'),
+    ('en', 'Cover selection', 'Source comparison'),
+])
+def test_cover_and_source_headers_use_short_titles_and_keep_controls(editor, language, cover_title, source_title):
+    apply_static_language(editor, language)
+    titles = editor.findChildren(QLabel, 'EditorSectionTitle')
+    assert editor.cover_gallery.findChild(QLabel, 'EditorSectionTitle').text() == cover_title
+    source_heading = next(title for title in titles if title.text() == source_title)
+    assert source_heading.parentWidget() is editor.source_legend_button.parentWidget()
+    assert editor.source_legend_button.menu() is not None
+    assert not editor.source_legend_button.icon().isNull()
+    assert editor.source_comparison_toggle.icon().isNull()

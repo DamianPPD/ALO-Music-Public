@@ -71,7 +71,7 @@ for language in ('pl', 'en'):
             assert action.width() >= action.fontMetrics().horizontalAdvance(action.text()) + 14
         assert editor.source_comparison_toggle.icon().isNull()
         assert editor.cover_proposals_grid.count() == 4
-        assert all(100 <= label.width() <= 104 for label in editor._cover_proposal_labels.values())
+        assert all(112 <= label.width() <= 117 for label in editor._cover_proposal_labels.values())
         host = editor.cover_proposals_host
         assert 0 <= editor.choose_cover_button.parentWidget().mapTo(editor.cover_gallery,QPoint()).y() - host.mapTo(editor.cover_gallery,host.rect().bottomLeft()).y() <= 14
         assert abs(editor.cover_gallery.height()-editor.metadata_card.height()) <= 1
