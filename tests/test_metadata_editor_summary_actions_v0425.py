@@ -107,6 +107,8 @@ def test_comparison_chevron_is_painted_and_legend_stays_above_table(editor, lang
     app = QApplication.instance()
     app.processEvents()
     toggle = editor.source_comparison_toggle
+    arrow = toggle.findChild(QLabel, 'SourceComparisonChevron')
+    assert arrow is not None and arrow.isVisible()
     legend = editor.source_legend_button
     title = next(label for label in editor.findChildren(QLabel, 'EditorSectionTitle')
                  if label.text().startswith(('Porównanie źródeł', 'Source comparison')))
@@ -120,7 +122,8 @@ def test_comparison_chevron_is_painted_and_legend_stays_above_table(editor, lang
             app.processEvents()
         assert toggle.isVisible()
         assert editor.source_table.isVisible() == expanded
-        assert toggle.icon().pixmap(16, 16).toImage() == library_icon(asset, '#a8bdca', 16).pixmap(16, 16).toImage()
+        assert toggle.icon().pixmap(16, 16).toImage() == library_icon('legend', '#a8bdca', 16).pixmap(16, 16).toImage()
+        assert arrow.pixmap().toImage() == library_icon(asset, '#a8bdca', 14).pixmap(14, 14).toImage()
         painted = toggle.grab().toImage()
         assert any(painted.pixelColor(x, y).value() > 100
                    for y in range(painted.height()) for x in range(painted.width()))
@@ -144,7 +147,7 @@ def test_cover_action_captions_follow_live_language_changes(editor):
 
 @pytest.mark.parametrize('language', ['pl', 'en'])
 @pytest.mark.parametrize('scale', ['1', '1.25', '1.5', '2'])
-def test_cover_actions_use_space_below_four_thumbnails_and_preserve_alignment(language, scale):
+def test_cover_actions_share_stable_bottom_row_and_preserve_alignment(language, scale):
     code = '''
 from pathlib import Path
 from PySide6.QtCore import QPoint
@@ -177,26 +180,37 @@ for width, height in ((1540, 1000), (1420, 900), (1180, 760)):
     bottoms = [p.mapTo(host, p.rect().bottomLeft()).y() for p in panels]
     assert abs(bottoms[0] - bottoms[1]) <= 1, bottoms
     assert 60 <= editor.comment.height() <= 82
-    assert editor.cover_info.height() <= 80
+    assert editor.cover_info.height() <= 96
     assert editor.cover_main_preview.size().toTuple() == (288, 288)
     grid = editor.cover_proposals_grid
     assert grid.count() == 4
     assert {grid.getItemPosition(i)[:2] for i in range(4)} == {(0, 0), (0, 1), (1, 0), (1, 1)}
-    parent = editor.cover_gallery
     proposals = editor.cover_proposals_host
-    left = proposals.mapTo(parent, QPoint()).x()
+    assert abs(proposals.width() - proposals.height()) <= 1
+    cards = {(grid.getItemPosition(i)[0], grid.getItemPosition(i)[1]):
+             grid.itemAt(i).widget().rect().translated(grid.itemAt(i).widget().mapTo(proposals, QPoint()))
+             for i in range(4)}
+    tl, tr, bl, br = [cards[key] for key in ((0, 0), (0, 1), (1, 0), (1, 1))]
+    assert abs(tl.left() - (proposals.width() - tr.right() - 1)) <= 1
+    assert abs(tl.top() - (proposals.height() - bl.bottom() - 1)) <= 1
+    assert abs((tr.left() - tl.right()) - (bl.top() - tl.bottom())) <= 1
+    parent = editor.cover_gallery
     bottom = proposals.mapTo(parent, proposals.rect().bottomLeft()).y()
     buttons = (editor.choose_cover_button, editor.search_cover_button)
+    boxes = [button.rect().translated(button.mapTo(parent, QPoint())) for button in buttons]
     for button in buttons:
         top = button.mapTo(parent, QPoint())
-        right = button.mapTo(parent, button.rect().topRight()).x()
-        assert top.x() >= left
         assert top.y() > bottom
-        assert right <= left + proposals.width()
+        assert top.y() > editor.cover_info.mapTo(parent, editor.cover_info.rect().bottomLeft()).y()
         assert button.width() >= button.sizeHint().width()
-    assert buttons[0].mapTo(parent, QPoint()).y() - bottom <= 12
-    assert buttons[1].mapTo(parent, QPoint()).y() - buttons[0].mapTo(parent, buttons[0].rect().bottomLeft()).y() <= 12
-    assert buttons[1].mapTo(parent, buttons[1].rect().bottomLeft()).y() <= editor.cover_info.mapTo(parent, editor.cover_info.rect().bottomLeft()).y() + 8
+    assert boxes[0].top() == boxes[1].top() and boxes[0].bottom() == boxes[1].bottom()
+    assert 7 <= parent.height() - boxes[0].bottom() <= 12
+    assert abs(boxes[0].left() - (parent.width() - boxes[1].right() - 1)) <= 1
+    assert 4 <= boxes[1].left() - boxes[0].right() <= 12
+    for key in ('external:Source 0', 'placeholder', 'source'):
+        editor._select_cover_choice(key, record_undo=False)
+        app.processEvents()
+        assert [button.rect().translated(button.mapTo(parent, QPoint())) for button in buttons] == boxes
     before = [p.geometry() for p in panels]
     editor.recognition_details_button.click()
     app.processEvents()

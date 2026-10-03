@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+import re
+
+from mutagen.id3 import TCON
 
 from audio_library_organizer.metadata.genre import genre_items
 from audio_library_organizer.ui.i18n import ui_text
@@ -13,12 +16,60 @@ DEFAULT_GENRES = (
     'Ambient', 'Chillout', 'Downtempo', 'Electro', 'EDM', 'Hip-Hop', 'R&B',
 )
 
+_NORMALIZED_PATH = r'(?P<tail>(?:\s+/\s+[^\s/,;|]+(?:[ \t]+[^\s/,;|]+)*)*)'
+_URL = re.compile(r'(?<![\w])(?:[a-z][a-z0-9+.-]*://|www\.)[^\s,;|]+' + _NORMALIZED_PATH, re.IGNORECASE)
+# Imported genres have already gone through normalize_genre_list: an URL can
+# therefore arrive as "https: / example.com / download". Remove that whole
+# address before genre_items can turn its host/path into separate suggestions.
+_SPLIT_URL = re.compile(r'(?<![\w])(?:https?|ftp):\s*/\s*(?:/\s*)?[^\s,;|]+' + _NORMALIZED_PATH, re.IGNORECASE)
+_DOMAIN = re.compile(
+    r'(?<![\w.-])(?P<address>(?:[^\W_](?:(?:[^\W_]|-){0,61}[^\W_])?\.)+'
+    r'(?:[^\W\d_]{2,63}|xn--[a-z0-9-]{2,59})(?::[0-9]{1,5})?'
+    r'(?:[/?#][^\s,;|]*)?)(?![\w.-])' + _NORMALIZED_PATH, re.IGNORECASE)
+_MUSIC_NAMES = DEFAULT_GENRES + tuple(TCON.GENRES)
+_KNOWN_GENRE_FORMS = {re.sub(r'\W+', '', genre.casefold()) for genre in _MUSIC_NAMES}
+_MUSIC_WORDS = {word for genre in _MUSIC_NAMES
+                for word in re.findall(r'[^\W\d_]{3,}', genre.casefold())}
+
+
+def _is_music_label(value: str) -> bool:
+    compact = re.sub(r'\W+', '', value.casefold())
+    words = re.findall(r'[^\W\d_]+', value.casefold())
+    return compact in _KNOWN_GENRE_FORMS or (len(words) > 1 and words[-1] in _MUSIC_WORDS)
+
+
+def _keep_music_from_normalized_path(match) -> str:
+    # Slash normalization loses the distinction between a URL path and a
+    # following genre ("www.example.com; House" becomes "... / House").
+    # Preserve recognizable music labels in that ambiguous spaced tail.
+    return ' / '.join(item for item in genre_items(match.group('tail'), limit=50)
+                      if _is_music_label(item))
+
+
+def _suggestion_genres(value: str | None) -> list[str]:
+    text = _URL.sub(_keep_music_from_normalized_path, str(value or ''))
+    text = _SPLIT_URL.sub(_keep_music_from_normalized_path, text)
+
+    def remove_domain(match):
+        address = match.group('address')
+        # Retain ambiguous dotted music labels, including subgenres outside
+        # the defaults (Hard.Trance, Melodic.Techno, Post.Punk). The existing
+        # ID3 vocabulary is used only for recognition, not added to suggestions.
+        # A path/port or an explicit URL is still an unambiguous web address.
+        if not any(char in address for char in '/:?#'):
+            if _is_music_label(address):
+                tail = ' / '.join(genre_items(match.group('tail'), limit=50))
+                return ' / '.join([address, *_suggestion_genres(tail)])
+        return _keep_music_from_normalized_path(match)
+
+    return genre_items(_DOMAIN.sub(remove_domain, text), limit=50)
+
 
 def build_genre_suggestions(values: Iterable[str | None], query: str = '') -> list[str]:
     seen: set[str] = set()
     result: list[str] = []
     for value in tuple(values) + DEFAULT_GENRES:
-        for item in genre_items(value, limit=50):
+        for item in _suggestion_genres(value):
             key = item.casefold()
             if key not in seen:
                 seen.add(key); result.append(item)

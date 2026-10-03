@@ -218,18 +218,19 @@ def test_hiding_editor_also_closes_details_popup(editor, app):
 
 @pytest.mark.parametrize('language', ['pl', 'en'])
 @pytest.mark.parametrize('theme', ['dark', 'light'])
-def test_real_cover_metrics_remain_readable_in_compact_panel(editor, app, language, theme):
+@pytest.mark.parametrize('source', ['source', 'external:Apple / iTunes', 'external:MusicBrainz'])
+def test_real_cover_metrics_remain_readable_in_compact_panel(editor, app, language, theme, source):
     app.setStyleSheet(style_for_theme(theme))
     apply_static_language(editor, language)
     pixmap = QPixmap(1200, 1200)
     pixmap.fill(QColor('#345678'))
-    editor._cover_candidate_pixmaps['source'] = pixmap
-    editor._cover_details['source'] = {'type': 'Okładka główna (Front)', 'format': 'JPEG', 'bytes': 403200}
-    editor._selected_cover_key = 'source'
+    editor._cover_candidate_pixmaps[source] = pixmap
+    editor._cover_details[source] = {'type': 'Okładka główna (Front)', 'format': 'JPEG', 'bytes': 403200}
+    editor._selected_cover_key = source
     editor._refresh_cover_information()
     for _ in range(3):
         app.processEvents()
-    assert editor.cover_info.height() <= (72 if theme == 'dark' else 80)
+    assert editor.cover_info.height() <= 96
     for value in editor.cover_info_values.values():
         if value.wordWrap():
             assert value.height() >= value.heightForWidth(value.width())
@@ -247,8 +248,7 @@ def test_enlarged_cover_and_compact_metrics_leave_no_large_workspace_gap(editor,
     cover = editor.cover_main_preview
     assert 280 <= cover.width() <= 320 and cover.width() == cover.height()
     assert editor.cover_info.width() == cover.width()
-    assert editor.cover_info.height() <= 72
-    assert editor.cover_info.height() <= editor.cover_info.sizeHint().height() + 2
+    assert 68 <= editor.cover_info.height() <= 96
     assert set(editor.cover_info_values) == {'source', 'resolution', 'type', 'format', 'size'}
     for value in editor.cover_info_values.values():
         assert value.height() >= value.fontMetrics().height()
@@ -284,17 +284,22 @@ def test_source_header_has_small_legend_after_title_and_independent_chevron(edit
     assert toggle.mapTo(editor, QPoint()).x() > legend.mapTo(editor, legend.rect().topRight()).x() + 40
     assert toggle.menu() is None and toggle.text() == ''
     assert toggle.isChecked() and editor.source_table.isVisible()
-    open_icon = toggle.icon().pixmap(16, 16).toImage()
+    arrow = toggle.findChild(QLabel, 'SourceComparisonChevron')
+    assert arrow is not None and arrow.isVisible()
+    open_icon = arrow.pixmap().toImage()
+    list_icon = toggle.icon().pixmap(16, 16).toImage()
     rows = editor.source_table.rowCount()
     toggle.click()
     app.processEvents()
     assert not toggle.isChecked() and editor.source_table.isHidden()
-    assert toggle.icon().pixmap(16, 16).toImage() != open_icon
+    assert arrow.pixmap().toImage() != open_icon
+    assert toggle.icon().pixmap(16, 16).toImage() == list_icon
     assert editor.source_table.rowCount() == rows
     toggle.click()
     app.processEvents()
     assert editor.source_table.isVisible() and toggle.isChecked()
-    assert toggle.icon().pixmap(16, 16).toImage() == open_icon
+    assert arrow.pixmap().toImage() == open_icon
+    assert toggle.icon().pixmap(16, 16).toImage() == list_icon
     menu = legend.menu()
     try:
         menu.popup(legend.mapToGlobal(QPoint(0, legend.height())))

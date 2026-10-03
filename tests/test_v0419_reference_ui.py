@@ -59,7 +59,7 @@ def test_cover_panel_is_compact_grid_like_reference():
     assert "self.cover_browse_button = QPushButton('Wyszukaj')" not in EDITOR
     assert "self.show_more_covers_button = QPushButton('Pokaż więcej')" not in EDITOR
     assert 'Więcej okładek online…' not in EDITOR
-    assert 'preview_size = 78' in EDITOR
+    assert 'preview_size = 90' in EDITOR
     assert 'columns = 2' in EDITOR
     assert "entries.append(('placeholder', 'BRAK OKŁADKI'))" in EDITOR
 

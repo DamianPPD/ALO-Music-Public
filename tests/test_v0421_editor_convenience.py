@@ -168,8 +168,9 @@ def test_cover_panel_uses_larger_art_and_two_column_proposals(tmp_path: Path):
             preview = card.findChild(QLabel, 'CoverProposalPreview')
             assert card.minimumWidth() >= preview.width() + 6
             assert card.minimumHeight() >= preview.height() + 6
-        assert dialog.search_cover_button.geometry().top() > dialog.choose_cover_button.geometry().bottom()
-        assert dialog.choose_cover_button.width() == dialog.search_cover_button.width()
+        assert dialog.search_cover_button.geometry().bottom() == dialog.choose_cover_button.geometry().bottom()
+        assert abs(dialog.choose_cover_button.width() - dialog.search_cover_button.width()) <= 1
+        assert dialog.search_cover_button.geometry().left() > dialog.choose_cover_button.geometry().right()
     finally:
         _close(dialog)
 

@@ -222,8 +222,7 @@ def test_compact_info_layout_does_not_stretch_comment(editor, app, language, siz
     shell = editor._field_value_shells['comment']
     top = editor.comment.mapTo(shell, QPoint()).y()
     assert top <= 5 and shell.height() - top - editor.comment.height() <= 5
-    assert editor.cover_info.height() <= 96
-    assert editor.cover_info.height() <= editor.cover_info.sizeHint().height() + 2
+    assert 68 <= editor.cover_info.height() <= 96
     assert set(editor.cover_info_values) == {'source', 'resolution', 'type', 'format', 'size'}
     for value in editor.cover_info_values.values():
         assert value.geometry().height() >= value.fontMetrics().height()

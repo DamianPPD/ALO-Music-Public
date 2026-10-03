@@ -199,6 +199,7 @@ QToolButton#MetadataSourceBadge[sourceKind="discogs"], QLabel#SourceLegendBadge[
 QToolButton#MetadataSourceBadge[sourceKind="musicbrainz"], QLabel#SourceLegendBadge[sourceKind="musicbrainz"] { color:#eef0ff; background:#222d5c; border:1px solid #7289ff; }
 QToolButton#MetadataSourceBadge[sourceKind="manual"], QLabel#SourceLegendBadge[sourceKind="manual"] { color:#fff2df; background:#4d3214; border:1px solid #ffb84d; }
 QToolButton#MetadataSourceBadge[sourceKind="analysis"], QLabel#SourceLegendBadge[sourceKind="analysis"] { color:#e6fffd; background:#153f40; border:1px solid #49d6cf; }
+QToolButton#MetadataSourceBadge[sourceKind="audio_recognition"], QLabel#SourceLegendBadge[sourceKind="audio_recognition"] { color:#20c5c3; background:#153f40; border:1px solid #20c5c3; }
 QToolButton#MetadataSourceBadge[sourceKind="filename"], QLabel#SourceLegendBadge[sourceKind="filename"] { color:#e4e9ef; background:#2a3038; border:1px solid #7d8894; }
 QLineEdit[sourceKind="tag"], QTextEdit[sourceKind="tag"] { border-color:#5ca3ff; }
 QLineEdit[sourceKind="discogs"], QTextEdit[sourceKind="discogs"] { border-color:#43d17d; }
@@ -895,6 +896,7 @@ QToolButton#MetadataSourceBadge[sourceKind="musicbrainz"],
 QToolButton#MetadataSourceBadge[sourceKind="apple"],
 QToolButton#MetadataSourceBadge[sourceKind="manual"],
 QToolButton#MetadataSourceBadge[sourceKind="analysis"],
+QToolButton#MetadataSourceBadge[sourceKind="audio_recognition"],
 QToolButton#MetadataSourceBadge[sourceKind="filename"] {
     background:#171f27; border-color:#3a4651; color:#b7c3cd;
 }
@@ -2831,8 +2833,8 @@ QDialog#MetadataEditorDialog QToolButton#SourceLegendInfoButton::menu-indicator 
 }
 QDialog#MetadataEditorDialog QWidget#EditorRecognitionDetails { background:transparent; }
 QDialog#MetadataEditorDialog QToolButton#SourceComparisonToggle {
-    background:transparent; border:0; border-radius:3px; padding:0;
-    min-width:24px; max-width:24px; min-height:22px; max-height:22px;
+    background:transparent; border:0; border-radius:3px; padding:0 22px 0 4px;
+    min-width:20px; max-width:20px; min-height:22px; max-height:22px;
 }
 QDialog#MetadataEditorDialog QToolButton#SourceComparisonToggle:hover { background:#17343d; }
 QDialog#MetadataEditorDialog QWidget#RecognitionResultRow { background:transparent; }
@@ -2841,6 +2843,7 @@ QDialog#MetadataEditorDialog QToolButton#EditorRecognitionDetailsButton {
     background:transparent; color:#bdcfd8; border:1px solid #304650; border-radius:4px; padding:0 25px 0 7px;
 }
 QDialog#MetadataEditorDialog QLabel#RecognitionDetailsChevron,
+QDialog#MetadataEditorDialog QLabel#SourceComparisonChevron,
 QDialog#MetadataEditorDialog QLabel#OutputFilenameIcon { background:transparent; border:0; padding:0; }
 QDialog#MetadataEditorDialog QWidget#CoverActions { background:transparent; border:0; }
 QDialog#MetadataEditorDialog QToolButton#EditorRecognitionDetailsButton:hover { background:#17343d; color:#eef8fc; }
@@ -2908,6 +2911,9 @@ QDialog#MetadataEditorDialog QLabel#CoverProposalSelectedMarker {
 }
 QDialog#MetadataEditorDialog QLabel#CoverMainPreview {
     background:#070d12; border:1px solid #293944; border-radius:8px;
+}
+QDialog#MetadataEditorDialog QFrame#CoverProposalCard {
+    min-width:96px; max-width:96px; min-height:96px; max-height:96px;
 }
 '''
 DARK_STYLE += METADATA_EDITOR_REFINEMENT_STYLE

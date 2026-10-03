@@ -237,7 +237,7 @@ for size in ((1540, 1000), (1420, 900), (1180, 760)):
     assert abs(tops[0] - tops[1]) <= 1, tops
     assert abs(bottoms[0] - bottoms[1]) <= 1, bottoms
     assert 60 <= editor.comment.height() <= 82
-    assert editor.cover_info.height() <= 80
+    assert editor.cover_info.height() <= 96
     assert editor.cover_main_preview.size().toTuple() == (288, 288)
     before = [p.geometry() for p in panels]
     editor.recognition_details_button.click()

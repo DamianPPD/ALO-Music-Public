@@ -107,26 +107,43 @@ def _fill_editor_native_background(event_type, message) -> bool:
 class RecognitionDetailsButton(QToolButton):
     """Keep the detail icon and trailing state chevron visible together."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, icon_name='details', icon_size=14,
+                 color='#bdcfd8', chevron_name='RecognitionDetailsChevron'):
         super().__init__(parent)
-        self.setIcon(library_icon('details', '#bdcfd8', 14))
-        self.setIconSize(QSize(14, 14))
+        self._chevron_color = color
+        self.setIcon(library_icon(icon_name, color, icon_size))
+        self.setIconSize(QSize(icon_size, icon_size))
         self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._chevron = QLabel(self)
-        self._chevron.setObjectName('RecognitionDetailsChevron')
+        self._chevron.setObjectName(chevron_name)
         self._chevron.setFixedSize(14, 14)
         self._chevron.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.toggled.connect(self._refresh_chevron)
         self._refresh_chevron(False)
 
     def _refresh_chevron(self, expanded: bool) -> None:
-        self._chevron.setPixmap(library_icon('collapse' if expanded else 'expand', '#bdcfd8', 14).pixmap(14, 14))
+        self._chevron.setPixmap(library_icon('collapse' if expanded else 'expand', self._chevron_color, 14).pixmap(14, 14))
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._chevron.move(self.width() - self._chevron.width() - 7,
                            (self.height() - self._chevron.height()) // 2)
+
+
+class CoverProposalsHost(QFrame):
+    """Keep the two-by-two grid square at each available column width."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        policy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        policy.setHeightForWidth(True)
+        self.setSizePolicy(policy)
+        self.setMinimumSize(218, 218)
+        self.setMaximumWidth(288)
+
+    def heightForWidth(self, width):
+        return max(218, min(288, width))
 
 
 class RecognitionDetailsPopup(QFrame):
@@ -1132,10 +1149,11 @@ class MetadataEditorDialog(QDialog):
         self.cover_info = QFrame()
         self.cover_info.setObjectName('CoverInformationPanel')
         self.cover_info.setFixedWidth(288)
+        self.cover_info.setFixedHeight(96)
         self.cover_info.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Maximum)
         info_layout = QVBoxLayout(self.cover_info)
-        info_layout.setContentsMargins(6, 1, 6, 1)
-        info_layout.setSpacing(1)
+        info_layout.setContentsMargins(6, 3, 6, 3)
+        info_layout.setSpacing(2)
         self.cover_info_heading = QLabel('Informacje o okładce')
         self.cover_info_heading.setObjectName('CoverInformationHeading')
         info_layout.addWidget(self.cover_info_heading)
@@ -1146,7 +1164,7 @@ class MetadataEditorDialog(QDialog):
         info_grid = QGridLayout()
         info_grid.setContentsMargins(0, 0, 0, 0)
         info_grid.setHorizontalSpacing(6)
-        info_grid.setVerticalSpacing(0)
+        info_grid.setVerticalSpacing(1)
         self.cover_info_labels = {}
         self.cover_info_values = {}
         for key, title, row, column in (('source', 'Źródło', 0, 0),
@@ -1193,30 +1211,31 @@ class MetadataEditorDialog(QDialog):
         proposals_head.addStretch(1)
         cover_side.addLayout(proposals_head)
 
-        self.cover_proposals_host = QFrame()
+        self.cover_proposals_host = CoverProposalsHost()
         self.cover_proposals_host.setObjectName('CoverProposalsHost')
         self.cover_proposals_grid = QGridLayout(self.cover_proposals_host)
         self.cover_proposals_grid.setContentsMargins(7, 7, 7, 7)
         self.cover_proposals_grid.setHorizontalSpacing(6)
         self.cover_proposals_grid.setVerticalSpacing(6)
-        self.cover_proposals_grid.setColumnMinimumWidth(0, 90)
-        self.cover_proposals_grid.setColumnMinimumWidth(1, 90)
-        self.cover_proposals_host.setMinimumWidth(200)
-        cover_side.addWidget(self.cover_proposals_host, 0, Qt.AlignmentFlag.AlignTop)
+        self.cover_proposals_grid.setColumnMinimumWidth(0, 96)
+        self.cover_proposals_grid.setColumnMinimumWidth(1, 96)
+        for index in range(2):
+            self.cover_proposals_grid.setRowStretch(index, 1)
+            self.cover_proposals_grid.setColumnStretch(index, 1)
+        cover_side.addWidget(self.cover_proposals_host, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        cover_side.addStretch(1)
+        cover_top.addLayout(cover_side, 1)
+        gl.addLayout(cover_top, 1)
 
         cover_actions = QWidget()
         cover_actions.setObjectName('CoverActions')
         cover_actions.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
-        cover_actions_layout = QVBoxLayout(cover_actions)
+        cover_actions_layout = QHBoxLayout(cover_actions)
         cover_actions_layout.setContentsMargins(0, 2, 0, 0)
         cover_actions_layout.setSpacing(7)
-        cover_actions_layout.addWidget(self.choose_cover_button)
-        cover_actions_layout.addWidget(self.search_cover_button)
-        cover_side.addWidget(cover_actions)
-        cover_side.addStretch(1)
-        cover_top.addLayout(cover_side, 1)
-        gl.addLayout(cover_top)
-        gl.addStretch(1)
+        cover_actions_layout.addWidget(self.choose_cover_button, 1)
+        cover_actions_layout.addWidget(self.search_cover_button, 1)
+        gl.addWidget(cover_actions)
 
         self._cover_candidate_urls: dict[str, str] = {}
         self._cover_candidate_pixmaps: dict[str, QPixmap] = {}
@@ -1307,11 +1326,12 @@ class MetadataEditorDialog(QDialog):
         compare_title = _section_header('Porównanie źródeł  (pomocniczo)')
         compare_title.layout().insertWidget(2, self.source_legend_button)
         compare_head.addWidget(compare_title, 1)
-        self.source_comparison_toggle = QToolButton()
+        self.source_comparison_toggle = RecognitionDetailsButton(
+            icon_name='legend', icon_size=16, color='#a8bdca', chevron_name='SourceComparisonChevron')
         self.source_comparison_toggle.setObjectName('SourceComparisonToggle')
         self.source_comparison_toggle.setCheckable(True)
         self.source_comparison_toggle.setChecked(True)
-        self.source_comparison_toggle.setFixedSize(24, 22)
+        self.source_comparison_toggle.setFixedSize(46, 22)
         self.source_comparison_toggle.setIconSize(QSize(16, 16))
         self.source_comparison_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.source_comparison_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1452,7 +1472,6 @@ class MetadataEditorDialog(QDialog):
 
     def _toggle_source_comparison(self, expanded: bool) -> None:
         self.source_table.setVisible(expanded)
-        self.source_comparison_toggle.setIcon(library_icon('collapse' if expanded else 'expand', '#a8bdca', 16))
         caption = 'Zwiń porównanie źródeł' if expanded else 'Rozwiń porównanie źródeł'
         self.source_comparison_toggle.setProperty('_alo_pl_tooltip', caption)
         self.source_comparison_toggle.setToolTip(ui_text(self, caption))
@@ -2707,7 +2726,7 @@ class MetadataEditorDialog(QDialog):
         self.choose_cover_button.setProperty('_alo_pl_tooltip', tooltip)
         self.choose_cover_button.setToolTip(ui_text(self, tooltip))
 
-        preview_size = 78
+        preview_size = 90
         columns = 2
 
         for index, (key, title) in enumerate(visible_entries):
