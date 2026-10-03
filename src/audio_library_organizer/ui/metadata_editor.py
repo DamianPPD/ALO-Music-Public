@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import copy, deepcopy
 from pathlib import Path
+import sys
 
 from PySide6.QtCore import Property, Qt, QTimer, QUrl, Signal, Slot, QRegularExpression, QSize, QRectF, QPoint, QPointF, QBuffer, QByteArray, QIODevice, QObject, QEvent
 from PySide6.QtGui import QAction, QPixmap, QIcon, QColor, QPalette, QPainter, QPen, QPolygonF, QRegularExpressionValidator, QDesktopServices, QImageReader
@@ -13,6 +14,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,
+    QLayout,
     QLabel,
     QLineEdit,
     QMenu,
@@ -61,6 +63,44 @@ def _editor_surface_palette(widget: QWidget) -> None:
     for role in (QPalette.ColorRole.Window, QPalette.ColorRole.Base):
         palette.setColor(role, QColor('#10141a'))
     widget.setPalette(palette)
+
+
+def _fill_editor_native_background(event_type, message) -> bool:
+    """Initialize Windows' native client before Qt's first backingstore paint."""
+    if sys.platform != 'win32' or event_type != b'windows_generic_MSG' or not message:
+        return False
+    import ctypes
+    from ctypes import wintypes
+
+    native = wintypes.MSG.from_address(int(message))
+    if native.message != 0x0014 or not native.wParam:  # WM_ERASEBKGND supplies the HDC
+        return False
+    try:
+        user32 = ctypes.WinDLL('user32', use_last_error=True)
+        gdi32 = ctypes.WinDLL('gdi32', use_last_error=True)
+        user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+        user32.GetClientRect.restype = wintypes.BOOL
+        user32.FillRect.argtypes = [wintypes.HDC, ctypes.POINTER(wintypes.RECT), wintypes.HBRUSH]
+        user32.FillRect.restype = ctypes.c_int
+        gdi32.CreateSolidBrush.argtypes = [wintypes.DWORD]
+        gdi32.CreateSolidBrush.restype = wintypes.HBRUSH
+        gdi32.DeleteObject.argtypes = [wintypes.HANDLE]
+        gdi32.DeleteObject.restype = wintypes.BOOL
+        rectangle = wintypes.RECT()
+        if not user32.GetClientRect(native.hWnd, ctypes.byref(rectangle)):
+            return False
+        brush = gdi32.CreateSolidBrush(0x1a1410)  # COLORREF for #10141a (BGR)
+        if not brush:
+            return False
+        try:
+            painted = bool(user32.FillRect(native.wParam, ctypes.byref(rectangle), brush))
+        finally:
+            gdi32.DeleteObject(brush)
+        crash_debug.record('editor.native_background', hwnd=int(native.hWnd),
+                           message='WM_ERASEBKGND', painted=painted, color='#10141a')
+        return painted
+    except (OSError, AttributeError, TypeError, ValueError):
+        return False
 
 
 class RecognitionDetailsPopup(QFrame):
@@ -521,6 +561,7 @@ class MetadataEditorDialog(QDialog):
     def __init__(self, track: TrackRecord, parent=None, *, filename_template: str = DEFAULT_FILENAME_TEMPLATE, player_bar=None, genre_suggestions=(), normalize_names: bool = True, name_rules=None, navigation_index: int = 0, navigation_total: int = 1):
         super().__init__(parent)
         self.setObjectName('MetadataEditorDialog')
+        self._native_first_paint_pending = True
         _editor_surface_palette(self)
         self.track = track
         self.navigation_total = max(1, int(navigation_total))
@@ -638,6 +679,7 @@ class MetadataEditorDialog(QDialog):
         content_host.setObjectName('MetadataEditorContent')
         _editor_surface_palette(content_host)
         content = QVBoxLayout(content_host)
+        content.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         content.setContentsMargins(0, 0, 6, 0)
         content.setSpacing(9)
         self.content_scroll.setWidget(content_host)
@@ -882,23 +924,23 @@ class MetadataEditorDialog(QDialog):
         workspace.setSpacing(10)
         self.metadata_column = QWidget()
         self.metadata_column.setObjectName('MetadataEditorColumn')
-        self.metadata_column.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        self.metadata_column.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         metadata_column_layout = QVBoxLayout(self.metadata_column)
         metadata_column_layout.setContentsMargins(0, 0, 0, 0)
         metadata_column_layout.setSpacing(8)
         self.cover_recognition_column = QWidget()
         self.cover_recognition_column.setObjectName('EditorCoverRecognitionColumn')
-        self.cover_recognition_column.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        self.cover_recognition_column.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         cover_recognition_layout = QVBoxLayout(self.cover_recognition_column)
         cover_recognition_layout.setContentsMargins(0, 0, 0, 0)
         cover_recognition_layout.setSpacing(8)
 
         metadata = self.metadata_card = QFrame()
         metadata.setObjectName('PrimaryMetadataCard')
-        metadata.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        metadata.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         form = QFormLayout(metadata)
         form.setContentsMargins(10, 8, 10, 8)
-        form.setVerticalSpacing(5)
+        form.setVerticalSpacing(8)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)
         form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
@@ -943,7 +985,7 @@ class MetadataEditorDialog(QDialog):
         url_row.addWidget(self.open_url_button)
         form.addRow(self._field_label('Discogs URL'), url_host)
         form.addRow(self._field_label('Komentarz'), self._field_input('comment', self.comment))
-        metadata_column_layout.addWidget(metadata, 0, Qt.AlignmentFlag.AlignTop)
+        metadata_column_layout.addWidget(metadata)
 
         recognition = self.recognition_card = self.recognition_details_popup = RecognitionDetailsPopup(
             self, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
@@ -1037,11 +1079,11 @@ class MetadataEditorDialog(QDialog):
         ril.addWidget(self.recognition_details_scroll)
         recognition.closed.connect(lambda: self.recognition_details_button.setChecked(False))
         self.finished.connect(lambda _result: recognition.hide())
-        workspace.addWidget(self.metadata_column, 3, Qt.AlignmentFlag.AlignTop)
+        workspace.addWidget(self.metadata_column, 3)
 
         gallery = self.cover_gallery = QFrame()
         gallery.setObjectName('CoverGallery')
-        gallery.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        gallery.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         gl = QVBoxLayout(gallery)
         gl.setContentsMargins(10, 8, 10, 8)
         gl.setSpacing(6)
@@ -1157,7 +1199,7 @@ class MetadataEditorDialog(QDialog):
         self._selected_cover_key = 'placeholder'
         self._selected_external_url = track.cover_art_url
         cover_recognition_layout.addWidget(gallery)
-        workspace.addWidget(self.cover_recognition_column, 2, Qt.AlignmentFlag.AlignTop)
+        workspace.addWidget(self.cover_recognition_column, 2)
         content.addLayout(workspace)
 
         naming = QFrame()
@@ -1414,6 +1456,7 @@ class MetadataEditorDialog(QDialog):
     def _field_input(self, field_name: str, widget: QLineEdit | QTextEdit) -> QWidget:
         self._field_widgets[field_name] = widget
         host = QWidget()
+        host.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         row = QHBoxLayout(host)
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(5)
@@ -2405,6 +2448,21 @@ class MetadataEditorDialog(QDialog):
             event.accept()
         else:
             event.ignore()
+
+    def nativeEvent(self, event_type, message):
+        # Qt acknowledges native erases without filling them. The new HWND can
+        # be exposed before the first backingstore flush; QPalette/QSS do not
+        # paint that interval. Leave every subsequent erase to Qt so established
+        # child content is never cleared outside the backingstore's dirty region.
+        if self._native_first_paint_pending and _fill_editor_native_background(event_type, message):
+            return True, 1
+        return False, 0
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        handle = self.windowHandle()
+        if handle is not None and handle.isExposed():
+            self._native_first_paint_pending = False
 
     def hideEvent(self, event):
         self.recognition_details_popup.hide()

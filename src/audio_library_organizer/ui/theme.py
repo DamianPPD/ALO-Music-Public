@@ -2903,6 +2903,9 @@ QDialog#MetadataEditorDialog QFrame#CoverProposalCard[selected="true"] {
 QDialog#MetadataEditorDialog QLabel#CoverProposalSelectedMarker {
     background:transparent; border:0; padding:0; margin:0;
 }
+QDialog#MetadataEditorDialog QLabel#CoverMainPreview {
+    background:#070d12; border:1px solid #293944; border-radius:8px;
+}
 '''
 DARK_STYLE += METADATA_EDITOR_REFINEMENT_STYLE
 LIGHT_STYLE += METADATA_EDITOR_REFINEMENT_STYLE
