@@ -81,7 +81,7 @@ def test_only_problematic_fields_have_visible_status_icons_and_recover(editor, f
 
 def test_regular_sections_reuse_the_two_line_library_header_style(editor):
     marks = editor.findChildren(QLabel, 'LibrarySectionMark')
-    assert len(marks) == 5  # four layout sections and the recognition popup
+    assert len(marks) == 4  # three layout sections and the recognition popup; filename has a document icon
     for mark in marks:
         assert mark.size().toTuple() == (20, 7)
         assert mark.pixmap().isNull()

@@ -2838,8 +2838,11 @@ QDialog#MetadataEditorDialog QToolButton#SourceComparisonToggle:hover { backgrou
 QDialog#MetadataEditorDialog QWidget#RecognitionResultRow { background:transparent; }
 QDialog#MetadataEditorDialog QLabel#RecognitionResultStatus { background:transparent; color:#9bb4c2; font-size:9pt; }
 QDialog#MetadataEditorDialog QToolButton#EditorRecognitionDetailsButton {
-    background:transparent; color:#bdcfd8; border:1px solid #304650; border-radius:4px; padding:0 7px;
+    background:transparent; color:#bdcfd8; border:1px solid #304650; border-radius:4px; padding:0 25px 0 7px;
 }
+QDialog#MetadataEditorDialog QLabel#RecognitionDetailsChevron,
+QDialog#MetadataEditorDialog QLabel#OutputFilenameIcon { background:transparent; border:0; padding:0; }
+QDialog#MetadataEditorDialog QWidget#CoverActions { background:transparent; border:0; }
 QDialog#MetadataEditorDialog QToolButton#EditorRecognitionDetailsButton:hover { background:#17343d; color:#eef8fc; }
 QDialog#MetadataEditorDialog QFrame#RecognitionDetailsPopup {
     background:#0b141b; border:1px solid #35515f; border-radius:6px;

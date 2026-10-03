@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import copy, deepcopy
+from html import escape
 from pathlib import Path
 import sys
 
@@ -101,6 +102,31 @@ def _fill_editor_native_background(event_type, message) -> bool:
         return painted
     except (OSError, AttributeError, TypeError, ValueError):
         return False
+
+
+class RecognitionDetailsButton(QToolButton):
+    """Keep the detail icon and trailing state chevron visible together."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setIcon(library_icon('details', '#bdcfd8', 14))
+        self.setIconSize(QSize(14, 14))
+        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._chevron = QLabel(self)
+        self._chevron.setObjectName('RecognitionDetailsChevron')
+        self._chevron.setFixedSize(14, 14)
+        self._chevron.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.toggled.connect(self._refresh_chevron)
+        self._refresh_chevron(False)
+
+    def _refresh_chevron(self, expanded: bool) -> None:
+        self._chevron.setPixmap(library_icon('collapse' if expanded else 'expand', '#bdcfd8', 14).pixmap(14, 14))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._chevron.move(self.width() - self._chevron.width() - 7,
+                           (self.height() - self._chevron.height()) // 2)
 
 
 class RecognitionDetailsPopup(QFrame):
@@ -767,8 +793,9 @@ class MetadataEditorDialog(QDialog):
         result_row.setSpacing(8)
         self.recognition_result_status = QLabel()
         self.recognition_result_status.setObjectName('RecognitionResultStatus')
+        self.recognition_result_status.setTextFormat(Qt.TextFormat.RichText)
         result_row.addWidget(self.recognition_result_status)
-        self.recognition_details_button = self.recognition_toggle = QToolButton()
+        self.recognition_details_button = self.recognition_toggle = RecognitionDetailsButton()
         self.recognition_details_button.setObjectName('EditorRecognitionDetailsButton')
         self.recognition_details_button.setText('Szczegóły')
         self.recognition_details_button.setToolTip('Szczegóły rozpoznania')
@@ -1177,19 +1204,19 @@ class MetadataEditorDialog(QDialog):
         self.cover_proposals_host.setMinimumWidth(200)
         cover_side.addWidget(self.cover_proposals_host, 0, Qt.AlignmentFlag.AlignTop)
 
+        cover_actions = QWidget()
+        cover_actions.setObjectName('CoverActions')
+        cover_actions.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        cover_actions_layout = QVBoxLayout(cover_actions)
+        cover_actions_layout.setContentsMargins(0, 2, 0, 0)
+        cover_actions_layout.setSpacing(7)
+        cover_actions_layout.addWidget(self.choose_cover_button)
+        cover_actions_layout.addWidget(self.search_cover_button)
+        cover_side.addWidget(cover_actions)
+        cover_side.addStretch(1)
         cover_top.addLayout(cover_side, 1)
         gl.addLayout(cover_top)
         gl.addStretch(1)
-
-        cover_actions = QWidget()
-        cover_actions.setObjectName('CoverActions')
-        cover_actions_row = QHBoxLayout(cover_actions)
-        cover_actions_row.setContentsMargins(0, 2, 0, 0)
-        cover_actions_row.setSpacing(7)
-        cover_actions_row.addWidget(self.choose_cover_button)
-        cover_actions_row.addStretch(1)
-        cover_actions_row.addWidget(self.search_cover_button)
-        gl.addWidget(cover_actions)
 
         self._cover_candidate_urls: dict[str, str] = {}
         self._cover_candidate_pixmaps: dict[str, QPixmap] = {}
@@ -1209,7 +1236,11 @@ class MetadataEditorDialog(QDialog):
         nl.setSpacing(3)
         name_row = QHBoxLayout()
         name_row.setSpacing(8)
-        name_row.addWidget(_section_mark())
+        filename_icon = QLabel()
+        filename_icon.setObjectName('OutputFilenameIcon')
+        filename_icon.setFixedSize(20, 20)
+        filename_icon.setPixmap(library_icon('metadata_edit', '#91adbe', 20).pixmap(20, 20))
+        name_row.addWidget(filename_icon)
         nh = QLabel('Nazwa wynikowa')
         nh.setObjectName('DetailFieldHeading')
         name_row.addWidget(nh)
@@ -1282,6 +1313,8 @@ class MetadataEditorDialog(QDialog):
         self.source_comparison_toggle.setChecked(True)
         self.source_comparison_toggle.setFixedSize(24, 22)
         self.source_comparison_toggle.setIconSize(QSize(16, 16))
+        self.source_comparison_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.source_comparison_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         self.source_comparison_toggle.toggled.connect(self._toggle_source_comparison)
         compare_head.addWidget(self.source_comparison_toggle, 0, Qt.AlignmentFlag.AlignRight)
         comparison_layout.addLayout(compare_head)
@@ -2042,9 +2075,12 @@ class MetadataEditorDialog(QDialog):
             duration = f'{total // 60:02d}:{total % 60:02d}'
         bitrate = f'{self.track.bitrate_kbps} kb/s' if self.track.bitrate_kbps else '—'
         self.recognition_values['source'].setText(ui_text(self, source_display))
-        summary = (ui_text(self, 'Źródło audio zatwierdzone') + ' · ' if self.track.audio_recognition else '')
-        self.recognition_result_status.setText(summary + ui_text(self, 'Główne źródło') + ': ' + ui_text(self, source_display))
         source_color = self.SOURCE_COLORS.get(source, '#d5e2e8')
+        self.recognition_result_status.setProperty('sourceColor', source_color)
+        self.recognition_result_status.setText(
+            escape(ui_text(self, 'Główne źródło')) + ': '
+            f'<span style="color:{source_color};font-weight:700;">{escape(ui_text(self, source_display))}</span>'
+        )
         self.recognition_values['source'].setProperty('sourceColor', source_color)
         self.recognition_values['source'].setStyleSheet(
             f'color:{source_color}; background:transparent; font-weight:700;'
