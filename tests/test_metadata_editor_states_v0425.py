@@ -5,6 +5,7 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 import pytest
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QColor, QPixmap
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QPushButton, QLabel
 
 from audio_library_organizer.domain.models import TrackRecord
@@ -41,7 +42,7 @@ def _row(editor, source):
 
 
 @pytest.mark.parametrize('language', ['pl', 'en'])
-def test_last_applied_source_highlight_moves_and_previous_source_remains_clickable(editor, language):
+def test_last_applied_source_caption_fits_and_previous_source_remains_clickable(editor, language):
     app = QApplication.instance()
     apply_static_language(editor, language)
     selected = '✓ Aktualnie wybrane' if language == 'pl' else '✓ Currently selected'
@@ -58,17 +59,70 @@ def test_last_applied_source_highlight_moves_and_previous_source_remains_clickab
             assert action.isEnabled()
             assert (action.text() == selected) == (other == row)
             assert action.width() >= action.fontMetrics().horizontalAdvance(action.text()) + 14
-            assert (editor.source_table.item(other, 1).background().color().name() == '#153b2b') == (other == row)
+            cell_widget = editor.source_table.cellWidget(other, 6)
+            assert cell_widget.contentsRect().contains(action.geometry())
+            cell_rect = editor.source_table.visualRect(editor.source_table.model().index(other, 6))
+            action_rect = action.rect().translated(action.mapTo(editor.source_table.viewport(), QPoint()))
+            assert cell_rect.contains(action_rect)
+            assert editor.source_table.item(other, 1).background().style() == Qt.BrushStyle.NoBrush
         painted = editor.source_table.viewport().grab().toImage()
         cell = editor.source_table.visualItemRect(editor.source_table.item(row, 1))
         color = painted.pixelColor(cell.right() - 12, cell.center().y())
-        assert color.green() > color.blue(), color.name()
+        assert color.blue() >= color.green(), color.name()
     editor.artist.setText('Manual artist')
     apply_static_language(editor, 'en' if language == 'pl' else 'pl')
     editor.refresh_audio_language()
     action = editor.source_table.cellWidget(_row(editor, 'Discogs'), 6).findChild(QPushButton, 'UseSourceDataButton')
     assert action.text() == ('✓ Currently selected' if language == 'pl' else '✓ Aktualnie wybrane')
     assert action.isEnabled()
+
+
+def test_source_comparison_hover_is_subtle_neutral_and_leaves_applied_caption(editor):
+    app = QApplication.instance()
+    editor._apply_source_bundle('Tag')
+    app.processEvents()
+    table = editor.source_table
+    editor.content_scroll.ensureWidgetVisible(table)
+    QTest.mouseMove(editor.source_comparison_toggle, editor.source_comparison_toggle.rect().center())
+    app.processEvents()
+    row = _row(editor, 'MusicBrainz')
+    before = table.viewport().grab().toImage()
+    QTest.mouseMove(table.viewport(), table.visualItemRect(table.item(row, 1)).center())
+    app.processEvents()
+    hover = table.viewport().grab().toImage()
+    for column in range(6):
+        rect = table.visualItemRect(table.item(row, column))
+        point = QPoint(rect.right() - 12, rect.center().y())
+        base, color = before.pixelColor(point), hover.pixelColor(point)
+        assert 0 < color.value() - base.value() < 30
+        assert color.blue() >= color.green()
+        assert max(color.red(), color.green(), color.blue()) - min(color.red(), color.green(), color.blue()) < 20
+    action = table.cellWidget(_row(editor, 'Tag'), 6).findChild(QPushButton, 'UseSourceDataButton')
+    assert action.text() == '✓ Aktualnie wybrane'
+
+
+@pytest.mark.parametrize('source,expected', [
+    ('Tag', '#5ca3ff'), ('Discogs', '#43d17d'), ('MusicBrainz', '#7289ff'),
+    ('Apple / iTunes', '#ff6670'), (AUDIO_SOURCE, '#a3a8ff'),
+    ('Ręcznie', '#ffb84d'), ('Analiza audio', '#49d6cf'), ('Nazwa pliku', '#7d8894'),
+])
+def test_metadata_field_border_uses_source_color(editor, source, expected):
+    app = QApplication.instance()
+    for field in ('title', 'comment'):
+        editor._source_values.setdefault(field, {})[source] = 'Source value'
+        editor._select_source_value(field, source)
+        app.processEvents()
+        widget = editor._field_widgets[field]
+        picture = widget.grab().toImage()
+        assert picture.pixelColor(0, picture.height() // 2).name() == expected
+        assert editor._source_buttons[field].property('sourceKind') == editor.SOURCE_KINDS[source]
+    if source in ('Apple / iTunes', AUDIO_SOURCE):
+        editor.title.clear()
+        editor._current_sources['title'] = source
+        editor._refresh_source_badge('title')
+        app.processEvents()
+        picture = editor.title.grab().toImage()
+        assert picture.pixelColor(0, picture.height() // 2).name() == '#f34d64'
 
 
 def test_audio_panel_uses_dark_indigo_and_empty_result_stays_red(editor):

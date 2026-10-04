@@ -2790,6 +2790,10 @@ QDialog#MetadataEditorDialog QLabel#MetadataFieldWarning { background:transparen
 QDialog#MetadataEditorDialog QProgressBar#RecognitionConfidenceBar {
     min-height:6px; max-height:6px; border:0;
 }
+QDialog#MetadataEditorDialog QLineEdit[sourceKind="apple"],
+QDialog#MetadataEditorDialog QTextEdit[sourceKind="apple"] { border-color:#ff6670; }
+QDialog#MetadataEditorDialog QLineEdit[sourceKind="audio_recognition"],
+QDialog#MetadataEditorDialog QTextEdit[sourceKind="audio_recognition"] { border-color:__AUDIO_ACCENT__; }
 QDialog#MetadataEditorDialog QLineEdit[fieldProblem="true"] {
     border:1px solid #f34d64; background:#29151b; color:#fff3f5;
 }
@@ -2811,7 +2815,7 @@ QDialog#MetadataEditorDialog QFrame#AudioRecognitionSummary[emptyResult="true"] 
 QDialog#MetadataEditorDialog QFrame#AudioRecognitionSummary[emptyResult="true"] QLabel#AudioRecognitionSummaryResult {
     color:#d6dde3; font-weight:400;
 }
-'''
+'''.replace('__AUDIO_ACCENT__', AUDIO_ID_ACCENT)
 DARK_STYLE += METADATA_EDITOR_PANEL_STYLE
 LIGHT_STYLE += METADATA_EDITOR_PANEL_STYLE + r'''
 QDialog#MetadataEditorDialog QFrame#PrimaryMetadataCard QWidget#EditorSectionHeader,
@@ -2948,17 +2952,42 @@ QTabWidget#GenreSettingsTabs QTabBar::tab {
 QTabWidget#GenreSettingsTabs QTabBar::tab:selected { color:#edf3f8; border-color:__GENRE_ACCENT__; }
 QPushButton#GenreAddButton { border-color:__GENRE_ACCENT__; }
 QDialog#MetadataEditorDialog QTableWidget#SourceComparisonTable {
-    selection-background-color:#153b2b; selection-color:#f2fff7;
+    selection-background-color:#202b35; selection-color:#e4eaf0;
+}
+QDialog#MetadataEditorDialog QTableWidget#SourceComparisonTable::item:hover {
+    background:#1b252c;
 }
 QDialog#MetadataEditorDialog QTableWidget#SourceComparisonTable::item:selected {
-    background:#153b2b; color:#f2fff7;
+    background:#202b35; color:#e4eaf0;
 }
-QDialog#MetadataEditorDialog QWidget#UseSourceDataCell[selected="true"] { background:#153b2b; }
+QDialog#MetadataEditorDialog QWidget#UseSourceDataCell[selected="true"] { background:transparent; }
 QDialog#MetadataEditorDialog QPushButton#UseSourceDataButton {
     min-width:0; max-width:400px;
 }
+QDialog#MetadataEditorDialog QPushButton#UseSourceDataButton:hover {
+    background:#25323b; border-color:#6c7e8b; color:#e4eaf0;
+}
 QDialog#MetadataEditorDialog QPushButton#UseSourceDataButton[selected="true"] {
-    background:#193e2d; border-color:#416b54; color:#b6dfc6;
+    background:#24313c; border-color:#596a79; color:#e4eaf0;
+}
+QDialog#MetadataEditorDialog QPushButton#UseSourceDataButton[selected="true"]:hover {
+    background:#2c3a46; border-color:#6c7e8b;
+}
+QDialog#MetadataEditorDialog QTableWidget#AudioRecognitionCandidates {
+    background:#11151f; border-color:#4c5183; gridline-color:#292e43;
+    color:#dfe3f2; selection-background-color:#323953; selection-color:#edf0ff;
+}
+QDialog#MetadataEditorDialog QTableWidget#AudioRecognitionCandidates QHeaderView::section {
+    background:#181e2d; color:#a8b0cf; border-right-color:#343a56;
+}
+QDialog#MetadataEditorDialog QTableWidget#AudioRecognitionCandidates::item {
+    border-bottom-color:#292e43;
+}
+QDialog#MetadataEditorDialog QTableWidget#AudioRecognitionCandidates::item:hover {
+    background:#1b2130;
+}
+QDialog#MetadataEditorDialog QTableWidget#AudioRecognitionCandidates::item:selected {
+    background:#323953; color:#edf0ff;
 }
 QDialog#MetadataEditorDialog QFrame#AudioRecognitionPanel {
     background:#11151f; border:1px solid #575b91; border-left:2px solid #7076b7; border-radius:7px;

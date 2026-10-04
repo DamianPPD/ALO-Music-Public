@@ -226,26 +226,28 @@ class MissingCompleteGraphic(QWidget):
         painter.drawLine(30, 35, 35, 39); painter.drawLine(35, 39, 46, 28)
 
 
-def _source_bundle_option(option, index):
+def _source_bundle_option(option, index, table):
     styled = QStyleOptionViewItem(option)
     styled.state &= ~(QStyle.StateFlag.State_Selected | QStyle.StateFlag.State_HasFocus)
-    if index.data(Qt.ItemDataRole.UserRole + 1):
-        styled.state |= QStyle.StateFlag.State_Selected
+    if index.row() == table.hovered_row:
+        styled.state |= QStyle.StateFlag.State_MouseOver
+    else:
+        styled.state &= ~QStyle.StateFlag.State_MouseOver
     return styled
 
 
 class SourceBundleDelegate(QStyledItemDelegate):
-    """Paint the last applied bundle, independently of transient table selection."""
+    """Keep comparison rows neutral; the action caption marks the applied bundle."""
 
     def paint(self, painter, option, index):
-        super().paint(painter, _source_bundle_option(option, index), index)
+        super().paint(painter, _source_bundle_option(option, index, self.parent()), index)
 
 
 class SourceNameDelegate(QStyledItemDelegate):
     """Paint the source name in its provider color even under Qt's item stylesheet."""
 
     def paint(self, painter, option, index):
-        styled = _source_bundle_option(option, index)
+        styled = _source_bundle_option(option, index, self.parent())
         self.initStyleOption(styled, index)
         label = styled.text
         icon = QIcon(styled.icon)
@@ -271,6 +273,24 @@ class SourceNameDelegate(QStyledItemDelegate):
 class SourceComparisonTable(QTableWidget):
     """Keep source, title and action readable as the editor width changes."""
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.hovered_row = -1
+        self.setMouseTracking(True)
+        self.viewport().setMouseTracking(True)
+
+    def mouseMoveEvent(self, event):
+        row = self.indexAt(event.position().toPoint()).row()
+        if row != self.hovered_row:
+            self.hovered_row = row
+            self.viewport().update()
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event):
+        self.hovered_row = -1
+        self.viewport().update()
+        super().leaveEvent(event)
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.resize_columns()
@@ -283,7 +303,8 @@ class SourceComparisonTable(QTableWidget):
             cell = self.cellWidget(row, 6)
             button = cell.findChild(QPushButton, 'UseSourceDataButton') if cell else None
             if button is not None:
-                action_width = max(action_width, button.width() + 14)
+                # Include both layout margins and the styled item's padding/border.
+                action_width = max(action_width, button.width() + 32)
         fixed = {0: 208, 4: 58, 5: 95, 6: action_width}
         for column, width in fixed.items():
             header.resizeSection(column, width)
@@ -2235,8 +2256,6 @@ class MetadataEditorDialog(QDialog):
             use_button.setFixedSize(max(82, use_button.fontMetrics().horizontalAdvance(use_button.text()) + 18), 18)
             for column in range(6):
                 self.source_table.item(row, column).setData(Qt.ItemDataRole.UserRole + 1, selected)
-                if selected:
-                    self.source_table.item(row, column).setBackground(QColor('#153b2b'))
         self.source_table.resize_columns()
         self.source_table.resize_to_rows()
 

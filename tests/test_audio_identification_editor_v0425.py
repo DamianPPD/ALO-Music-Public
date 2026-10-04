@@ -4,7 +4,7 @@ import pytest
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
-from PySide6.QtCore import QSettings, Qt, QThread
+from PySide6.QtCore import QPoint, QSettings, Qt, QThread
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLabel, QWidgetAction
 import requests
@@ -259,6 +259,17 @@ def test_candidate_hover_and_selection_keep_whole_row_without_focus_frame(tmp_pa
         assert len(table.selectedIndexes()) == table.columnCount()
         assert editor.audio_confirm_button.isEnabled()
         assert not table.hasFocus() and not table.viewport().hasFocus()
+        selected = table.viewport().grab().toImage()
+        for column in range(table.columnCount()):
+            rect = table.visualItemRect(table.item(0, column))
+            point = QPoint(rect.right() - 5, rect.center().y())
+            selected_color, hover_color = selected.pixelColor(point), hover.pixelColor(point)
+            assert 225 <= selected_color.hue() <= 285, selected_color.name()
+            assert selected_color.blue() > selected_color.green()
+            assert selected_color.value() < 100
+            assert selected_color != hover_color
+            assert selected_color.value() > hover_color.value() + 15
+            assert hover_color.blue() >= hover_color.green()
     finally:
         editor._force_closing = True
         editor.close()
