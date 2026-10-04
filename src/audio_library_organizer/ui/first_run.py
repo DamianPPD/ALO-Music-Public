@@ -111,7 +111,7 @@ class FirstRunDialog(QDialog):
         pl = QVBoxLayout(preview); pl.setContentsMargins(14, 10, 14, 10); pl.setSpacing(3)
         ph = QLabel('BIBLIOTEKA ZOSTANIE UTWORZONA TUTAJ'); ph.setObjectName('FieldHeading')
         self.preview_path = QLabel('Wybierz lokalizację powyżej'); self.preview_path.setObjectName('PathPreview'); self.preview_path.setWordWrap(True)
-        folders = QLabel('GOTOWE   •   NIE WYBRANE   •   DO SPRAWDZENIA   •   MOJE FOLDERY MP3   •   raporty'); folders.setObjectName('MutedText')
+        folders = QLabel('GOTOWE   •   NIE WYBRANE   •   DO SPRAWDZENIA   •   Foldery z zaznaczonych utworów   •   raporty'); folders.setObjectName('MutedText')
         pl.addWidget(ph); pl.addWidget(self.preview_path); pl.addWidget(folders); root.addWidget(preview)
 
         if initial_settings is not None:

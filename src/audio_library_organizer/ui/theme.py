@@ -3090,18 +3090,18 @@ QWidget#StartLibraryPanels QLabel#QuickAccessIcon {
     background:transparent; border:0; border-radius:0;
 }
 QWidget#StartLibraryPanels QLabel#StartMetricHeading {
-    color:#b0c3ce; font-size:9.5pt; font-weight:500;
+    color:#bed0db; font-size:10.5pt; font-weight:550;
 }
 QWidget#StartLibraryPanels QLabel#StartMetricValue { color:#e0ebf1; }
 QWidget#StartLibraryPanels QProgressBar#StartMetricProgress {
-    min-height:7px; max-height:7px; background:#203747; border:0; border-radius:2px;
+    min-height:9px; max-height:9px; background:#203747; border:0; border-radius:3px;
 }
 QWidget#StartLibraryPanels QProgressBar#StartMetricProgress::chunk { background:#39abdc; border-radius:2px; }
 QWidget#StartLibraryPanels QProgressBar#StartMetricProgress[metricKind="online"]::chunk { background:#b987ff; }
 QWidget#StartLibraryPanels QLabel#StartAttentionTitle {
-    color:#a8cedd; font-size:9.5pt; font-weight:700;
+    color:#a8cedd; font-size:10.5pt; font-weight:700;
 }
-QWidget#StartLibraryPanels QLabel#StartAttentionText { color:#b0c3ce; font-size:8.5pt; }
+QWidget#StartLibraryPanels QLabel#StartAttentionText { color:#bed0db; font-size:9.5pt; }
 '''
 DARK_STYLE += START_LIBRARY_PANELS_STYLE
 LIGHT_STYLE += START_LIBRARY_PANELS_STYLE

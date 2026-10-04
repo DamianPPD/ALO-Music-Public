@@ -23,6 +23,7 @@ START_C_NAMES = {
     'scan', 'recognize', 'review', 'export', 'plus', 'cancel',
     'status_ring', 'check_circle', 'spinner', 'warning',
     'music_note', 'duplicates', 'cover', 'folder', 'folder_check', 'folder_x',
+    'folder_root', 'folder_warning', 'folder_selected', 'folder_report',
     'report', 'cloud', 'document_warning', 'database', 'document_x', 'disk',
 }
 
@@ -90,7 +91,7 @@ def test_c_icon_assets_are_real_consistent_svg_and_render_at_dpi_sizes():
         assert path.is_file(), name
         root = ElementTree.parse(path).getroot()
         assert root.attrib['viewBox'] == '0 0 24 24'
-        assert root.attrib['stroke-width'] == '2.2'
+        assert root.attrib['stroke-width'] == ('1.65' if name in {'folder_root', 'folder_check', 'folder_x', 'folder_warning', 'folder_selected', 'folder_report'} else '2.2')
         assert root.attrib['stroke'] == 'currentColor'
         assert 'filter' not in path.read_text(encoding='utf-8')
         for size in (18, 23, 32):
@@ -114,8 +115,8 @@ def test_start_sections_use_c_icons_without_changing_actions(tmp_path, monkeypat
         for key, name in stat_icons.items():
             card = window.dashboard.cards[key]
             assert _pixels(card.stat_icon.pixmap()) == _pixels(icons.start_icon(name, card._accent, 32).pixmap(32, 32))
-        locations = {'root': 'folder', 'ready': 'folder_check', 'review': 'folder_warning',
-                     'not_selected': 'folder_x', 'custom_folders': 'folder_music', 'reports': 'folder_report'}
+        locations = {'root': 'folder_root', 'ready': 'folder_check', 'review': 'folder_warning',
+                     'not_selected': 'folder_x', 'custom_folders': 'folder_selected', 'reports': 'folder_report'}
         for key, name in locations.items():
             card = window.dashboard.location_cards[key]
             assert _pixels(card.title_icon.pixmap()) == _pixels(icons.start_icon(name, card.property('accentColor'), 20).pixmap(20, 20))
@@ -124,7 +125,7 @@ def test_start_sections_use_c_icons_without_changing_actions(tmp_path, monkeypat
         for key, name in metrics.items():
             box = window.dashboard.stats_values[key].parentWidget()
             icon = next(label for label in box.findChildren(QLabel) if label.pixmap() is not None)
-            assert _pixels(icon.pixmap()) == _pixels(icons.start_icon(name, '#628fb0', 18).pixmap(18, 18))
+            assert _pixels(icon.pixmap()) == _pixels(icons.start_icon(name, '#628fb0', 20).pixmap(20, 20))
         assert len(window.dashboard.location_cards) == 6
     finally:
         window.close()
@@ -217,7 +218,7 @@ def test_start_sections_have_balanced_gaps_without_resizing_cards(tmp_path):
         assert page.metric_cards['suspicious'].geometry().bottom() < page.attention_frame.y()
         assert page.cards['total'].height() == 92
         assert 70 <= page.location_cards['root'].height() <= 78
-        assert 70 <= page.metric_cards['covers'].height() <= 80
+        assert 80 <= page.metric_cards['covers'].height() <= 90
     finally:
         page.close()
 

@@ -189,7 +189,7 @@ class DashboardPage(QWidget):
         elif review or duplicate:
             text = f'Biblioteka wymaga uwagi: {review} do sprawdzenia, {duplicate} duplikatów.'
         elif ready:
-            text = f'{ready} utworów jest gotowych. Możesz filtrować Bibliotekę albo tworzyć własne foldery MP3.'
+            text = f'{ready} utworów jest gotowych. Możesz filtrować Bibliotekę albo tworzyć foldery z zaznaczonych utworów.'
         else:
             text = 'Uruchom rozpoznawanie online lub sprawdź dane w Bibliotece.'
         self.next_label.setText(ui_text(self, text))
@@ -872,7 +872,7 @@ class MainWindow(QMainWindow):
         brand_wrap.setFixedWidth(205); nav.addWidget(brand_wrap)
         self.nav_buttons = []
         self.nav_icon_ids = ('nav_start', 'nav_library', 'nav_duplicates', 'nav_folders', 'nav_help', 'nav_settings')
-        for icon_name, (label, index) in zip(self.nav_icon_ids, [('Start', 0), ('Biblioteka', 1), ('Duplikaty', 2), ('Moje foldery MP3', 3), ('Pomoc', 4), ('Ustawienia', 5)]):
+        for icon_name, (label, index) in zip(self.nav_icon_ids, [('Start', 0), ('Biblioteka', 1), ('Duplikaty', 2), ('Foldery z zaznaczonych utworów', 3), ('Pomoc', 4), ('Ustawienia', 5)]):
             btn = StartNavButton(label, icon_name); btn.setObjectName('TopNavButton'); btn.setCheckable(True)
             btn.clicked.connect(lambda _=False, i=index: self._navigate(i)); self.nav_buttons.append(btn)
             nav.addWidget(btn)
@@ -979,7 +979,7 @@ class MainWindow(QMainWindow):
         self.duplicates = DuplicatesPage(self.player); self.duplicates.decision_requested.connect(self._duplicate_decision); self.duplicates.edit_track_requested.connect(self._edit_duplicate_track)
         self.collections = CollectionsPage(self._collections_library_for_active())
         self.collections.add_from_library_requested.connect(lambda: self._navigate(1))
-        self.collections.play_requested.connect(lambda track: self.player.load_track(track, autoplay=True, source_label='Moje foldery MP3'))
+        self.collections.play_requested.connect(lambda track: self.player.load_track(track, autoplay=True, source_label='Foldery z zaznaczonych utworów'))
         self.collections.playlist_requested.connect(self._export_playlist)
         self.help = HelpCenter(); self.settings_page = SettingsPage(self.main_settings, qt_settings)
         self.settings_page.help_requested.connect(self._open_help_topic)
@@ -1473,7 +1473,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, self._t('Nie można utworzyć folderu'), self._t(str(exc))); return
         if self._thread is not None:
             return
-        self._set_operation_state('export', 'TWORZENIE MOJEGO FOLDERU MP3', f'Kopiowanie {len(plan.items)} zaznaczonych utworów…')
+        self._set_operation_state('export', 'TWORZENIE FOLDERU Z ZAZNACZONYCH UTWORÓW', f'Kopiowanie {len(plan.items)} zaznaczonych utworów…')
         self._set_busy(True, f'Tworzenie folderu „{name.strip()}”…', kind='collection')
         thread = QThread(self); worker = ExportWorker(plan); worker.moveToThread(thread)
         thread.started.connect(worker.run); worker.progress.connect(self._export_progress); worker.finished.connect(self._collection_finished); worker.failed.connect(self._job_failed)

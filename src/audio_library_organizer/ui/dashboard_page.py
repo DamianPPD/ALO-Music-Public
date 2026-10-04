@@ -223,8 +223,10 @@ class LibraryStructureList(QWidget):
         painter.setPen(QPen(QColor('#365568'), 1))
         painter.drawLine(8, root.geometry().bottom() + 1, 8, centers[-1])
         for row, center in zip(children, centers):
+            connector_accent = row.property('connectorAccent')
+            painter.setPen(QPen(QColor(connector_accent or '#365568'), 1))
             painter.drawLine(8, center, row.x() - 1, center)
-            painter.setBrush(QColor(START_PANEL_ICON_COLOR))
+            painter.setBrush(QColor(connector_accent or START_PANEL_ICON_COLOR))
             painter.drawEllipse(QRectF(5, center - 3, 6, 6))
         painter.end()
 
@@ -285,16 +287,21 @@ class LibraryLocationRow(QFrame):
     def set_path(self, path: Path) -> None:
         self.path = Path(path)
         self.path_label.set_path(self.path)
+        self.refresh_availability()
+
+    def refresh_availability(self) -> bool:
         available = self.path.is_dir()
+        self.open_button.setEnabled(available)
         self.open_button.setProperty('available', available)
         self.open_button.style().unpolish(self.open_button)
         self.open_button.style().polish(self.open_button)
         self.open_button.setToolTip(ui_text(self, 'Otwórz folder w Eksploratorze' if available else 'Niedostępna'))
         self.open_button.setAccessibleDescription(ui_text(self, 'Dostępna' if available else 'Niedostępna'))
-        self.open_button.setEnabled(available)
+        self.open_button.update()
+        return available
 
     def _open_folder(self) -> None:
-        if self.path.is_dir():
+        if self.refresh_availability():
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.path)))
 
 class DashboardPage(QWidget):
@@ -417,16 +424,16 @@ class DashboardPage(QWidget):
             box = QFrame()
             box.setObjectName('StartLibraryMetric')
             box.setProperty('metricKind', key)
-            box.setFixedHeight(74 if wide else 90)
+            box.setFixedHeight(82 if wide else 104)
             box_layout = QHBoxLayout(box)
-            box_layout.setContentsMargins(11, 8, 11, 8)
-            box_layout.setSpacing(8)
+            box_layout.setContentsMargins(14, 12, 14, 12)
+            box_layout.setSpacing(11)
             icon = QLabel()
             icon_name = {'covers': 'cover', 'online': 'cloud', 'suspicious': 'document_warning',
                          'size': 'database', 'missing': 'document_x', 'free_space': 'disk'}[key]
             icon.setObjectName('StartMetricIcon')
-            icon.setPixmap(start_icon(icon_name, START_PANEL_ICON_COLOR, 18).pixmap(18, 18))
-            icon.setFixedSize(22, 22)
+            icon.setPixmap(start_icon(icon_name, START_PANEL_ICON_COLOR, 20).pixmap(20, 20))
+            icon.setFixedSize(26, 26)
             icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
             box_layout.addWidget(icon)
             heading = QLabel(label)
@@ -434,7 +441,7 @@ class DashboardPage(QWidget):
             heading.setWordWrap(True)
             value = QLabel('—')
             value.setObjectName('StartMetricValue')
-            value.setStyleSheet('font-size:13pt;font-weight:750;')
+            value.setStyleSheet('font-size:15pt;font-weight:750;')
             if wide:
                 box_layout.addWidget(heading, 1)
                 value_column = QVBoxLayout()
@@ -451,7 +458,7 @@ class DashboardPage(QWidget):
                 self.stats_progress[key] = progress
             else:
                 text_column = QVBoxLayout()
-                text_column.setSpacing(4)
+                text_column.setSpacing(6)
                 text_column.addWidget(heading)
                 text_column.addWidget(value)
                 box_layout.addLayout(text_column, 1)
@@ -464,14 +471,14 @@ class DashboardPage(QWidget):
 
         self.attention_frame = QFrame()
         self.attention_frame.setObjectName('StartLibraryAttention')
-        self.attention_frame.setMinimumHeight(70)
+        self.attention_frame.setMinimumHeight(86)
         attention_layout = QHBoxLayout(self.attention_frame)
-        attention_layout.setContentsMargins(11, 8, 11, 8)
-        attention_layout.setSpacing(8)
+        attention_layout.setContentsMargins(14, 12, 14, 12)
+        attention_layout.setSpacing(11)
         attention_icon = QLabel()
         attention_icon.setObjectName('StartAttentionIcon')
-        attention_icon.setPixmap(start_icon('warning', START_PANEL_ICON_COLOR, 18).pixmap(18, 18))
-        attention_icon.setFixedSize(22, 22)
+        attention_icon.setPixmap(start_icon('warning', START_PANEL_ICON_COLOR, 20).pixmap(20, 20))
+        attention_icon.setFixedSize(26, 26)
         attention_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         attention_layout.addWidget(attention_icon)
         attention_column = QVBoxLayout()
@@ -555,17 +562,19 @@ class DashboardPage(QWidget):
     def _location_specs(settings: AppSettings) -> tuple[tuple[str, str, Path, str, str], ...]:
         library = settings.library
         return (
-            ('root', 'Biblioteka główna', library.root, 'folder', '#58c9f3'),
+            ('root', 'Biblioteka główna', library.root, 'folder_root', '#58c9f3'),
             ('ready', 'Pliki wynikowe / GOTOWE', library.ready, 'folder_check', '#55d98b'),
             ('review', 'Do sprawdzenia', library.review, 'folder_warning', '#f0b44d'),
             ('not_selected', 'Niewybrane', library.not_selected, 'folder_x', '#e675a2'),
-            ('custom_folders', 'Moje pliki MP3', library.custom_folders, 'folder_music', '#b987ff'),
+            ('custom_folders', 'Foldery z zaznaczonych utworów', library.custom_folders, 'folder_selected', '#8d9ba6'),
             ('reports', 'Raporty', library.reports, 'folder_report', '#50c9da'),
         )
 
     def _create_location_cards(self, settings: AppSettings) -> None:
         for index, (key, title, path, icon_name, accent) in enumerate(self._location_specs(settings)):
             card = LibraryLocationRow(title, path, icon_name, accent, self.quick_access_host, is_root=key == 'root')
+            if key == 'custom_folders':
+                card.setProperty('connectorAccent', accent)
             self.location_cards[key] = card
             self.quick_access_layout.addWidget(card, index, 0 if key == 'root' else 1, 1, 2 if key == 'root' else 1)
         self.quick_access_host.rows = list(self.location_cards.values())
@@ -587,6 +596,14 @@ class DashboardPage(QWidget):
             self.hero_title.setMaximumWidth(min(600, max(330, int(self.width() * .42))))
         if hasattr(self, 'library_panels_host'):
             self._reflow_panels()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.refresh_locations()
+
+    def refresh_locations(self) -> None:
+        for card in self.location_cards.values():
+            card.refresh_availability()
 
     def set_library(self, settings: AppSettings, library_name: str | None = None):
         self._library_root = Path(settings.library.root)
@@ -625,6 +642,7 @@ class DashboardPage(QWidget):
         self._update_attention()
 
     def set_health(self, health: dict[str, object]):
+        self.refresh_locations()
         self._health = dict(health)
         self.cards['missing_covers'].set_value(int(health.get('missing_covers', 0)))
         self._update_statistics()
@@ -663,14 +681,14 @@ class DashboardPage(QWidget):
             free_gb = shutil.disk_usage(target).free / (1024 ** 3)
             free_label.setText(f'{free_gb:.1f} GB')
             if free_gb < 10:
-                free_label.setStyleSheet('font-size:13pt;font-weight:750;color:#ff6b6b;')
+                free_label.setStyleSheet('font-size:15pt;font-weight:750;color:#ff6b6b;')
             elif free_gb < 20:
-                free_label.setStyleSheet('font-size:13pt;font-weight:750;color:#ffb84d;')
+                free_label.setStyleSheet('font-size:15pt;font-weight:750;color:#ffb84d;')
             else:
-                free_label.setStyleSheet('font-size:13pt;font-weight:750;')
+                free_label.setStyleSheet('font-size:15pt;font-weight:750;')
         except OSError:
             free_label.setText('—')
-            free_label.setStyleSheet('font-size:13pt;font-weight:750;')
+            free_label.setStyleSheet('font-size:15pt;font-weight:750;')
 
     def _update_attention(self) -> None:
         review = int(self._summary.get('review', 0))

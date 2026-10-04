@@ -21,7 +21,7 @@ def test_library_has_multi_genre_bpm_filters_and_collection_actions():
 def test_custom_mp3_folders_have_path_page_and_navigation():
     assert 'MOJE_FOLDERY_MP3' in SETTINGS
     assert 'CollectionsPage' in MAIN
-    assert 'Moje foldery MP3' in MAIN
+    assert 'Foldery z zaznaczonych utworów' in MAIN
 
 
 def test_dashboard_has_library_health_and_ministats():

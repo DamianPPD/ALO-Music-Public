@@ -1,3 +1,5 @@
+from audio_library_organizer import __version__
+
 HELP_TOPICS = {
     'Pierwsze uruchomienie': '''
 <h2>Bezpieczny start</h2>
@@ -114,9 +116,9 @@ HELP_TOPICS = {
 <p>Na końcu sprawdza, czy plik końcowy nadal istnieje i ma poprawny, niezerowy rozmiar. To jest <b>kontrola techniczna kopii</b>, a nie ręczna weryfikacja metadanych. Dlatego przed utworzeniem plików program przypomina o pozycji <b>SPRAWDŹ W BIBLIOTECE</b>. Po operacji zobaczysz wynik kontroli, przycisk <b>Przejdź do Biblioteki</b>, przycisk <b>Otwórz folder biblioteki</b> oraz raport <code>weryfikacja_kopii_....csv</code>.</p>
 <p>Plik, który nie przejdzie kontroli, nie jest liczony jako poprawnie zweryfikowany.</p>
 ''',
-    'O programie': '''
+    'O programie': f'''
 <h2>ALO Music — Audio Library Organizer</h2>
-<p>Wersja <b>0.4.24</b> · 2026. Lokalny organizator biblioteki muzycznej dla Windows z bezpiecznym kopiowaniem, rozpoznawaniem nagrań, edycją metadanych, tabelą duplikatów, rodzinami wersji, okładkami i BPM.</p>
+<p>Wersja <b>{__version__}</b> · 2026. Lokalny organizator biblioteki muzycznej dla Windows z bezpiecznym kopiowaniem, rozpoznawaniem nagrań, edycją metadanych, tabelą duplikatów, rodzinami wersji, okładkami i BPM.</p>
 <p>Biblioteki są trwałe i rozdzielają folder wynikowy od źródeł używanych do skanowania. Historia skanów jest informacyjna; ALO nie uruchamia automatycznie starego źródła tylko dlatego, że było wcześniej skanowane.</p>
 '''
 

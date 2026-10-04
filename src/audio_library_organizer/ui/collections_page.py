@@ -31,14 +31,14 @@ class CollectionsPage(QWidget):
         root.setContentsMargins(8, 6, 8, 8)
         root.setSpacing(10)
 
-        title = QLabel('Moje foldery MP3')
+        title = QLabel('Foldery z zaznaczonych utworów')
         title.setStyleSheet('font-size:20pt;font-weight:750;')
         root.addWidget(title)
         note = QLabel('Fizyczne kopie wybranych utworów. Ten katalog jest wyłączony ze skanowania głównej biblioteki.')
         note.setWordWrap(True); note.setObjectName('MutedText'); root.addWidget(note)
 
         actions = QHBoxLayout()
-        self.open_root = QPushButton('Otwórz MOJE_FOLDERY_MP3')
+        self.open_root = QPushButton('Otwórz folder')
         self.open_root.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.library.custom_folders))))
         self.add_from_library = QPushButton('Dodaj z Biblioteki'); self.add_from_library.clicked.connect(self.add_from_library_requested)
         self.playlist_btn = QPushButton('Utwórz playlistę M3U8'); self.playlist_btn.clicked.connect(self._request_playlist)
@@ -60,7 +60,7 @@ class CollectionsPage(QWidget):
         self.table.doubleClicked.connect(self._open_files_tab)
         self.table.itemSelectionChanged.connect(self._refresh_files)
         folders_lay.addWidget(self.table, 1)
-        self.empty = QLabel('Nie masz jeszcze własnych folderów MP3. W Bibliotece zaznacz utwory i wybierz „Utwórz folder z zaznaczonych”.')
+        self.empty = QLabel('Nie ma jeszcze folderów z zaznaczonych utworów. W Bibliotece zaznacz utwory i wybierz „Utwórz folder z zaznaczonych”.')
         self.empty.setWordWrap(True); self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter); self.empty.setObjectName('MutedText'); folders_lay.addWidget(self.empty)
 
         files_tab = QWidget(); files_lay = QVBoxLayout(files_tab); files_lay.setContentsMargins(0, 4, 0, 0)
@@ -144,7 +144,7 @@ class CollectionsPage(QWidget):
     def _remove_selected_file(self):
         folder = self._selected_collection_path(); path = self._selected_file_path()
         if folder is None or path is None:
-            QMessageBox.information(self, ui_text(self, 'Brak zaznaczenia'), ui_text(self, 'Wybierz plik we własnym folderze MP3.')); return
+            QMessageBox.information(self, ui_text(self, 'Brak zaznaczenia'), ui_text(self, 'Wybierz plik w folderze z zaznaczonych utworów.')); return
         answer = QMessageBox.question(self, ui_text(self, 'Usuń z folderu'), ui_text(self, 'Usunąć tylko tę kopię z MOJE_FOLDERY_MP3? Oryginalny plik i główna biblioteka pozostaną bez zmian.'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
         if answer == QMessageBox.StandardButton.Yes and remove_collection_file(folder, path):
             self.refresh(); self._refresh_files()

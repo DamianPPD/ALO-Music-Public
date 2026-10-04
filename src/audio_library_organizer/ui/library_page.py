@@ -1267,7 +1267,7 @@ class LibraryPage(QWidget):
         play_next = menu.addAction(library_icon('next', '#cbd8df', 18), ui_text(self, 'Odtwórz jako następny'))
         edit = menu.addAction(library_icon('metadata_edit', '#9af0b6', 18), ui_text(self, 'Edytuj metadane'))
         menu.addSeparator()
-        folder = menu.addAction(library_icon('folder', '#cbd8df', 18), ui_text(self, 'Dodaj do Moje foldery MP3'))
+        folder = menu.addAction(library_icon('folder', '#cbd8df', 18), ui_text(self, 'Dodaj do folderów z zaznaczonych utworów'))
         playlist = menu.addAction(library_icon('playlist', '#cbd8df', 18), ui_text(self, 'Utwórz playlistę z zaznaczonych'))
         menu.addSeparator()
         reveal = menu.addAction(library_icon('folder', '#cbd8df', 18), ui_text(self, 'Pokaż w Eksploratorze'))
@@ -1296,7 +1296,7 @@ class LibraryPage(QWidget):
     def _request_collection(self):
         tracks = self._checked_tracks()
         if not tracks:
-            QMessageBox.information(self, ui_text(self, 'Brak zaznaczenia'), ui_text(self, 'Zaznacz utwory, które mają trafić do nowego folderu MP3.'))
+            QMessageBox.information(self, ui_text(self, 'Brak zaznaczenia'), ui_text(self, 'Zaznacz utwory, które mają trafić do nowego folderu.'))
             return
         self.create_collection_requested.emit(tracks)
 

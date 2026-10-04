@@ -141,7 +141,7 @@ def test_folder_icons_follow_accents_headers_reuse_two_lines_and_tree_starts_und
         assert row.title_icon.width() == 24
         assert row.open_button.findChild(QLabel, 'StartFolderChevron').pixmap().toImage() == alo_icon('chevron-right', '#628fb0', 12).pixmap(12, 12).toImage()
     assert [spec[3] for spec in page._location_specs(AppSettings((), LibraryPaths(page._library_root)))] == [
-        'folder', 'folder_check', 'folder_warning', 'folder_x', 'folder_music', 'folder_report']
+        'folder_root', 'folder_check', 'folder_warning', 'folder_x', 'folder_selected', 'folder_report']
     for panel in (page.structure_panel, page.status_panel):
         mark = panel.findChild(QLabel, 'LibrarySectionMark')
         assert mark is not None and mark.size().width() == 20 and mark.height() == 7
@@ -151,7 +151,7 @@ def test_folder_icons_follow_accents_headers_reuse_two_lines_and_tree_starts_und
         assert image.pixelColor(10, 6).blue() > image.pixelColor(10, 3).blue()
     for box in page.metric_cards.values():
         icon = box.findChild(QLabel, 'StartMetricIcon')
-        assert icon.pixmap().width() == 18 and icon.width() == 22
+        assert icon.pixmap().width() == 20 and icon.width() == 26
     QApplication.instance().processEvents()
     image = page.quick_access_host.grab().toImage()
     rows = list(page.location_cards.values())
@@ -198,6 +198,8 @@ try:
             assert scroll_bottom < player_top
             assert page.hero.height() == 200
             assert all(card.height() == 92 for card in page.cards.values())
+            selected = page.location_cards['custom_folders'].title_label
+            assert selected.fontMetrics().horizontalAdvance(selected.text()) <= selected.width()
             for row in page.location_cards.values():
                 button = row.open_button
                 assert row.contentsRect().contains(button.geometry())
