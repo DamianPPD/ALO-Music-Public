@@ -298,3 +298,33 @@ def test_add_source_plus_and_hover_pressed_are_distinct(window):
     pressed = button.grab().toImage().pixelColor(6, 6)
     button.setDown(False)
     assert len({normal.name(), hover.name(), pressed.name()}) == 3
+
+
+def test_scan_history_clicks_keep_data_visible_without_selection_or_focus(window, tmp_path):
+    path = tmp_path / 'source'; path.mkdir()
+    registry = window.library_registry
+    registry.record_scan('main', path, 12, scanned_at='2026-10-04T07:03:00')
+    registry.record_scan('main', path, 17, scanned_at='2026-10-04T07:13:00')
+    window.refresh_data()
+    sources = window.dashboard.sources
+    sources.menu_for_source(path).actions()[2].trigger()
+    app = QApplication.instance(); app.processEvents()
+    dialog = sources.history_dialog
+    assert dialog.isVisible()
+    table = dialog.findChild(type(sources.table))
+    assert table.columnCount() == 2 and table.rowCount() == 2
+    assert [[table.item(row, column).text() for column in range(2)] for row in range(2)] == [
+        ['04.10.2026 07:13', '17'], ['04.10.2026 07:03', '12']]
+    QTest.mouseMove(dialog, QPoint(1, 1)); app.processEvents()
+    rect = table.visualItemRect(table.item(0, 0))
+    before = table.viewport().grab().toImage().copy(rect)
+    for row, column in ((0, 0), (1, 1)):
+        QTest.mouseClick(table.viewport(), Qt.MouseButton.LeftButton,
+                         pos=table.visualItemRect(table.item(row, column)).center())
+        app.processEvents()
+        assert table.selectedIndexes() == []
+        assert not table.hasFocus()
+    QTest.mouseMove(dialog, QPoint(1, 1)); app.processEvents()
+    assert table.viewport().grab().toImage().copy(rect) == before
+    assert dialog.isVisible()
+    dialog.close(); app.processEvents()

@@ -157,6 +157,9 @@ class ScanSourcesWidget(QWidget):
         table = QTableWidget(len(entries), 2, dialog)
         table.setHorizontalHeaderLabels([ui_text(self, 'Ostatni skan'), ui_text(self, 'Pliki')])
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        table.setItemDelegate(_SourceInformationDelegate(table))
         table.verticalHeader().hide()
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         for row, entry in enumerate(entries):
