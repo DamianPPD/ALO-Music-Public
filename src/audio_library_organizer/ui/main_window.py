@@ -1357,7 +1357,10 @@ class MainWindow(QMainWindow):
         if self._thread is not None:
             return
         profile = self.library_registry.active
-        folder = QFileDialog.getExistingDirectory(self, self._t('Wybierz folder z nowymi plikami'))
+        folder = QFileDialog.getExistingDirectory(
+            self, self._t('Wybierz folder z nowymi plikami'),
+            options=QFileDialog.Option.DontUseNativeDialog,
+        )
         if not folder:
             return
         source = Path(folder).resolve()
@@ -1803,7 +1806,7 @@ class MainWindow(QMainWindow):
             self.identify_btn.setText(f"2. {tr('action.identify_online', language)}")
         self.review_btn.setText(f"3. {tr('action.review', language)}")
         self.export_btn.setText(f"4. {tr('action.export', language)}")
-        self.new_files_btn.setText(self._t('+ Dodaj źródło'))
+        self.new_files_btn.setText(self._t('+ Dodaj źródło').removeprefix('+ '))
         self.new_files_btn.setToolTip(self._t('Wybierz folder z nowymi plikami'))
 
     def _set_busy(self, busy: bool, message: str = '', *, kind: str | None = None):
@@ -1838,7 +1841,7 @@ class MainWindow(QMainWindow):
         export_running_text = 'Creating files…' if self.preferences.language == 'en' else 'Tworzenie plików…'
         self.export_btn.setText(export_running_text if export_running else f"4. {tr('action.export', self.preferences.language)}")
         self.review_btn.setText(f"3. {tr('action.review', self.preferences.language)}")
-        self.new_files_btn.setText(self._t('+ Dodaj źródło'))
+        self.new_files_btn.setText(self._t('+ Dodaj źródło').removeprefix('+ '))
         self._set_button_running(self.scan_btn, scan_running)
         self._set_button_running(self.identify_btn, online_running)
         self._set_button_running(self.export_btn, export_running)

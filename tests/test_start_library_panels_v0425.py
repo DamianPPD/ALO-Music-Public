@@ -169,7 +169,7 @@ def test_start_panels_fit_window_and_remain_above_player_at_basic_dpi(tmp_path, 
     code = '''
 import sys
 from pathlib import Path
-from PySide6.QtCore import QPoint, QSettings
+from PySide6.QtCore import QPoint, QSettings, Qt
 from PySide6.QtWidgets import QApplication, QLabel
 from audio_library_organizer.domain.settings import AppSettings, LibraryPaths
 from audio_library_organizer.ui import main_window
@@ -183,6 +183,10 @@ window = main_window.MainWindow(AppSettings((), paths), QSettings(str(Path(sys.a
 try:
     window.dashboard.set_summary({'total': 419, 'review': 201})
     window.dashboard.set_health({'available': 419, 'missing_covers': 314, 'online_checked': 80})
+    source = Path(sys.argv[1]) / 'Music collection'
+    source.mkdir()
+    window.library_registry.record_scan('main', source, 419, scanned_at='2026-10-04T07:03:00')
+    window._refresh_start_context()
     for language in ('pl', 'en'):
         apply_static_language(window.dashboard, language)
         window.dashboard.refresh_language()
@@ -198,6 +202,17 @@ try:
             assert scroll_bottom < player_top
             assert page.hero.height() == 200
             assert all(card.height() == 92 for card in page.cards.values())
+            detail = page.location_cards['ready'].detail_label
+            assert detail.text() == ('(No subfolders)' if language == 'en' else '(Bez podfolderów)')
+            assert detail.fontMetrics().horizontalAdvance(detail.text()) <= detail.width()
+            table = page.sources.table
+            sizes = [table.columnWidth(i) for i in range(5)]
+            assert abs(sum(sizes) - table.viewport().width()) <= 2
+            assert sizes[0] == max(sizes)
+            assert table.fontMetrics().horizontalAdvance(table.item(0, 1).text()) + 12 <= sizes[1]
+            assert table.horizontalScrollBar().maximum() == 0
+            assert table.focusPolicy() == Qt.FocusPolicy.NoFocus
+            assert table.selectedIndexes() == []
             selected = page.location_cards['custom_folders'].title_label
             assert selected.fontMetrics().horizontalAdvance(selected.text()) <= selected.width()
             for row in page.location_cards.values():

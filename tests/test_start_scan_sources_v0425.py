@@ -4,9 +4,10 @@ from pathlib import Path
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
 import pytest
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import QSettings, Qt, QEvent, QPoint
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QApplication, QLabel, QFrame, QPushButton
+from PySide6.QtTest import QTest
 from shiboken6 import isValid
 
 from audio_library_organizer.domain.preferences import AppPreferences
@@ -72,7 +73,7 @@ def test_ready_organization_tracks_settings_in_pl_en_without_controls(window):
             window.qt_settings.setValue('ui/folder_organization', mode)
             window._apply_preferences(AppPreferences(language=lang))
             window.refresh_data()
-            assert ready.detail_label.text() == '•  ' + text
+            assert ready.detail_label.text() == '(' + text + ')'
             assert ready.detail_label.textInteractionFlags() == Qt.TextInteractionFlag.NoTextInteraction
             assert ready.detail_label.font().pointSizeF() < ready.title_label.font().pointSizeF()
             assert ready.findChildren(QPushButton) == [ready.open_button]
@@ -149,16 +150,23 @@ def test_add_source_reuses_existing_folder_workflow_and_busy_state(window, tmp_p
     button = window.new_files_btn
     assert window.dashboard.sources.add_button is button
     assert not window.action_frame.isAncestorOf(button)
-    assert button.text() == '+ Dodaj źródło'
+    assert button.text() == 'Dodaj źródło'
     calls = []
     path = tmp_path / 'incoming'; path.mkdir()
-    monkeypatch.setattr(main_window.QFileDialog, 'getExistingDirectory', lambda *args: str(path))
+    dialogs = []
+    def choose_folder(*args, **kwargs):
+        dialogs.append((args, kwargs))
+        return str(path)
+    monkeypatch.setattr(main_window.QFileDialog, 'getExistingDirectory', choose_folder)
     monkeypatch.setattr(window, 'start_scan', lambda **kwargs: calls.append(kwargs))
     button.click()
+    assert len(dialogs) == 1
+    assert dialogs[0][0][0] is window
+    assert dialogs[0][1]['options'] & main_window.QFileDialog.Option.DontUseNativeDialog
     assert calls == [{'source_dirs': (path.resolve(),), 'new_files': True}]
     assert window.app_settings.source_dirs == (path.resolve(),)
     window._set_busy(True, kind='online'); assert not button.isEnabled()
-    window._set_busy(False); assert button.isEnabled() and button.text() == '+ Dodaj źródło'
+    window._set_busy(False); assert button.isEnabled() and button.text() == 'Dodaj źródło'
 
 
 def test_attention_is_one_red_noninteractive_line_and_status_keeps_six_metrics(window):
@@ -183,6 +191,110 @@ def test_attention_is_one_red_noninteractive_line_and_status_keeps_six_metrics(w
     assert page.attention_text.text() == 'Needs attention: 201 tracks require metadata review • 313 tracks have no cover art'
     assert [page.sources.table.horizontalHeaderItem(i).text() for i in range(5)] == [
         'Source folder', 'Last scan', 'Files', 'Status', 'Action']
-    assert page.sources.add_button.text() == '+ Add source'
+    assert page.sources.add_button.text() == 'Add source'
     page.set_summary({}); page.set_health({})
     assert not page.attention_line.isVisible()
+
+
+def test_status_dot_inherits_row_background_without_a_rectangle(window, tmp_path):
+    path = tmp_path / 'source'; path.mkdir()
+    window.library_registry.record_scan('main', path, 1)
+    window.refresh_data(); QApplication.instance().processEvents()
+    table = window.dashboard.sources.table
+    cell = table.cellWidget(0, 3)
+    picture = table.viewport().grab().toImage()
+    corner = cell.pos()
+    background = picture.pixelColor(corner.x() + 2, corner.y() + 2)
+    row_background = picture.pixelColor(corner.x() - 3, corner.y() + 2)
+    assert background == row_background
+    dot = cell.findChild(QLabel, 'ScanSourceStatusDot')
+    green = dot.grab().toImage().pixelColor(3, 3)
+    assert green.green() > green.red() + 50
+    path.rmdir(); window.refresh_data(); QApplication.instance().processEvents()
+    cell = table.cellWidget(0, 3)
+    dot = cell.findChild(QLabel, 'ScanSourceStatusDot')
+    red = dot.grab().toImage().pixelColor(3, 3)
+    assert red.red() > red.green() + 50
+    assert not table.cellWidget(0, 4).menu().actions()[0].isEnabled()
+
+
+def test_source_columns_fill_viewport_and_keep_full_scan_date(window, tmp_path):
+    path = tmp_path / 'source'; path.mkdir()
+    window.library_registry.record_scan('main', path, 100, scanned_at='2026-10-04T07:03:00')
+    window.refresh_data(); QApplication.instance().processEvents()
+    table = window.dashboard.sources.table
+    for width in (1740, 1500):
+        window.resize(width, 1100); QApplication.instance().processEvents()
+        sizes = [table.columnWidth(i) for i in range(5)]
+        assert abs(sum(sizes) - table.viewport().width()) <= 2
+        assert sizes[0] == max(sizes)
+        assert table.fontMetrics().horizontalAdvance(table.item(0, 1).text()) + 12 <= sizes[1]
+        assert table.fontMetrics().horizontalAdvance(table.item(0, 2).text()) + 18 <= sizes[2]
+        assert max(sizes[2:]) <= 60
+        assert table.horizontalScrollBar().maximum() == 0
+
+
+def test_source_clicks_leave_no_selection_or_focus_outline(window, tmp_path):
+    path = tmp_path / 'source'; path.mkdir()
+    window.library_registry.record_scan('main', path, 1)
+    window.refresh_data(); app = QApplication.instance(); app.processEvents()
+    table = window.dashboard.sources.table
+    window.dashboard.scroll.ensureWidgetVisible(table); app.processEvents()
+    point = table.visualItemRect(table.item(0, 0)).center()
+    before = table.viewport().grab().toImage()
+    QTest.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=point)
+    app.processEvents()
+    assert table.selectedIndexes() == []
+    assert not table.hasFocus()
+    app.sendEvent(table.viewport(), QEvent(QEvent.Type.Leave)); app.processEvents()
+    after = table.viewport().grab().toImage()
+    rect = table.visualItemRect(table.item(0, 0))
+    assert before.copy(rect) == after.copy(rect)
+
+
+def test_status_header_is_compact_and_ready_mode_is_cool_readable_text(window):
+    page = window.dashboard
+    assert page.status_panel.layout().contentsMargins().top() < page.sources_panel.layout().contentsMargins().top()
+    status_text = page.status_panel.layout().itemAt(0).layout().itemAt(1).layout()
+    assert status_text.spacing() < 3
+    label = page.location_cards['ready'].detail_label
+    color = label.palette().windowText().color()
+    assert color.blue() > color.red() + 40
+    assert color.green() > 165
+    assert len(page.metric_cards) == 6 and len(page.stats_progress) == 2
+
+
+def test_add_source_mouse_click_saves_source_scans_and_refreshes_table(window, tmp_path, monkeypatch):
+    path = tmp_path / 'incoming'; path.mkdir()
+    button = window.dashboard.sources.add_button
+    app = QApplication.instance()
+    window.dashboard.scroll.ensureWidgetVisible(button); app.processEvents()
+    dialogs = []
+    def choose_folder(*args, **kwargs):
+        dialogs.append(args)
+        return str(path)
+    monkeypatch.setattr(main_window.QFileDialog, 'getExistingDirectory', choose_folder)
+    def run_existing_scan(**kwargs):
+        result = window.service.scan(source_dirs=kwargs['source_dirs'])
+        window._scan_finished(result)
+    monkeypatch.setattr(window, 'start_scan', run_existing_scan)
+    QTest.mouseClick(button, Qt.MouseButton.LeftButton); app.processEvents()
+    assert len(dialogs) == 1
+    assert window.library_registry.active.source_dirs == (path.resolve(),)
+    restored = LibraryRegistry.from_store(window.qt_settings, window.main_settings)
+    assert restored.scan_history()[0].source_dir == path.resolve()
+    assert window.dashboard.sources.table.item(0, 0).text() == str(path.resolve())
+
+
+def test_add_source_plus_and_hover_pressed_are_distinct(window):
+    app = QApplication.instance(); button = window.dashboard.sources.add_button
+    assert not button.icon().isNull() and button.iconSize().width() >= 16
+    window.dashboard.scroll.ensureWidgetVisible(button); app.processEvents()
+    QTest.mouseMove(window, QPoint(1, 1)); app.processEvents()
+    normal = button.grab().toImage().pixelColor(6, 6)
+    QTest.mouseMove(button, button.rect().center()); app.processEvents()
+    hover = button.grab().toImage().pixelColor(6, 6)
+    button.setDown(True)
+    pressed = button.grab().toImage().pixelColor(6, 6)
+    button.setDown(False)
+    assert len({normal.name(), hover.name(), pressed.name()}) == 3

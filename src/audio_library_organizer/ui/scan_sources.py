@@ -3,15 +3,24 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QUrl, QSize
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QHeaderView, QLabel, QMenu,
-    QPushButton, QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget,
+    QPushButton, QStyle, QStyledItemDelegate, QStyleOptionViewItem,
+    QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget,
 )
 
 from audio_library_organizer.storage.library_profiles import LibraryRegistry
 from audio_library_organizer.ui.i18n import ui_text
+from audio_library_organizer.ui.icons import alo_icon
+
+
+class _SourceInformationDelegate(QStyledItemDelegate):
+    def paint(self, painter, option, index):
+        styled = QStyleOptionViewItem(option)
+        styled.state &= ~(QStyle.StateFlag.State_Selected | QStyle.StateFlag.State_HasFocus)
+        super().paint(painter, styled, index)
 
 
 def scan_time_text(value: str) -> str:
@@ -40,8 +49,10 @@ class ScanSourcesWidget(QWidget):
         self.table.setObjectName('StartScanSourcesTable')
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        self.table.setTextElideMode(Qt.TextElideMode.ElideNone)
+        self.table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.table.setItemDelegate(_SourceInformationDelegate(self.table))
+        self.table.setTextElideMode(Qt.TextElideMode.ElideMiddle)
         self.table.setWordWrap(False)
         self.table.setShowGrid(False)
         self.table.verticalHeader().hide()
@@ -49,12 +60,13 @@ class ScanSourcesWidget(QWidget):
         self.table.verticalHeader().setMinimumSectionSize(26)
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         header.setStretchLastSection(False)
-        for index, width in enumerate((210, 119, 42, 44, 48)):
-            self.table.setColumnWidth(index, width)
         layout.addWidget(self.table, 1)
-        self.add_button = QPushButton('+ Dodaj źródło', self)
+        self.add_button = QPushButton('Dodaj źródło', self)
         self.add_button.setObjectName('StartAddSource')
+        self.add_button.setIcon(alo_icon('start_source_add', '#a5cbde', 18))
+        self.add_button.setIconSize(QSize(18, 18))
         self.add_button.setToolTip('Wybierz folder z nowymi plikami')
         footer = QHBoxLayout(); footer.addWidget(self.add_button); footer.addStretch(1)
         layout.addLayout(footer)
@@ -69,14 +81,18 @@ class ScanSourcesWidget(QWidget):
         scroll = table.verticalScrollBar().value()
         table.setHorizontalHeaderLabels([ui_text(self, text) for text in self.HEADERS])
         entries = self.registry.scan_history() if self.registry else ()
+        metrics = table.fontMetrics()
+        table.setColumnWidth(1, metrics.horizontalAdvance('00.00.0000 00:00') + 16)
+        for column in (2, 3, 4):
+            table.setColumnWidth(column, max(36, metrics.horizontalAdvance(table.horizontalHeaderItem(column).text()) + 14))
+        files_width = max((metrics.horizontalAdvance(str(entry.file_count)) + 18 for entry in entries), default=42)
+        table.setColumnWidth(2, max(42, table.columnWidth(2), files_width))
         previous_widgets = [table.cellWidget(row, column) for row in range(table.rowCount())
                             for column in (3, 4)]
         table.setRowCount(len(entries))
-        path_width = 210
         for row, entry in enumerate(entries):
             path = entry.source_dir
             text = str(path)
-            path_width = max(path_width, table.fontMetrics().horizontalAdvance(text) + 18)
             for column, value in enumerate((text, scan_time_text(entry.scanned_at), str(entry.file_count))):
                 item = QTableWidgetItem(value)
                 item.setToolTip(text if column == 0 else value)
@@ -84,6 +100,7 @@ class ScanSourcesWidget(QWidget):
                 table.setItem(row, column, item)
             available = path.is_dir()
             status = QWidget(table)
+            status.setObjectName('ScanSourceStatusCell')
             status_layout = QHBoxLayout(status); status_layout.setContentsMargins(0, 0, 0, 0)
             dot = QLabel(status); dot.setObjectName('ScanSourceStatusDot')
             dot.setFixedSize(7, 7); dot.setProperty('available', available)
@@ -101,12 +118,11 @@ class ScanSourcesWidget(QWidget):
                                              menu.actions()[0].setEnabled(target.is_dir()))
             table.setCellWidget(row, 4, action)
             table.setRowHeight(row, 26)
-        table.setColumnWidth(0, path_width)
         table.verticalScrollBar().setValue(scroll)
         # Qt deletes replaced widgets later; keep them out of subsequent paints.
         for previous in previous_widgets:
             if previous is not None: previous.hide()
-        self.add_button.setText(ui_text(self, '+ Dodaj źródło'))
+        self.add_button.setText(ui_text(self, '+ Dodaj źródło').removeprefix('+ '))
 
     def menu_for_source(self, path: Path, *, parent=None) -> QMenu:
         path = Path(path)

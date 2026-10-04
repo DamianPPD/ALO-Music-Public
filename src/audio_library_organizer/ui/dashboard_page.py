@@ -409,7 +409,7 @@ class DashboardPage(QWidget):
         self.structure_panel, structure_layout = self._create_library_panel(
             'Struktura biblioteki', 'Główna biblioteka i powiązane lokalizacje robocze.')
         self.status_panel, status_layout = self._create_library_panel(
-            'Stan biblioteki', 'Podsumowanie zawartości i analiz biblioteki.')
+            'Stan biblioteki', 'Podsumowanie zawartości i analiz biblioteki.', compact_header=True)
         self.sources_panel, sources_layout = self._create_library_panel(
             'Źródła skanowania', 'Foldery dodane do skanowania biblioteki.')
         self.sources_panel.setFixedHeight(300)
@@ -503,12 +503,14 @@ class DashboardPage(QWidget):
 
         self.set_folder_organization('none')
 
-    def _create_library_panel(self, title: str, subtitle: str):
+    def _create_library_panel(self, title: str, subtitle: str, *, compact_header: bool = False):
         panel = QFrame(self.library_panels_host)
         panel.setObjectName('StartLibraryPanel')
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(9)
+        layout.setContentsMargins(12, 6 if compact_header else 10, 12, 10)
+        layout.setSpacing(5 if compact_header else 9)
+        if compact_header:
+            layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         header = QHBoxLayout()
         header.setSpacing(9)
         mark = QLabel()
@@ -516,7 +518,7 @@ class DashboardPage(QWidget):
         mark.setFixedSize(20, 7)
         header.addWidget(mark)
         text = QVBoxLayout()
-        text.setSpacing(3)
+        text.setSpacing(1 if compact_header else 3)
         heading = QLabel(title)
         heading.setObjectName('StartPanelTitle')
         note = QLabel(subtitle)
@@ -532,7 +534,7 @@ class DashboardPage(QWidget):
         self._folder_organization = mode if mode in {'none', 'artist', 'genre'} else 'none'
         text = {'none': 'Bez podfolderów', 'artist': 'Według wykonawcy', 'genre': 'Według gatunku'}[self._folder_organization]
         label = self.location_cards['ready'].detail_label
-        label.setText('•  ' + ui_text(self, text))
+        label.setText('(' + ui_text(self, text) + ')')
         label.show()
 
     @staticmethod
