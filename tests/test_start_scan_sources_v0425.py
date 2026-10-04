@@ -15,6 +15,7 @@ from audio_library_organizer.domain.settings import AppSettings, LibraryPaths
 from audio_library_organizer.storage.library_profiles import LibraryRegistry
 from audio_library_organizer.ui import main_window
 from audio_library_organizer.ui.dashboard_page import DashboardPage
+from audio_library_organizer.ui.icons import alo_icon
 
 
 @pytest.fixture
@@ -122,7 +123,10 @@ def test_source_menu_opens_copies_shows_scoped_history_and_only_removes_records(
     registry.record_scan('main', path, 2, scanned_at='2026-09-29T23:15:00')
     window.refresh_data()
     sources = window.dashboard.sources
-    assert sources.table.cellWidget(0, 4).text() == '⋮'
+    control = sources.table.cellWidget(0, 4)
+    assert control.text() == '' and not control.icon().isNull()
+    assert control.accessibleName() == 'Akcja'
+    assert control.icon().pixmap(14, 14).toImage() == alo_icon('control_more', '#91a7b4', 14).pixmap(14, 14).toImage()
     assert sources.table.cellWidget(0, 4).menu().isWindow()
     menu = sources.menu_for_source(path)
     actions = menu.actions()

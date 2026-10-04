@@ -173,7 +173,7 @@ def test_recognition_button_states_remain_distinct_and_requests_obey_lock(editor
     assert online.count() == audio.count() == 1
 
 
-def test_only_selected_small_cover_has_a_dark_triangle_with_green_check(editor, tmp_path):
+def test_only_selected_small_cover_has_a_subtle_folded_corner_with_cool_check(editor, tmp_path):
     source = QPixmap(40, 40)
     source.fill(QColor('#456789'))
     manual = QPixmap(40, 40)
@@ -195,13 +195,16 @@ def test_only_selected_small_cover_has_a_dark_triangle_with_green_check(editor, 
         assert marker.parentWidget() is preview
         assert marker.geometry().top() == 0
         assert marker.geometry().right() == preview.width() - 1
-        assert marker.width() <= 24 and marker.height() <= 24
+        assert marker.width() <= 20 and marker.height() <= 20
         assert marker.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         painted = marker.pixmap().toImage()
         assert painted.pixelColor(0, painted.height() - 1).alpha() == 0
         assert painted.pixelColor(painted.width() - 2, 1).value() < 50
-        assert any(painted.pixelColor(x, y).green() > 150 and painted.pixelColor(x, y).red() < 100
-                   for x in range(painted.width()) for y in range(painted.height()))
+        pixels = [painted.pixelColor(x, y) for x in range(painted.width()) for y in range(painted.height())]
+        assert any(pixel.alpha() > 200 and pixel.blue() > 160 and
+                   pixel.blue() >= pixel.green() > pixel.red() for pixel in pixels)
+        assert not any(pixel.alpha() > 200 and pixel.green() > 180 and
+                       pixel.green() > pixel.blue() + 30 for pixel in pixels)
         card = preview.parentWidget()
         edge = card.grab().toImage().pixelColor(card.width() // 2, 0)
         assert edge.green() <= edge.blue()  # no green frame around the selected tile

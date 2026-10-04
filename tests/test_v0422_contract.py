@@ -50,8 +50,10 @@ def test_a1_asset_pack_has_required_ultra_thin_icons():
         svg = path.read_text(encoding='utf-8')
         assert 'viewBox="0 0 24 24"' in svg
         assert 'stroke="currentColor"' in svg
-        # The approved Start add-source plus is intentionally heavier than A1.
-        stroke = '1.8' if path.stem.startswith('nav_') or path.stem == 'start_source_add' else '1.15'
+        # Only these approved replacements/controls use the new outline weight.
+        approved_outline = {'export', 'recognize', 'control_more', 'control_close'}
+        stroke = ('1.7' if path.stem in approved_outline else
+                  '1.8' if path.stem.startswith('nav_') or path.stem == 'start_source_add' else '1.15')
         assert f'stroke-width="{stroke}"' in svg, path.name
 
 

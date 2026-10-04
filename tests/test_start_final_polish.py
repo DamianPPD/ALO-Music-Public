@@ -91,7 +91,10 @@ def test_c_icon_assets_are_real_consistent_svg_and_render_at_dpi_sizes():
         assert path.is_file(), name
         root = ElementTree.parse(path).getroot()
         assert root.attrib['viewBox'] == '0 0 24 24'
-        assert root.attrib['stroke-width'] == ('1.65' if name in {'folder_root', 'folder_check', 'folder_x', 'folder_warning', 'folder_selected', 'folder_report'} else '2.2')
+        # Only the approved Library replacement adopts the new outline weight.
+        stroke = ('1.7' if name == 'nav_library' else
+                  '1.65' if name in {'folder_root', 'folder_check', 'folder_x', 'folder_warning', 'folder_selected', 'folder_report'} else '2.2')
+        assert root.attrib['stroke-width'] == stroke
         assert root.attrib['stroke'] == 'currentColor'
         assert 'filter' not in path.read_text(encoding='utf-8')
         for size in (18, 23, 32):

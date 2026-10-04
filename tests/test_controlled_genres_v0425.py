@@ -11,6 +11,7 @@ from audio_library_organizer.domain.models import TrackRecord
 from audio_library_organizer.domain.settings import AppSettings, LibraryPaths
 from audio_library_organizer.ui.genre_input import GenreChipInput
 from audio_library_organizer.ui.i18n import apply_static_language
+from audio_library_organizer.ui.icons import alo_icon
 from audio_library_organizer.ui.main_window import MainWindow, SettingsPage
 from audio_library_organizer.ui.metadata_editor import MetadataEditorDialog
 from audio_library_organizer.ui.theme import style_for_theme
@@ -158,7 +159,9 @@ def test_genre_tags_are_compact_neutral_and_only_cross_removes(app):
         for tag in tags:
             assert 24 <= tag.height() <= 26
             remove = tag.findChild(QToolButton, 'GenreTagRemove')
-            assert remove.text() == '×' and remove.icon().isNull()
+            assert remove.text() == '' and not remove.icon().isNull()
+            assert remove.iconSize().width() <= 14
+            assert remove.icon().pixmap(12, 12).toImage() == alo_icon('control_close', '#99a6b2', 12).pixmap(12, 12).toImage()
             assert remove.width() <= 18
             assert tag.findChild(QLabel, 'GenreTagLabel').textFormat() == Qt.TextFormat.PlainText
             picture = tag.grab().toImage()

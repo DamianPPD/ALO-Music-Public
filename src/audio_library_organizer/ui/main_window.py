@@ -294,7 +294,7 @@ class SettingsPage(QWidget):
             ('library', 'Biblioteka', 'Wybierz główną lokalizację biblioteki ALO.', 'library', '#67d8ef'),
             ('naming', 'Nazewnictwo plików', 'Ustal sposób tworzenia nazw plików wynikowych.', 'metadata', '#c7a9ff'),
             ('genres', 'Gatunki', 'Zarządzaj listą używaną w podpowiedziach pola Gatunek.', 'metadata', GENRE_ACCENT),
-            ('online', 'Rozpoznawanie online', 'Dostosuj sposób korzystania ze źródeł internetowych.', 'recognize', '#57d8ff'),
+            ('online', 'Rozpoznawanie online', 'Dostosuj sposób korzystania ze źródeł internetowych.', 'settings_online', '#57d8ff'),
             ('integrations', 'Integracje i klucze API', 'Połącz ALO ze źródłami używanymi podczas rozpoznawania utworów.', 'integration', '#77dffc'),
             ('interface', 'Interfejs', 'Dostosuj język i zachowanie programu.', 'settings', '#78d9e6'),
             ('advanced', 'Zaawansowane', 'Opcje techniczne, diagnostyczne i serwisowe.', 'warning', '#ffbd61'),

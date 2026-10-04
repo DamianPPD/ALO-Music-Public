@@ -413,18 +413,21 @@ def _section_header(text: str, *, icon_widget=None) -> QWidget:
 
 
 def _cover_selection_marker_pixmap() -> QPixmap:
-    size = 22
+    size = 18
     pixmap = QPixmap(size * 3, size * 3)
     pixmap.setDevicePixelRatio(3.0)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
     painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(QColor('#071014'))
+    painter.setBrush(QColor('#101c23'))
     painter.drawPolygon(QPolygonF([QPointF(0, 0), QPointF(size, 0), QPointF(size, size)]))
-    painter.setPen(QPen(QColor('#35d893'), 1.6, Qt.PenStyle.SolidLine,
+    painter.setPen(QPen(QColor('#45616c'), .6, Qt.PenStyle.SolidLine,
                         Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-    painter.drawPolyline(QPolygonF([QPointF(10, 7), QPointF(13, 10), QPointF(18, 5)]))
+    painter.drawLine(QPointF(1, 1), QPointF(size - 1, size - 1))
+    painter.setPen(QPen(QColor('#8fb9c8'), 1.25, Qt.PenStyle.SolidLine,
+                        Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    painter.drawPolyline(QPolygonF([QPointF(8.5, 5.2), QPointF(11, 7.5), QPointF(15, 3.8)]))
     painter.end()
     return pixmap
 
@@ -2836,8 +2839,8 @@ class MetadataEditorDialog(QDialog):
             selected_badge.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
             selected_badge.setPixmap(_cover_selection_marker_pixmap())
             selected_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            selected_badge.setFixedSize(22, 22)
-            selected_badge.move(preview_size - 22, 0)
+            selected_badge.setFixedSize(selected_badge.pixmap().deviceIndependentSize().toSize())
+            selected_badge.move(preview_size - selected_badge.width(), 0)
             selected_badge.setVisible(key == getattr(self, '_selected_cover_key', ''))
             selected_badge.raise_()
             self._cover_proposal_labels[key] = preview

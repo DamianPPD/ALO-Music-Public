@@ -99,7 +99,8 @@ def controlled_genre_suggestions(values: Iterable[str | None]) -> list[str]:
 
 
 try:
-    from PySide6.QtCore import Qt, Signal, QStringListModel
+    from PySide6.QtCore import Qt, Signal, QStringListModel, QSize
+    from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QWidget, QFrame, QHBoxLayout, QVBoxLayout, QLineEdit, QToolButton, QCompleter, QLabel
     _QT = True
 except ImportError:
@@ -108,6 +109,8 @@ except ImportError:
 
 
 if _QT:
+    from audio_library_organizer.ui.icons import alo_icon
+
     class GenreTag(QFrame):
         removed = Signal(str)
 
@@ -127,7 +130,11 @@ if _QT:
             if removable:
                 remove = QToolButton()
                 remove.setObjectName('GenreTagRemove')
-                remove.setText('×')
+                icon = alo_icon('control_close', '#99a6b2', 12)
+                icon.addPixmap(alo_icon('control_close', '#f0b0b8', 12).pixmap(QSize(12, 12), 3.0), QIcon.Mode.Active)
+                remove.setIcon(icon)
+                remove.setIconSize(QSize(12, 12))
+                remove.setAutoRaise(True)
                 remove.setFixedSize(16, 18)
                 remove.setCursor(Qt.CursorShape.PointingHandCursor)
                 remove.setProperty('_alo_pl_tooltip', 'Usuń gatunek')
