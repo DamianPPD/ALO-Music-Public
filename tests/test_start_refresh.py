@@ -22,11 +22,11 @@ def test_refresh_keeps_actions_and_data_but_renders_six_compact_metrics(tmp_path
         assert len(page.cards) == 4
         assert len(page.stats_values) == 6
         assert len(page.stats_progress) == 2
-        assert len({page.stats_values[key].parentWidget().y() for key in page.stats_values}) == 1
-        assert all(card.height() == 86 for card in page.location_cards.values())
+        assert len({page.stats_values[key].parentWidget().y() for key in page.stats_values}) == 4
+        assert all(60 <= card.height() <= 70 for card in page.location_cards.values())
         for card in page.location_cards.values():
             assert card.open_button.isEnabled()
-            assert card.title_icon.width() >= 45
+            assert card.title_icon.width() <= 24
         page.set_summary({'total': 419, 'review': 211, 'duplicate': 0})
         page.set_health({'available': 419, 'missing_covers': 339, 'online_checked': 47, 'missing': 0})
         assert page.cards['review'].value_label.text() == '211'
@@ -79,15 +79,12 @@ def test_final_start_polish_adds_only_small_internal_spacing(tmp_path):
         assert page.hero.height() == 200
         assert page.hero.layout().contentsMargins().left() == 110
         for card in page.location_cards.values():
-            margin = card.layout().contentsMargins()
-            assert (margin.left(), margin.top(), margin.right(), margin.bottom()) == (16, 9, 15, 9)
-            assert card.height() == 86
+            assert card.contentsRect().contains(card.open_button.geometry())
+            assert card.contentsRect().contains(card.title_icon.geometry())
+            assert 60 <= card.height() <= 70
         for box in page.metric_cards.values():
-            margin = box.layout().contentsMargins()
-            assert (margin.left(), margin.top(), margin.right(), margin.bottom()) == (11, 9, 11, 9)
-            assert box.minimumHeight() == 84
-        margin = page.attention_frame.layout().contentsMargins()
-        assert (margin.left(), margin.top(), margin.right(), margin.bottom()) == (10, 7, 10, 7)
+            assert box.contentsRect().contains(box.findChild(QLabel, 'StartMetricIcon').geometry())
+        assert page.attention_frame.parentWidget() is page.status_panel
         assert set(page.stats_progress) == {'covers', 'online'}
     finally:
         page.close()

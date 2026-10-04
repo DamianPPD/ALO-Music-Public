@@ -59,11 +59,11 @@ def test_studio_sections_use_dashboard_proportions_without_empty_spacer(tmp_path
         _app().processEvents()
         assert page.hero.height() == 200
         assert all(card.height() >= 90 for card in page.cards.values())
-        assert all(card.height() >= 82 for card in page.location_cards.values())
+        assert all(60 <= card.height() <= 70 for card in page.location_cards.values())
         metric = page.stats_values['covers'].parentWidget()
         assert metric.height() >= 58
         assert page.location_cards['root'].geometry().top() < page.location_cards['not_selected'].geometry().top()
-        assert page.stats_values['covers'].parentWidget().geometry().top() == page.stats_values['size'].parentWidget().geometry().top()
+        assert page.metric_cards['covers'].y() < page.metric_cards['size'].y()
         page.set_summary({'total': 10, 'review': 2})
         page.set_health({'available': 10, 'missing_covers': 3})
         _app().processEvents()
@@ -71,7 +71,9 @@ def test_studio_sections_use_dashboard_proportions_without_empty_spacer(tmp_path
         # The page may scroll, but the final section follows its content
         # without an empty stretch above the player.
         assert page.scroll.widget().layout().itemAt(page.scroll.widget().layout().count() - 1).spacerItem() is None
-        assert page.scroll.widget().height() - page.attention_frame.geometry().bottom() < 25
+        body = page.scroll.widget()
+        bottom = page.library_panels_host.geometry().bottom()
+        assert body.height() - bottom <= body.layout().contentsMargins().bottom() + 1
     finally:
         page.close()
 

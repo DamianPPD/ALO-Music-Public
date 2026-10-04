@@ -48,14 +48,15 @@ def test_start_dashboard_does_not_duplicate_global_workflow_buttons():
 
 def test_start_dashboard_has_compact_library_statistics_without_unwanted_metrics():
     source = _dashboard_source()
-    assert "QLabel('Statystyki biblioteki')" in source
+    assert "'Stan biblioteki', 'Podsumowanie zawartości i analiz biblioteki.'" in source
+    assert "QLabel('Statystyki biblioteki')" not in source
     for key, label in (
-        ('covers', 'OKŁADKI'),
-        ('online', 'ROZPOZNANE ONLINE'),
-        ('missing', 'BRAKUJĄCE PLIKI'),
-        ('suspicious', 'PODEJRZANE DANE'),
-        ('size', 'ROZMIAR BIBLIOTEKI'),
-        ('free_space', 'WOLNE MIEJSCE'),
+        ('covers', 'Okładki'),
+        ('online', 'Rozpoznane online'),
+        ('missing', 'Brakujące pliki'),
+        ('suspicious', 'Podejrzane dane'),
+        ('size', 'Rozmiar biblioteki'),
+        ('free_space', 'Wolne miejsce'),
     ):
         assert f"('{key}', '{label}')" in source
     assert 'LICZBA GATUNKÓW' not in source

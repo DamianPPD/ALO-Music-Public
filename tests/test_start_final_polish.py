@@ -118,13 +118,13 @@ def test_start_sections_use_c_icons_without_changing_actions(tmp_path, monkeypat
                      'not_selected': 'folder_x', 'custom_folders': 'music_note', 'reports': 'report'}
         for key, name in locations.items():
             card = window.dashboard.location_cards[key]
-            assert _pixels(card.title_icon.pixmap()) == _pixels(icons.start_icon(name, '#628fb0', 29).pixmap(29, 29))
+            assert _pixels(card.title_icon.pixmap()) == _pixels(icons.start_icon(name, '#628fb0', 20).pixmap(20, 20))
         metrics = {'covers': 'cover', 'online': 'cloud', 'suspicious': 'document_warning',
                    'size': 'database', 'missing': 'document_x', 'free_space': 'disk'}
         for key, name in metrics.items():
             box = window.dashboard.stats_values[key].parentWidget()
             icon = next(label for label in box.findChildren(QLabel) if label.pixmap() is not None)
-            assert _pixels(icon.pixmap()) == _pixels(icons.start_icon(name, '#628fb0', 22).pixmap(22, 22))
+            assert _pixels(icon.pixmap()) == _pixels(icons.start_icon(name, '#628fb0', 18).pixmap(18, 18))
         assert len(window.dashboard.location_cards) == 6
     finally:
         window.close()
@@ -206,17 +206,18 @@ def test_start_sections_have_balanced_gaps_without_resizing_cards(tmp_path):
         page.show()
         _app().processEvents()
         body = page.scroll.widget()
-        quick_title = next(label for label in page.findChildren(QLabel) if label.text() == 'Szybki dostęp')
+        quick_title = next(label for label in page.findChildren(QLabel) if label.text() == 'Struktura biblioteki')
         def gap(upper, lower):
             return lower.mapTo(body, lower.rect().topLeft()).y() - upper.mapTo(body, upper.rect().bottomLeft()).y() - 1
 
         assert 14 <= gap(page.cards['total'], page.last_scan_label) <= 24
-        assert 18 <= gap(page.last_scan_label, quick_title) <= 29
-        assert 11 <= gap(quick_title, page.location_cards['root']) <= 20
-        assert 12 <= gap(page.metric_cards['covers'], page.attention_frame) <= 18
+        assert gap(page.last_scan_label, quick_title) >= 18
+        assert gap(quick_title, page.location_cards['root']) >= 10
+        assert page.metric_cards['covers'].geometry().bottom() < page.metric_cards['online'].y()
+        assert page.metric_cards['suspicious'].geometry().bottom() < page.attention_frame.y()
         assert page.cards['total'].height() == 92
-        assert page.location_cards['root'].height() == 86
-        assert page.metric_cards['covers'].height() == 84
+        assert 60 <= page.location_cards['root'].height() <= 70
+        assert 70 <= page.metric_cards['covers'].height() <= 80
     finally:
         page.close()
 
@@ -228,12 +229,13 @@ def test_all_start_open_folder_buttons_use_c_icon_and_keep_callbacks(tmp_path, m
     visited = []
     monkeypatch.setattr(QDesktopServices, 'openUrl', lambda url: visited.append(url.toLocalFile()) or True)
     try:
-        expected = _pixels(icons.start_icon('folder_open', '#d9e8ef', 15).pixmap(16, 16))
         buttons = [page.open_folder_button] + [card.open_button for card in page.location_cards.values()]
         assert len(buttons) == 7
         for button in buttons:
             assert button.text() == 'Otwórz folder'
             assert not button.icon().isNull()
+            color = '#d9e8ef' if button is page.open_folder_button else '#628fb0'
+            expected = _pixels(icons.start_icon('folder_open', color, 15).pixmap(16, 16))
             assert _pixels(button.icon().pixmap(16, 16)) == expected
         page.open_folder_button.click()
         for card in page.location_cards.values():

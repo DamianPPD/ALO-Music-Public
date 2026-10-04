@@ -3022,3 +3022,77 @@ QDialog#MetadataEditorDialog QFrame#AudioRecognitionSummary[emptyResult="true"] 
 '''.replace('__GENRE_ACCENT__', GENRE_ACCENT).replace('__AUDIO_ACCENT__', AUDIO_ID_ACCENT)
 DARK_STYLE += CONTROLLED_GENRE_STYLE
 LIGHT_STYLE += CONTROLLED_GENRE_STYLE
+
+# Only the replacement structure/status block on Start uses these rules.
+START_LIBRARY_PANELS_STYLE = r'''
+QWidget#StartLibraryPanels { background:transparent; border:0; }
+QWidget#StartLibraryPanels QFrame#StartLibraryPanel {
+    background:#0c1822; border:1px solid #29424f; border-radius:8px;
+}
+QWidget#StartLibraryPanels QLabel {
+    background:transparent; border:0; padding:0;
+}
+QWidget#StartLibraryPanels QLabel#StartPanelTitle {
+    color:#e1ebf1; font-size:11pt; font-weight:750;
+}
+QWidget#StartLibraryPanels QLabel#StartPanelSubtitle {
+    color:#91a7b4; font-size:8.5pt; font-weight:400;
+}
+QWidget#StartLibraryPanels QWidget#LibraryStructureList {
+    background:transparent; border:0;
+}
+QWidget#StartLibraryPanels QFrame#LibraryLocationRow {
+    background:#0b1b26; border:1px solid #294451; border-radius:6px;
+}
+QWidget#StartLibraryPanels QFrame#LibraryLocationRow:hover {
+    background:#10212c; border-top-color:#3a5968;
+    border-right-color:#3a5968; border-bottom-color:#3a5968;
+}
+QWidget#StartLibraryPanels QLabel#QuickAccessTitle {
+    color:#dee8ef; font-size:9.5pt; font-weight:700;
+}
+QWidget#StartLibraryPanels QLabel#QuickAccessPath {
+    color:#8fa7b4; font-size:8.5pt; font-weight:400;
+}
+QWidget#StartLibraryPanels QLabel#QuickAccessAvailability {
+    color:#718793; font-size:8pt; font-weight:500; padding:0;
+}
+QWidget#StartLibraryPanels QLabel#QuickAccessAvailability[available="true"] { color:#71d9aa; }
+QWidget#StartLibraryPanels QLabel#LibraryLocationStatusDot {
+    background:#718793; border:0; border-radius:2px;
+}
+QWidget#StartLibraryPanels QLabel#LibraryLocationStatusDot[available="true"] { background:#71d9aa; }
+QWidget#StartLibraryPanels QPushButton#QuickAccessOpen {
+    background:#10212c; border:1px solid #34515f; border-radius:5px;
+    color:#d4e2ea; min-width:0; min-height:24px; padding:3px 8px; font-size:8pt;
+}
+QWidget#StartLibraryPanels QPushButton#QuickAccessOpen:hover {
+    background:#172c38; border-color:#557989; color:#edf3f8;
+}
+QWidget#StartLibraryPanels QPushButton#QuickAccessOpen:disabled {
+    background:#0c1822; color:#566771; border-color:#25343c;
+}
+QWidget#StartLibraryPanels QFrame#StartLibraryMetric,
+QWidget#StartLibraryPanels QFrame#StartLibraryAttention {
+    background:#0b1b26; border:1px solid #294451; border-radius:6px;
+}
+QWidget#StartLibraryPanels QLabel#StartMetricIcon,
+QWidget#StartLibraryPanels QLabel#QuickAccessIcon {
+    background:transparent; border:0; border-radius:0;
+}
+QWidget#StartLibraryPanels QLabel#StartMetricHeading {
+    color:#b0c3ce; font-size:8.5pt; font-weight:500;
+}
+QWidget#StartLibraryPanels QLabel#StartMetricValue { color:#e0ebf1; }
+QWidget#StartLibraryPanels QProgressBar#StartMetricProgress {
+    min-height:5px; max-height:5px; background:#203747; border:0; border-radius:2px;
+}
+QWidget#StartLibraryPanels QProgressBar#StartMetricProgress::chunk { background:#39abdc; border-radius:2px; }
+QWidget#StartLibraryPanels QProgressBar#StartMetricProgress[metricKind="online"]::chunk { background:#b987ff; }
+QWidget#StartLibraryPanels QLabel#StartAttentionTitle {
+    color:#a8cedd; font-size:9.5pt; font-weight:700;
+}
+QWidget#StartLibraryPanels QLabel#StartAttentionText { color:#b0c3ce; font-size:8.5pt; }
+'''
+DARK_STYLE += START_LIBRARY_PANELS_STYLE
+LIGHT_STYLE += START_LIBRARY_PANELS_STYLE

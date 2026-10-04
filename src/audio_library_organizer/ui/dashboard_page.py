@@ -16,6 +16,8 @@ from audio_library_organizer.ui.i18n import ui_text, language_for
 from audio_library_organizer.ui.widgets import StatCard
 from audio_library_organizer.ui.assets import asset_path
 
+START_PANEL_ICON_COLOR = '#628fb0'
+
 
 class StudioHero(QFrame):
     """Display the approved panorama with its audio equipment in the crop."""
@@ -199,47 +201,75 @@ class ElidedPathLabel(QLabel):
         )
 
 
-class QuickAccessCard(QFrame):
+class LibraryStructureList(QWidget):
+    """Draw the quiet tree connector behind the six location rows."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName('LibraryStructureList')
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.rows = []
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self.rows:
+            return
+        centers = [row.geometry().center().y() for row in self.rows]
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(QColor('#365568'), 1))
+        painter.drawLine(8, centers[0], 8, centers[-1])
+        for row, center in zip(self.rows, centers):
+            painter.drawLine(8, center, row.x() - 1, center)
+            painter.setBrush(QColor(START_PANEL_ICON_COLOR))
+            painter.drawEllipse(QRectF(5, center - 3, 6, 6))
+        painter.end()
+
+
+class LibraryLocationRow(QFrame):
     def __init__(self, title: str, path: Path, icon_name: str, accent: str, parent=None):
         super().__init__(parent)
-        self.setObjectName('QuickAccessCard')
+        self.setObjectName('LibraryLocationRow')
         self.setProperty('accentColor', accent)
+        self.setStyleSheet(f'QFrame#LibraryLocationRow {{ border-left:3px solid {accent}; }}')
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        self.setFixedHeight(86)
+        self.setFixedHeight(64)
         self.path = Path(path)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 9, 15, 9)
-        layout.setSpacing(11)
+        layout.setContentsMargins(12, 8, 10, 8)
+        layout.setSpacing(9)
         self.title_icon = QLabel()
         self.title_icon.setObjectName('QuickAccessIcon')
-        self.title_icon.setPixmap(start_icon(icon_name, '#628fb0', 29).pixmap(29, 29))
-        self.title_icon.setFixedSize(48, 48)
+        self.title_icon.setPixmap(start_icon(icon_name, START_PANEL_ICON_COLOR, 20).pixmap(20, 20))
+        self.title_icon.setFixedSize(24, 24)
         self.title_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.title_icon)
         text_column = QVBoxLayout()
-        text_column.setSpacing(4)
+        text_column.setSpacing(3)
         self.title_label = QLabel(title)
         self.title_label.setObjectName('QuickAccessTitle')
         text_column.addWidget(self.title_label)
         self.path_label = ElidedPathLabel(self.path, accent)
         text_column.addWidget(self.path_label)
         layout.addLayout(text_column, 1)
-        actions = QVBoxLayout()
-        actions.setSpacing(6)
+        availability_row = QHBoxLayout()
+        availability_row.setSpacing(5)
+        self.availability_dot = QLabel()
+        self.availability_dot.setObjectName('LibraryLocationStatusDot')
+        self.availability_dot.setFixedSize(5, 5)
+        availability_row.addWidget(self.availability_dot)
         self.availability = QLabel('')
         self.availability.setObjectName('QuickAccessAvailability')
-        self.availability.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.availability.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
-        actions.addWidget(self.availability)
-        actions.setAlignment(self.availability, Qt.AlignmentFlag.AlignRight)
+        availability_row.addWidget(self.availability)
+        layout.addLayout(availability_row)
         self.open_button = QPushButton('Otwórz folder')
         self.open_button.setObjectName('QuickAccessOpen')
         self.open_button.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.open_button.setIcon(start_icon('folder_open', '#d9e8ef', 15))
+        self.open_button.setIcon(start_icon('folder_open', START_PANEL_ICON_COLOR, 15))
         self.open_button.setToolTip('Otwórz folder w Eksploratorze')
-        actions.addWidget(self.open_button)
-        layout.addLayout(actions)
+        layout.addWidget(self.open_button)
 
         self.open_button.clicked.connect(self._open_folder)
         self.set_path(path)
@@ -252,6 +282,9 @@ class QuickAccessCard(QFrame):
         self.availability.setProperty('available', available)
         self.availability.style().unpolish(self.availability)
         self.availability.style().polish(self.availability)
+        self.availability_dot.setProperty('available', available)
+        self.availability_dot.style().unpolish(self.availability_dot)
+        self.availability_dot.style().polish(self.availability_dot)
         self.open_button.setEnabled(available)
 
     def _open_folder(self) -> None:
@@ -360,134 +393,148 @@ class DashboardPage(QWidget):
         root.addWidget(self.last_scan_label)
         root.addSpacing(12)
 
-        quick_header = QHBoxLayout()
-        quick_title_icon = QLabel()
-        quick_title_icon.setPixmap(start_icon('folder_open', '#62d6f5', 20).pixmap(20, 20))
-        quick_title_icon.setFixedSize(24, 24)
-        quick_header.addWidget(quick_title_icon)
-        quick_title = QLabel('Szybki dostęp')
-        quick_title.setObjectName('DashboardSectionTitle')
-        quick_header.addWidget(quick_title)
-        quick_header.addStretch(1)
-        root.addLayout(quick_header)
-        root.addSpacing(5)
+        self.library_panels_host = QWidget()
+        self.library_panels_host.setObjectName('StartLibraryPanels')
+        self.library_panels_layout = QGridLayout(self.library_panels_host)
+        self.library_panels_layout.setContentsMargins(0, 0, 0, 0)
+        self.library_panels_layout.setSpacing(12)
+        self.structure_panel, structure_layout = self._create_library_panel(
+            'Struktura biblioteki', 'Główna biblioteka i powiązane lokalizacje robocze.', 'folder_open')
+        self.status_panel, status_layout = self._create_library_panel(
+            'Stan biblioteki', 'Podsumowanie zawartości i analiz biblioteki.', 'report')
 
-        self.quick_access_host = QWidget()
-        self.quick_access_layout = QGridLayout(self.quick_access_host)
-        self.quick_access_layout.setContentsMargins(0, 0, 0, 3)
-        self.quick_access_layout.setHorizontalSpacing(10)
-        self.quick_access_layout.setVerticalSpacing(5)
-        self.location_cards: dict[str, QuickAccessCard] = {}
+        self.quick_access_host = LibraryStructureList(self.structure_panel)
+        self.quick_access_layout = QVBoxLayout(self.quick_access_host)
+        self.quick_access_layout.setContentsMargins(26, 0, 0, 0)
+        self.quick_access_layout.setSpacing(7)
+        self.quick_access_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.location_cards: dict[str, LibraryLocationRow] = {}
         self._location_order = ('root', 'ready', 'review', 'not_selected', 'custom_folders', 'reports')
         self._create_location_cards(settings)
-        root.addWidget(self.quick_access_host)
-        root.addSpacing(12)
-
-        self.statistics_separator = QFrame()
-        self.statistics_separator.setObjectName('DashboardStatisticsSeparator')
-        self.statistics_separator.setMinimumHeight(27)
-        separator_layout = QHBoxLayout(self.statistics_separator)
-        separator_layout.setContentsMargins(0, 3, 0, 3)
-        separator_layout.setSpacing(8)
-        self.statistics_separator_icon = QLabel()
-        self.statistics_separator_icon.setObjectName('DashboardStatisticsIcon')
-        self.statistics_separator_icon.setPixmap(start_icon('report', '#75bfff', 17).pixmap(17, 17))
-        self.statistics_separator_icon.setFixedSize(20, 20)
-        self.statistics_separator_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        separator_layout.addWidget(self.statistics_separator_icon)
-        self.statistics_separator_title = QLabel('Statystyki biblioteki')
-        self.statistics_separator_title.setObjectName('DashboardStatisticsTitle')
-        separator_layout.addWidget(self.statistics_separator_title)
-        right_line = QFrame()
-        right_line.setObjectName('DashboardStatisticsLine')
-        right_line.setFrameShape(QFrame.Shape.HLine)
-        separator_layout.addWidget(right_line, 1)
-        root.addWidget(self.statistics_separator)
-        root.addSpacing(5)
-
-        stats_frame = QFrame()
-        stats_frame.setObjectName('LibraryHealthCard')
-        stats_layout = QVBoxLayout(stats_frame)
-        stats_layout.setContentsMargins(0, 0, 0, 0)
-        stats_layout.setSpacing(3)
+        structure_layout.addWidget(self.quick_access_host, 1)
 
         self.stats_grid = QGridLayout()
-        self.stats_grid.setHorizontalSpacing(9)
-        self.stats_grid.setVerticalSpacing(4)
+        self.stats_grid.setHorizontalSpacing(8)
+        self.stats_grid.setVerticalSpacing(8)
+        self.stats_grid.setAlignment(Qt.AlignmentFlag.AlignTop)
         stat_labels = [
-            ('covers', 'OKŁADKI'),
-            ('online', 'ROZPOZNANE ONLINE'),
-            ('size', 'ROZMIAR BIBLIOTEKI'),
-            ('missing', 'BRAKUJĄCE PLIKI'),
-            ('suspicious', 'PODEJRZANE DANE'),
-            ('free_space', 'WOLNE MIEJSCE'),
+            ('covers', 'Okładki'),
+            ('online', 'Rozpoznane online'),
+            ('size', 'Rozmiar biblioteki'),
+            ('missing', 'Brakujące pliki'),
+            ('suspicious', 'Podejrzane dane'),
+            ('free_space', 'Wolne miejsce'),
         ]
         self._metric_order = tuple(key for key, _label in stat_labels)
         self.metric_cards = {}
         self.stats_values: dict[str, QLabel] = {}
         self.stats_progress = {}
         for index, (key, label) in enumerate(stat_labels):
+            wide = key in {'covers', 'online'}
             box = QFrame()
             box.setObjectName('StartLibraryMetric')
-            box_layout = QVBoxLayout(box)
-            box.setMinimumHeight(84)
-            box_layout.setContentsMargins(11, 9, 11, 9)
-            box_layout.setSpacing(4)
+            box.setProperty('metricKind', key)
+            box.setFixedHeight(74 if wide else 80)
+            box_layout = QHBoxLayout(box)
+            box_layout.setContentsMargins(11, 8, 11, 8)
+            box_layout.setSpacing(8)
             icon = QLabel()
             icon_name = {'covers': 'cover', 'online': 'cloud', 'suspicious': 'document_warning',
                          'size': 'database', 'missing': 'document_x', 'free_space': 'disk'}[key]
             icon.setObjectName('StartMetricIcon')
-            icon.setPixmap(start_icon(icon_name, '#628fb0', 22).pixmap(22, 22))
-            icon.setFixedSize(35, 35)
+            icon.setPixmap(start_icon(icon_name, START_PANEL_ICON_COLOR, 18).pixmap(18, 18))
+            icon.setFixedSize(22, 22)
             icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            header = QHBoxLayout()
-            header.setSpacing(8)
-            header.addWidget(icon)
-            text_column = QVBoxLayout()
-            text_column.setSpacing(2)
+            box_layout.addWidget(icon)
             heading = QLabel(label)
             heading.setObjectName('StartMetricHeading')
-            text_column.addWidget(heading)
+            heading.setWordWrap(True)
             value = QLabel('—')
+            value.setObjectName('StartMetricValue')
             value.setStyleSheet('font-size:12pt;font-weight:750;')
-            text_column.addWidget(value)
-            header.addLayout(text_column, 1)
-            box_layout.addLayout(header)
-            if key in {'covers', 'online'}:
+            if wide:
+                box_layout.addWidget(heading, 1)
+                value_column = QVBoxLayout()
+                value_column.setSpacing(7)
+                value_column.addWidget(value)
                 from PySide6.QtWidgets import QProgressBar
                 progress = QProgressBar()
                 progress.setObjectName('StartMetricProgress')
+                progress.setProperty('metricKind', key)
                 progress.setRange(0, 100)
                 progress.setTextVisible(False)
-                box_layout.addWidget(progress)
+                value_column.addWidget(progress)
+                box_layout.addLayout(value_column, 1)
                 self.stats_progress[key] = progress
+            else:
+                text_column = QVBoxLayout()
+                text_column.setSpacing(4)
+                text_column.addWidget(heading)
+                text_column.addWidget(value)
+                box_layout.addLayout(text_column, 1)
             self.stats_values[key] = value
             self.metric_cards[key] = box
-            self.stats_grid.addWidget(box, 0, index)
-        stats_layout.addLayout(self.stats_grid)
-        root.addWidget(stats_frame)
-        root.addSpacing(6)
-        self._reflow_metrics()
+            if wide:
+                self.stats_grid.addWidget(box, index, 0, 1, 2)
+            else:
+                self.stats_grid.addWidget(box, 2 + (index - 2) // 2, (index - 2) % 2)
 
         self.attention_frame = QFrame()
-        self.attention_frame.setObjectName('MissingFilesBanner')
+        self.attention_frame.setObjectName('StartLibraryAttention')
+        self.attention_frame.setMinimumHeight(70)
         attention_layout = QHBoxLayout(self.attention_frame)
-        attention_layout.setContentsMargins(10, 7, 10, 7)
-        attention_layout.setSpacing(10)
+        attention_layout.setContentsMargins(11, 8, 11, 8)
+        attention_layout.setSpacing(8)
         attention_icon = QLabel()
         attention_icon.setObjectName('StartAttentionIcon')
-        attention_icon.setPixmap(start_icon('warning', '#ffb84d', 20).pixmap(20, 20))
+        attention_icon.setPixmap(start_icon('warning', START_PANEL_ICON_COLOR, 18).pixmap(18, 18))
+        attention_icon.setFixedSize(22, 22)
+        attention_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         attention_layout.addWidget(attention_icon)
+        attention_column = QVBoxLayout()
+        attention_column.setSpacing(4)
         attention_title = QLabel('Wymaga uwagi')
-        attention_title.setStyleSheet('font-weight:800;color:#ffb84d;')
-        attention_layout.addWidget(attention_title)
+        attention_title.setObjectName('StartAttentionTitle')
+        attention_column.addWidget(attention_title)
         self.attention_text = QLabel('')
+        self.attention_text.setObjectName('StartAttentionText')
         self.attention_text.setWordWrap(True)
-        attention_layout.addWidget(self.attention_text, 1)
+        attention_column.addWidget(self.attention_text)
+        attention_layout.addLayout(attention_column, 1)
         self.attention_frame.setVisible(False)
-        root.addWidget(self.attention_frame)
+        self.stats_grid.addWidget(self.attention_frame, 4, 0, 1, 2)
+        status_layout.addLayout(self.stats_grid, 1)
+        root.addWidget(self.library_panels_host)
+        self._reflow_panels()
 
         self._load_last_scan()
+
+    def _create_library_panel(self, title: str, subtitle: str, icon_name: str):
+        panel = QFrame(self.library_panels_host)
+        panel.setObjectName('StartLibraryPanel')
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(9)
+        header = QHBoxLayout()
+        header.setSpacing(9)
+        icon = QLabel()
+        icon.setObjectName('StartPanelIcon')
+        icon.setPixmap(start_icon(icon_name, START_PANEL_ICON_COLOR, 20).pixmap(20, 20))
+        icon.setFixedSize(24, 24)
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header.addWidget(icon)
+        text = QVBoxLayout()
+        text.setSpacing(3)
+        heading = QLabel(title)
+        heading.setObjectName('StartPanelTitle')
+        note = QLabel(subtitle)
+        note.setObjectName('StartPanelSubtitle')
+        note.setWordWrap(True)
+        text.addWidget(heading)
+        text.addWidget(note)
+        header.addLayout(text, 1)
+        layout.addLayout(header)
+        return panel, layout
 
     def _library_storage_key(self) -> str:
         normalized = str(self._library_root.resolve()).casefold().encode('utf-8', errors='replace')
@@ -534,39 +581,35 @@ class DashboardPage(QWidget):
             ('root', 'Biblioteka główna', library.root, 'folder', '#58c9f3'),
             ('ready', 'Pliki wynikowe / GOTOWE', library.ready, 'folder_check', '#55d98b'),
             ('review', 'Do sprawdzenia', library.review, 'warning', '#f0b44d'),
-            ('not_selected', 'Niewybrane', library.not_selected, 'folder_x', '#b987ff'),
-            ('custom_folders', 'Moje pliki MP3', library.custom_folders, 'music_note', '#50d1c4'),
-            ('reports', 'Raporty', library.reports, 'report', '#75bfff'),
+            ('not_selected', 'Niewybrane', library.not_selected, 'folder_x', '#e675a2'),
+            ('custom_folders', 'Moje pliki MP3', library.custom_folders, 'music_note', '#b987ff'),
+            ('reports', 'Raporty', library.reports, 'report', '#50c9da'),
         )
 
     def _create_location_cards(self, settings: AppSettings) -> None:
         for key, title, path, icon_name, accent in self._location_specs(settings):
-            self.location_cards[key] = QuickAccessCard(title, path, icon_name, accent, self.quick_access_host)
-        self._reflow_locations()
+            card = LibraryLocationRow(title, path, icon_name, accent, self.quick_access_host)
+            self.location_cards[key] = card
+            self.quick_access_layout.addWidget(card)
+        self.quick_access_host.rows = list(self.location_cards.values())
 
     def _update_location_cards(self, settings: AppSettings) -> None:
         for key, _title, path, _icon_name, _accent in self._location_specs(settings):
             self.location_cards[key].set_path(path)
 
-    def _reflow_locations(self) -> None:
-        width = self.width()
-        columns = 3 if width >= 1250 else 2 if width >= 720 else 1
-        for index, key in enumerate(self._location_order):
-            self.quick_access_layout.addWidget(self.location_cards[key], index // columns, index % columns)
-
-    def _reflow_metrics(self) -> None:
-        columns = 6 if self.width() >= 1250 else 3 if self.width() >= 720 else 2
-        for index, key in enumerate(self._metric_order):
-            self.stats_grid.addWidget(self.metric_cards[key], index // columns, index % columns)
+    def _reflow_panels(self) -> None:
+        two_columns = self.width() >= 1050
+        self.library_panels_layout.addWidget(self.structure_panel, 0, 0)
+        self.library_panels_layout.addWidget(self.status_panel, 0 if two_columns else 1, 1 if two_columns else 0)
+        self.library_panels_layout.setColumnStretch(0, 2 if two_columns else 1)
+        self.library_panels_layout.setColumnStretch(1, 1 if two_columns else 0)
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
         if hasattr(self, 'hero_title'):
             self.hero_title.setMaximumWidth(min(600, max(330, int(self.width() * .42))))
-        if hasattr(self, 'location_cards'):
-            self._reflow_locations()
-        if hasattr(self, 'metric_cards'):
-            self._reflow_metrics()
+        if hasattr(self, 'library_panels_host'):
+            self._reflow_panels()
 
     def set_library(self, settings: AppSettings, library_name: str | None = None):
         self._library_root = Path(settings.library.root)
