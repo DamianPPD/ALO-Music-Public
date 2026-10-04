@@ -300,7 +300,7 @@ def test_source_legend_colors_provider_text_not_whole_row(tmp_path: Path):
             'TAG': '#5ca3ff',
             'Discogs': '#43d17d',
             'MusicBrainz': '#b36cff',
-            'Apple': '#ff6670',
+            'Apple': '#e88abd',
             'RĘCZNIE': '#ffb84d',
             'ANALIZA': '#ef5b64',
             'ROZPOZNANIE AUDIO': '#a3a8ff',
@@ -321,9 +321,9 @@ def test_start_cards_keep_neutral_headers_and_color_only_final_path_segment(tmp_
         'root': '#58c9f3',
         'ready': '#55d98b',
         'review': '#f0b44d',
-        'not_selected': '#b987ff',
-        'custom_folders': '#50d1c4',
-        'reports': '#75bfff',
+        'not_selected': '#e675a2',
+        'custom_folders': '#8d9ba6',
+        'reports': '#50c9da',
     }
     assert {key: card.property('accentColor') for key, card in page.location_cards.items()} == expected
     for key, card in page.location_cards.items():
@@ -335,14 +335,14 @@ def test_start_cards_keep_neutral_headers_and_color_only_final_path_segment(tmp_
         assert expected[key] in card.path_label.text()
         parent_text = str(card.path.parent)
         assert parent_text not in card.path_label.text() or '#8fa7b4' in card.path_label.text()
-    assert page.statistics_separator.objectName() == 'DashboardStatisticsSeparator'
-    assert page.statistics_separator_icon.pixmap() is not None
-    assert not page.statistics_separator_icon.pixmap().isNull()
-    assert page.statistics_separator_title.text() == 'Statystyki biblioteki'
-    assert 25 <= page.statistics_separator.minimumHeight() <= 32
-    assert page.statistics_separator.layout().contentsMargins().top() >= 2
-    assert page.statistics_separator.layout().contentsMargins().bottom() >= 2
-    assert page.quick_access_layout.contentsMargins().bottom() >= 2
+    for panel, title in ((page.structure_panel, 'Struktura biblioteki'),
+                         (page.status_panel, 'Stan biblioteki'),
+                         (page.sources_panel, 'Źródła skanowania')):
+        heading = panel.findChild(QLabel, 'StartPanelTitle')
+        assert heading.text() == title
+        assert heading.palette().windowText().color().name() not in expected.values()
+        assert panel.findChild(QLabel, 'LibrarySectionMark') is not None
+    assert page.status_panel.layout().contentsMargins().top() < page.structure_panel.layout().contentsMargins().top()
     page.close()
 
 

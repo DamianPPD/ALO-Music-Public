@@ -508,6 +508,8 @@ def _dynamic_en(text: str) -> str:
 def _english_count_agreement(text: str) -> str:
     text = re.sub(r'\b1 (available files|missing files|duplicate groups|files|tracks|groups|channels)\b',
                   lambda match: '1 ' + match.group(1).replace('files', 'file').replace('tracks', 'track').replace('groups', 'group').replace('channels', 'channel'), text)
+    text = re.sub(r'\b1 track (require|have)\b',
+                  lambda match: '1 track ' + ('requires' if match.group(1) == 'require' else 'has'), text)
     return re.sub(r'\b1 need review\b', '1 needs review', text)
 
 

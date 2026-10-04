@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QApplication
 from audio_library_organizer.domain.settings import AppSettings, LibraryPaths
 from audio_library_organizer.ui.dashboard_page import DashboardPage
 from audio_library_organizer.ui.icons import alo_icon
+from audio_library_organizer.ui.theme import style_for_theme
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,7 +50,9 @@ def test_a1_asset_pack_has_required_ultra_thin_icons():
         svg = path.read_text(encoding='utf-8')
         assert 'viewBox="0 0 24 24"' in svg
         assert 'stroke="currentColor"' in svg
-        assert 'stroke-width="1.8"' in svg if path.stem.startswith('nav_') else 'stroke-width="1.15"' in svg
+        # The approved Start add-source plus is intentionally heavier than A1.
+        stroke = '1.8' if path.stem.startswith('nav_') or path.stem == 'start_source_add' else '1.15'
+        assert f'stroke-width="{stroke}"' in svg, path.name
 
 
 def test_a1_loader_renders_icons_at_common_windows_scale_sizes():
@@ -129,41 +132,89 @@ def test_start_open_folder_uses_the_real_configured_location(tmp_path, monkeypat
     assert Path(opened[0].toLocalFile()) == paths.review
 
 
-def test_start_marks_nonexistent_location_neutral_and_disables_open(tmp_path):
-    _app()
+def test_start_marks_nonexistent_location_neutral_and_disables_open(tmp_path, monkeypatch):
+    app = _app()
     paths = LibraryPaths(tmp_path / 'not-created')
     page = DashboardPage(AppSettings(source_dirs=(), library=paths))
+    page.setStyleSheet(style_for_theme('dark'))
+    page.resize(1280, 1000)
+    page.show()
+    app.processEvents()
     card = page.location_cards['reports']
-    assert card.availability.text() == 'Niedostępna'
-    assert card.open_button.isEnabled() is False
-    assert not hasattr(card, 'copy_button')
+    opened = []
+    monkeypatch.setattr(QDesktopServices, 'openUrl', lambda url: opened.append(url.toLocalFile()) or True)
+    try:
+        button = card.open_button
+        assert not button.isEnabled()
+        assert button.property('available') is False
+        assert button.toolTip() == 'Niedostępna'
+        assert button.accessibleDescription() == 'Niedostępna'
+        edge = button.grab().toImage().pixelColor(1, button.height() // 2)
+        assert edge.green() <= edge.red() + 40
+        button.click()
+        assert opened == []
+
+        paths.reports.mkdir(parents=True)
+        page.refresh_locations()
+        app.processEvents()
+        assert button.isEnabled() and button.property('available') is True
+        assert button.accessibleDescription() == 'Dostępna'
+        edge = button.grab().toImage().pixelColor(1, button.height() // 2)
+        assert edge.green() > edge.red() + 40 and edge.green() > edge.blue()
+        button.click()
+        assert opened == [str(paths.reports)]
+    finally:
+        page.close()
 
 
 def test_start_reflows_quick_access_for_wide_and_narrow_windows(tmp_path):
     app = _app()
     paths = LibraryPaths(tmp_path / 'library'); paths.ensure_created()
     page = DashboardPage(AppSettings(source_dirs=(), library=paths))
-    page.resize(1280, 900); page.show(); app.processEvents()
-    assert page.quick_access_layout.indexOf(page.location_cards['review']) >= 0
-    wide_position = page.quick_access_layout.getItemPosition(page.quick_access_layout.indexOf(page.location_cards['review']))
-    page.resize(950, 900); app.processEvents(); page._reflow_locations()
-    narrow_position = page.quick_access_layout.getItemPosition(page.quick_access_layout.indexOf(page.location_cards['review']))
-    assert wide_position[:2] == (0, 2)
-    assert page.width() < 1100
-    assert narrow_position[:2] == (1, 0)
-    page.close()
+    page.setStyleSheet(style_for_theme('dark'))
+    page.show()
+    try:
+        for width in (1740, 950):
+            page.resize(width, 1400)
+            app.processEvents()
+            structure, right = page.structure_panel, page.right_column
+            if width == 1740:
+                assert structure.geometry().right() < right.geometry().left()
+            else:
+                assert page.width() < 1050
+                assert structure.geometry().bottom() < right.geometry().top()
+            assert not structure.geometry().intersects(right.geometry())
+            assert page.library_panels_host.contentsRect().contains(structure.geometry())
+            assert page.library_panels_host.contentsRect().contains(right.geometry())
+            assert page.sources_panel.geometry().bottom() < page.status_panel.geometry().top()
+            assert page.scroll.horizontalScrollBar().maximum() == 0
+            rows = list(page.location_cards.values())
+            assert all(first.geometry().bottom() < second.geometry().top()
+                       for first, second in zip(rows, rows[1:]))
+    finally:
+        page.close()
 
 
-def test_add_tracks_copy_and_cancel_hierarchy_are_explicit():
-    assert "QPushButton('Dodaj utwory do biblioteki')" in MAIN
-    assert "Dodaj pliki audio do biblioteki ALO Music" in MAIN
-    assert "'action.add_files': {'pl': 'Dodaj utwory do biblioteki', 'en': 'Add tracks to library'}" in I18N
-    assert 'QPushButton#CancelScanAction:hover' in THEME
-    assert 'QPushButton#CancelOnlineAction:hover' in THEME
-    assert 'border:1px solid #e45f68' in THEME
-    assert "self.scan_btn.setIcon(start_icon('cancel'" in MAIN
-    assert "self.identify_btn.setIcon(start_icon('cancel'" in MAIN
-    assert '⏳ Anulowanie' not in MAIN
+def test_add_tracks_copy_and_cancel_hierarchy_are_explicit(current_start_window):
+    window = current_start_window
+    add = window.dashboard.sources.add_button
+    assert add.text() == 'Dodaj źródło' and not add.icon().isNull()
+    assert window.dashboard.sources_panel.isAncestorOf(add)
+    assert not window.action_frame.isAncestorOf(add)
+    for kind, button, caption in (
+        ('scan', window.scan_btn, 'Anuluj skanowanie'),
+        ('online', window.identify_btn, 'Anuluj rozpoznawanie'),
+    ):
+        idle_icon = button.icon().pixmap(23, 23).toImage()
+        window._set_busy(True, kind=kind)
+        assert button.isEnabled() and button.text() == caption
+        assert not add.isEnabled()
+        assert '#e45f68' in button.styleSheet()
+        assert button.icon().pixmap(23, 23).toImage() != idle_icon
+        window._set_busy(False, kind=kind)
+        assert add.isEnabled()
+        assert button.text().startswith('1. ' if kind == 'scan' else '2. ')
+        assert button.icon().pixmap(23, 23).toImage() == idle_icon
 
 
 def test_integrations_are_separate_cards_with_configuration_statuses():

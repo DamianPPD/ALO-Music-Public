@@ -6,22 +6,28 @@ EDITOR = (ROOT / 'src/audio_library_organizer/ui/metadata_editor.py').read_text(
 THEME = (ROOT / 'src/audio_library_organizer/ui/theme.py').read_text(encoding='utf-8')
 
 
-def test_top_toolbar_keeps_workflow_actions_with_single_start_accent():
-    assert "self.nav_icon_ids = ('nav_start', 'nav_library', 'nav_duplicates', 'nav_folders', 'nav_help', 'nav_settings')" in MAIN
-    for pair in (
-        "(self.scan_btn, 'scan')",
-        "(self.identify_btn, 'search')",
-        "(self.review_btn, 'review')",
-        "(self.export_btn, 'export')",
-        "(self.new_files_btn, 'plus')",
-    ):
-        assert pair in MAIN
-    assert "self.scan_btn: '#dbe8e2'" in MAIN
-    assert "self.export_btn: '#dbe8e2'" in MAIN
-    assert "self.new_files_btn: '#dbe8e2'" in MAIN
-    assert "bg = '#102b21' if active else '#0c1920'" in MAIN
-    assert 'QPushButton#TopNavButton:checked' in THEME
-    assert 'border-bottom:2px solid #4cde96' in THEME
+def test_top_toolbar_keeps_workflow_actions_with_single_start_accent(current_start_window):
+    from PySide6.QtWidgets import QApplication, QFrame, QPushButton
+
+    window = current_start_window
+    group = window.action_frame.findChild(QFrame, 'WorkflowToolbarGroup')
+    buttons = group.findChildren(QPushButton)
+    assert buttons == [window.scan_btn, window.identify_btn, window.review_btn, window.export_btn]
+    assert [button.text().split('.')[0] for button in buttons] == ['1', '2', '3', '4']
+    images = [button.icon().pixmap(23, 23).toImage() for button in buttons]
+    assert all(not image.isNull() for image in images)
+    assert all(first != second for i, first in enumerate(images) for second in images[i + 1:])
+    assert [button.isChecked() for button in window.nav_buttons] == [True, False, False, False, False, False]
+    window.nav_buttons[1].click()
+    QApplication.instance().processEvents()
+    assert [button.isChecked() for button in window.nav_buttons] == [False, True, False, False, False, False]
+    assert window.stack.currentIndex() == 1
+    assert window.review_btn.property('operationActive') is True
+    assert all(not button.property('operationActive') for button in buttons if button is not window.review_btn)
+    window.nav_buttons[0].click()
+    QApplication.instance().processEvents()
+    assert window.stack.currentIndex() == 0 and window.nav_buttons[0].isChecked()
+    assert all(not button.property('operationActive') for button in buttons)
 
 
 def test_editor_section_headers_match_reference_wording_and_icons():

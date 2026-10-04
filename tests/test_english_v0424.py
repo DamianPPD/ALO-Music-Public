@@ -1,4 +1,5 @@
 import os
+import pytest
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
@@ -24,6 +25,21 @@ def test_english_status_names_and_runtime_counts():
     assert translate_static_text('NIE WYBIERAM', 'en') == 'NOT SELECTED'
     assert translate_static_text('3 plików • 2 grup', 'en') == '3 files • 2 groups'
     assert translate_static_text('Sortowanie: Status ↑   •   Filtry: brak', 'en') == 'Sort: Status ↑   •   Filters: none'
+
+
+@pytest.mark.parametrize('review,covers,expected', [
+    (1, 1, 'Needs attention: 1 track requires metadata review • 1 track has no cover art'),
+    (2, 2, 'Needs attention: 2 tracks require metadata review • 2 tracks have no cover art'),
+    (1, 2, 'Needs attention: 1 track requires metadata review • 2 tracks have no cover art'),
+    (2, 1, 'Needs attention: 2 tracks require metadata review • 1 track has no cover art'),
+    (0, 0, 'Needs attention: 0 tracks require metadata review • 0 tracks have no cover art'),
+    (201, 313, 'Needs attention: 201 tracks require metadata review • 313 tracks have no cover art'),
+])
+def test_attention_message_agrees_with_each_count_and_preserves_polish(review, covers, expected):
+    source = (f'Wymaga uwagi: {review} utworów wymaga sprawdzenia metadanych • '
+              f'{covers} utworów nie ma okładki')
+    assert translate_static_text(source, 'en') == expected
+    assert translate_static_text(source, 'pl') == source
 
 
 def test_library_status_rows_update_when_language_changes(tmp_path):
@@ -85,12 +101,15 @@ def test_live_window_switch_rebuilds_loaded_library_and_operation_text(tmp_path,
         window._apply_preferences(AppPreferences(language='en'))
         assert window.library.model.item(0, 1).text() == 'NEEDS REVIEW'
         assert window.operation_status.text() == 'Manually marked as READY: sample.mp3'
-        assert '1 needs review' in window.dashboard.attention_text.text()
+        assert window.dashboard.attention_text.text() == (
+            'Needs attention: 1 track requires metadata review • 1 track has no cover art')
         assert localized_no_cover_name(window.player) == 'no_cover_en.png'
         assert window.player._cover_pixmap.toImage() != original_cover
         window._apply_preferences(AppPreferences(language='pl'))
         assert window.library.model.item(0, 1).text() == 'DO SPRAWDZENIA'
         assert window.operation_status.text() == 'Ręcznie zatwierdzono jako GOTOWE: sample.mp3'
+        assert window.dashboard.attention_text.text() == (
+            'Wymaga uwagi: 1 utworów wymaga sprawdzenia metadanych • 1 utworów nie ma okładki')
         assert window.player._cover_pixmap.toImage() == original_cover
     finally:
         window.close()

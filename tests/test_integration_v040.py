@@ -35,12 +35,23 @@ def test_main_window_uses_library_registry_and_exposes_prominent_active_library_
     assert 'self.collections.play_requested.connect' in MAIN_WINDOW
 
 
-def test_toolbar_actions_are_visually_distinct_and_online_label_is_explicit():
-    assert "self.new_files_btn.setObjectName('AddFilesAction')" in MAIN_WINDOW
-    assert "self.identify_btn.setObjectName('IdentifyOnlineAction')" in MAIN_WINDOW
-    assert 'Rozpoznaj utwory online' in MAIN_WINDOW
-    assert 'QPushButton#AddFilesAction' in THEME
-    assert 'QPushButton#IdentifyOnlineAction' in THEME
+def test_toolbar_actions_are_visually_distinct_and_online_label_is_explicit(current_start_window):
+    from PySide6.QtWidgets import QPushButton
+    from audio_library_organizer.ui.icons import alo_icon
+
+    window = current_start_window
+    add = window.dashboard.sources.add_button
+    online = window.identify_btn
+    assert add.text() == 'Dodaj źródło'
+    assert add.toolTip() == 'Wybierz folder z nowymi plikami'
+    assert online.text() == '2. Rozpoznaj utwory online'
+    assert online.objectName() == 'IdentifyOnlineAction'
+    assert window.dashboard.sources_panel.isAncestorOf(add)
+    assert not window.action_frame.isAncestorOf(add)
+    assert window.findChildren(QPushButton, 'StartAddSource') == [add]
+    assert add.icon().pixmap(18, 18).toImage() == alo_icon('start_source_add', '#a5cbde', 18).pixmap(18, 18).toImage()
+    window.dashboard.scroll.ensureWidgetVisible(add)
+    assert add.grab().toImage().pixelColor(6, 6) != online.grab().toImage().pixelColor(6, 6)
 
 
 def test_startup_loads_preferences_and_uses_dark_theme_before_showing_window():

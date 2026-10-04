@@ -220,7 +220,7 @@ def test_source_name_text_uses_same_provider_color_as_dot(tmp_path: Path):
         'Tag': '#5ca3ff',
         'Discogs': '#43d17d',
         'MusicBrainz': '#b36cff',
-        'Apple / iTunes': '#ff6670',
+        'Apple / iTunes': '#e88abd',
         'Ręcznie': '#ffb84d',
         'Analiza audio': '#ef5b64',
     }

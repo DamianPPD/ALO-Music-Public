@@ -115,7 +115,7 @@ def test_source_names_use_provider_colors_and_actions_stay_inside_cells(tmp_path
         dialog.resize(1420, 920)
         dialog.show()
         app.processEvents()
-        expected = ('#5ca3ff', '#43d17d', '#b36cff', '#ff6670')
+        expected = ('#5ca3ff', '#43d17d', '#b36cff', '#e88abd')
         for row, color in enumerate(expected):
             assert dialog.source_table.item(row, 0).foreground().color() == QColor(color)
             cell = dialog.source_table.cellWidget(row, 6)
