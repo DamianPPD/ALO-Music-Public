@@ -190,7 +190,7 @@ def test_metadata_editor_has_large_cover_proposals_and_keeps_explicit_placeholde
     assert "track.field_source_values.get('__cover__'" in EDITOR
     assert 'cover_choice' in EDITOR
     assert (ROOT / 'src/audio_library_organizer/assets/no_cover.png').exists()
-    assert (ROOT / 'BRAK_OKLADKI.png').exists()
+    assert (ROOT / 'src/audio_library_organizer/assets/no_cover_en.png').exists()
 
 
 def test_sha256_is_not_in_library_quick_details():
