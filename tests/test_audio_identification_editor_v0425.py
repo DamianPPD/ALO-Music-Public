@@ -5,6 +5,7 @@ import pytest
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
 from PySide6.QtCore import QPoint, QSettings, Qt, QThread
+from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLabel, QWidgetAction
 import requests
@@ -55,7 +56,7 @@ def test_candidates_are_compact_columns_and_approval_collapses_to_summary(tmp_pa
         assert SOURCE in editor._source_rows()
         editor.audio_show_candidates_button.click()
         assert editor.audio_candidate_content.isVisible()
-        assert not table.item(0, 0).icon().isNull()
+        assert table.item(0, 0).toolTip() == 'Źródło audio zatwierdzone'
         table.setCurrentCell(1, 2)
         editor.audio_confirm_button.click()
         assert editor.track.audio_recognition['recording_id'] == 'recording-2'
@@ -83,7 +84,7 @@ def test_approved_candidate_can_be_reconfirmed_and_selected_again_after_switchin
 
         editor.audio_show_candidates_button.click()
         editor.audio_candidates.setCurrentCell(0, 2)
-        assert not editor.audio_candidates.item(0, 0).icon().isNull()
+        assert editor.audio_candidates.item(0, 0).toolTip() == 'Źródło audio zatwierdzone'
         assert editor.audio_confirm_button.text() == 'Zatwierdź jako źródło audio'
         assert editor.audio_confirm_button.isEnabled()
         editor.audio_confirm_button.click()
@@ -108,8 +109,8 @@ def test_approved_candidate_can_be_reconfirmed_and_selected_again_after_switchin
         assert editor.recognition_values['audio_status'].text() == 'Zatwierdzone'
         assert editor.audio_summary.isVisible()
         editor.audio_show_candidates_button.click()
-        assert editor.audio_candidates.item(0, 0).icon().isNull()
-        assert not editor.audio_candidates.item(1, 0).icon().isNull()
+        assert not editor.audio_candidates.item(0, 0).toolTip()
+        assert editor.audio_candidates.item(1, 0).toolTip() == 'Źródło audio zatwierdzone'
         editor.audio_candidates.setCurrentCell(0, 1)
         assert editor.audio_confirm_button.text() == 'Zatwierdź jako źródło audio'
         assert editor.audio_confirm_button.isEnabled()
@@ -119,8 +120,8 @@ def test_approved_candidate_can_be_reconfirmed_and_selected_again_after_switchin
         assert editor._source_values['title'][SOURCE] == 'First mix'
         assert editor._source_rows().count(SOURCE) == 1
         editor.audio_show_candidates_button.click()
-        assert not editor.audio_candidates.item(0, 0).icon().isNull()
-        assert editor.audio_candidates.item(1, 0).icon().isNull()
+        assert editor.audio_candidates.item(0, 0).toolTip() == 'Źródło audio zatwierdzone'
+        assert not editor.audio_candidates.item(1, 0).toolTip()
     finally:
         editor._force_closing = True
         editor.close()
@@ -264,7 +265,8 @@ def test_candidate_hover_and_selection_keep_whole_row_without_focus_frame(tmp_pa
             rect = table.visualItemRect(table.item(0, column))
             point = QPoint(rect.right() - 5, rect.center().y())
             selected_color, hover_color = selected.pixelColor(point), hover.pixelColor(point)
-            assert 225 <= selected_color.hue() <= 285, selected_color.name()
+            assert 240 <= selected_color.hue() <= 275, selected_color.name()
+            assert selected_color.saturation() >= 125
             assert selected_color.blue() > selected_color.green()
             assert selected_color.value() < 100
             assert selected_color != hover_color
@@ -274,6 +276,55 @@ def test_candidate_hover_and_selection_keep_whole_row_without_focus_frame(tmp_pa
         editor._force_closing = True
         editor.close()
         app.setStyleSheet(old_style)
+
+
+def test_audio_candidate_selectors_share_geometry_and_only_current_row_is_filled(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    previous = app.styleSheet()
+    app.setStyleSheet(style_for_theme('dark'))
+    editor = MetadataEditorDialog(TrackRecord(path=tmp_path / 'selection.mp3'))
+    try:
+        editor.show_audio_candidates([AcoustIDHit('r1', .9, 'First', 'Artist'),
+                                      AcoustIDHit('r2', .8, 'Second', 'Artist')])
+        editor.show()
+        app.processEvents()
+        table = editor.audio_candidates
+        table.setCurrentCell(0, 1)
+        editor.audio_confirm_button.click()
+        editor.audio_show_candidates_button.click()
+        app.processEvents()
+        for selected_row in (1, 0, 1):
+            QTest.mouseClick(table.viewport(), Qt.MouseButton.LeftButton,
+                             pos=table.visualItemRect(table.item(selected_row, 1)).center())
+            app.processEvents()
+            assert {index.row() for index in table.selectedIndexes()} == {selected_row}
+            assert editor.track.audio_recognition['recording_id'] == 'r1'
+            picture = table.viewport().grab().toImage()
+            bounds = []
+            for row in range(2):
+                rect = table.visualItemRect(table.item(row, 0))
+                center = rect.center()
+                color = picture.pixelColor(center)
+                if row == selected_row:
+                    assert color.name() == '#a3a8ff'
+                else:
+                    assert color == picture.pixelColor(rect.right() - 5, center.y())
+                background = picture.pixelColor(rect.right() - 5, center.y())
+                outline = QColor('#a3a8ff' if row == selected_row else '#77809b')
+                # Compare antialias coverage, independent of the two outline brightnesses.
+                threshold = .2 * (outline.blue() - background.blue())
+                pixels = [(x, y) for y in range(-9, 10) for x in range(-9, 10)
+                          if picture.pixelColor(center.x() + x, center.y() + y).blue() - background.blue() > threshold]
+                assert pixels
+                bbox = (min(x for x, y in pixels), min(y for x, y in pixels),
+                        max(x for x, y in pixels), max(y for x, y in pixels))
+                assert abs(bbox[0] + bbox[2]) <= 1 and abs(bbox[1] + bbox[3]) <= 1
+                bounds.append(bbox)
+            assert bounds[0] == bounds[1]
+    finally:
+        editor._force_closing = True
+        editor.close()
+        app.setStyleSheet(previous)
 
 
 def test_audio_phase_and_approval_share_a1_module_icon(tmp_path):
@@ -486,7 +537,7 @@ def test_confirm_in_real_editor_workflow_persists_without_test_upsert(tmp_path, 
             assert not reopened.audio_candidate_content.isVisible()
             reopened.audio_show_candidates_button.click()
             assert reopened.audio_candidates.rowCount() == 1
-            assert not reopened.audio_candidates.item(0, 0).icon().isNull()
+            assert reopened.audio_candidates.item(0, 0).toolTip() == 'Źródło audio zatwierdzone'
         finally:
             reopened._force_closing = True
             reopened.close()

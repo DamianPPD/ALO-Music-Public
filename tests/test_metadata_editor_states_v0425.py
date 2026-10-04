@@ -99,11 +99,23 @@ def test_source_comparison_hover_is_subtle_neutral_and_leaves_applied_caption(ed
         assert max(color.red(), color.green(), color.blue()) - min(color.red(), color.green(), color.blue()) < 20
     action = table.cellWidget(_row(editor, 'Tag'), 6).findChild(QPushButton, 'UseSourceDataButton')
     assert action.text() == '✓ Aktualnie wybrane'
+    QTest.mouseClick(table.viewport(), Qt.MouseButton.LeftButton,
+                     pos=table.visualItemRect(table.item(row, 1)).center())
+    QTest.mouseMove(editor.source_comparison_toggle, editor.source_comparison_toggle.rect().center())
+    app.processEvents()
+    assert not table.selectedIndexes()
+    assert editor._last_applied_source == 'Tag'
+    assert action.text() == '✓ Aktualnie wybrane'
+    after_click = table.viewport().grab().toImage()
+    for column in range(6):
+        rect = table.visualItemRect(table.item(row, column))
+        point = QPoint(rect.right() - 12, rect.center().y())
+        assert after_click.pixelColor(point) == before.pixelColor(point)
 
 
 @pytest.mark.parametrize('source,expected', [
     ('Tag', '#5ca3ff'), ('Discogs', '#43d17d'), ('MusicBrainz', '#7289ff'),
-    ('Apple / iTunes', '#ff6670'), (AUDIO_SOURCE, '#a3a8ff'),
+    ('Apple / iTunes', '#e88abd'), (AUDIO_SOURCE, '#a3a8ff'),
     ('Ręcznie', '#ffb84d'), ('Analiza audio', '#49d6cf'), ('Nazwa pliku', '#7d8894'),
 ])
 def test_metadata_field_border_uses_source_color(editor, source, expected):
@@ -123,6 +135,28 @@ def test_metadata_field_border_uses_source_color(editor, source, expected):
         app.processEvents()
         picture = editor.title.grab().toImage()
         assert picture.pixelColor(0, picture.height() // 2).name() == '#f34d64'
+
+
+def test_apple_color_is_shared_by_badge_comparison_menus_legends_and_summary(editor):
+    color = '#e88abd'
+    editor._source_values['title']['Apple / iTunes'] = 'Apple title'
+    editor._rebuild_source_menu('title')
+    editor._select_source_value('title', 'Apple / iTunes')
+    QApplication.instance().processEvents()
+    assert editor.SOURCE_COLORS['Apple / iTunes'] == color
+    assert 310 <= QColor(color).hue() <= 335
+    assert editor._source_buttons['title'].property('sourceColor') == color
+    item = editor.source_table.item(_row(editor, 'Apple / iTunes'), 0)
+    assert item.foreground().color().name() == color
+    assert item.icon().pixmap(12, 12).toImage().pixelColor(6, 6).name() == color
+    for menu in (editor.source_legend_button.menu(), editor._source_buttons['title'].menu()):
+        providers = menu.findChildren(QLabel, 'SourceMenuProvider')
+        apple = next(provider for provider in providers if provider.text() in ('Apple', 'APPLE'))
+        assert apple.property('displayColor') == color
+        dot = apple.parentWidget().findChild(QLabel, 'SourceMenuDot').pixmap().toImage()
+        assert dot.pixelColor(dot.width() // 2, dot.height() // 2).name() == color
+    assert editor.recognition_result_status.property('sourceColor') == color
+    assert editor.recognition_values['source'].property('sourceColor') == color
 
 
 def test_audio_panel_uses_dark_indigo_and_empty_result_stays_red(editor):

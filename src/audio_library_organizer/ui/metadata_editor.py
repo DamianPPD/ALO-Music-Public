@@ -54,7 +54,7 @@ from audio_library_organizer.ui.confidence import ConfidenceWidget
 from audio_library_organizer.ui.player import CompactPlayerBar
 from audio_library_organizer.ui.widgets import ClickableCoverLabel, SelectableElidedLineEdit, show_cover_preview
 from audio_library_organizer.ui.genre_input import GenreChipInput
-from audio_library_organizer.ui.theme import AUDIO_ID_ACCENT
+from audio_library_organizer.ui.theme import AUDIO_ID_ACCENT, APPLE_SOURCE_ACCENT
 from audio_library_organizer.ui.i18n import ui_text, language_for, apply_static_language, localized_no_cover_name
 
 
@@ -328,7 +328,7 @@ class SourceComparisonTable(QTableWidget):
 
 
 class AudioCandidateRowDelegate(QStyledItemDelegate):
-    """Paint row hover without the platform's focused-cell frame."""
+    """Paint row hover and a centered radio selector for the pending choice."""
 
     def paint(self, painter, option, index):
         styled = QStyleOptionViewItem(option)
@@ -337,7 +337,26 @@ class AudioCandidateRowDelegate(QStyledItemDelegate):
             styled.state |= QStyle.StateFlag.State_MouseOver
         else:
             styled.state &= ~QStyle.StateFlag.State_MouseOver
-        super().paint(painter, styled, index)
+        if index.column() != 0:
+            super().paint(painter, styled, index)
+            return
+        self.initStyleOption(styled, index)
+        styled.text = ''
+        styled.icon = QIcon()
+        table = self.parent()
+        table.style().drawControl(QStyle.ControlElement.CE_ItemViewItem, styled, painter, table)
+        selected = bool(styled.state & QStyle.StateFlag.State_Selected)
+        center = QPointF(styled.rect.center()) + QPointF(.5, .5)
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(QColor(AUDIO_ID_ACCENT if selected else '#77809b'), 1.4))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawEllipse(QRectF(center.x() - 7, center.y() - 7, 14, 14))
+        if selected:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(AUDIO_ID_ACCENT))
+            painter.drawEllipse(QRectF(center.x() - 2.5, center.y() - 2.5, 5, 5))
+        painter.restore()
 
 
 class AudioCandidatesTable(QTableWidget):
@@ -637,7 +656,7 @@ class MetadataEditorDialog(QDialog):
         'Tag': '#5ca3ff',
         'Discogs': '#43d17d',
         'MusicBrainz': '#b36cff',
-        'Apple / iTunes': '#ff6670',
+        'Apple / iTunes': APPLE_SOURCE_ACCENT,
         'Analiza audio': '#ef5b64',
         AUDIO_SOURCE: AUDIO_ID_ACCENT,
         'Nazwa pliku': '#9aa6b2',
@@ -1395,7 +1414,7 @@ class MetadataEditorDialog(QDialog):
         self.source_table.setObjectName('SourceComparisonTable')
         self.source_table.setHorizontalHeaderLabels(('Źródło', 'Wykonawca', 'Tytuł / wersja', 'Album / Release', 'Rok', 'Gatunek', 'Akcja'))
         self.source_table.verticalHeader().setVisible(False)
-        self.source_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.source_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.source_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.source_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.source_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -1842,8 +1861,9 @@ class MetadataEditorDialog(QDialog):
             item = self.audio_candidates.item(row, 0)
             if item:
                 is_approved = self._audio_hit_is_approved(hit)
-                item.setText('' if is_approved else '○')
-                item.setIcon(editor_icon('check', AUDIO_ID_ACCENT, 13) if is_approved else QIcon())
+                # Approval stays in the tooltip; the delegate paints only the current row's selector.
+                item.setText('')
+                item.setIcon(QIcon())
                 item.setToolTip(ui_text(self, 'Źródło audio zatwierdzone') if is_approved else '')
                 item.setForeground(QColor(AUDIO_ID_ACCENT))
 

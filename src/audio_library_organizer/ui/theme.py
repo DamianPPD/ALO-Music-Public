@@ -1,5 +1,6 @@
 GENRE_ACCENT = '#5f7d95'
 AUDIO_ID_ACCENT = '#a3a8ff'
+APPLE_SOURCE_ACCENT = '#e88abd'
 
 APP_STYLE = r'''
 QWidget { background:#10141a; color:#eef3f7; font-family:"Segoe UI"; font-size:10pt; }
@@ -2791,7 +2792,7 @@ QDialog#MetadataEditorDialog QProgressBar#RecognitionConfidenceBar {
     min-height:6px; max-height:6px; border:0;
 }
 QDialog#MetadataEditorDialog QLineEdit[sourceKind="apple"],
-QDialog#MetadataEditorDialog QTextEdit[sourceKind="apple"] { border-color:#ff6670; }
+QDialog#MetadataEditorDialog QTextEdit[sourceKind="apple"] { border-color:__APPLE_ACCENT__; }
 QDialog#MetadataEditorDialog QLineEdit[sourceKind="audio_recognition"],
 QDialog#MetadataEditorDialog QTextEdit[sourceKind="audio_recognition"] { border-color:__AUDIO_ACCENT__; }
 QDialog#MetadataEditorDialog QLineEdit[fieldProblem="true"] {
@@ -2815,7 +2816,7 @@ QDialog#MetadataEditorDialog QFrame#AudioRecognitionSummary[emptyResult="true"] 
 QDialog#MetadataEditorDialog QFrame#AudioRecognitionSummary[emptyResult="true"] QLabel#AudioRecognitionSummaryResult {
     color:#d6dde3; font-weight:400;
 }
-'''.replace('__AUDIO_ACCENT__', AUDIO_ID_ACCENT)
+'''.replace('__AUDIO_ACCENT__', AUDIO_ID_ACCENT).replace('__APPLE_ACCENT__', APPLE_SOURCE_ACCENT)
 DARK_STYLE += METADATA_EDITOR_PANEL_STYLE
 LIGHT_STYLE += METADATA_EDITOR_PANEL_STYLE + r'''
 QDialog#MetadataEditorDialog QFrame#PrimaryMetadataCard QWidget#EditorSectionHeader,
@@ -2975,7 +2976,7 @@ QDialog#MetadataEditorDialog QPushButton#UseSourceDataButton[selected="true"]:ho
 }
 QDialog#MetadataEditorDialog QTableWidget#AudioRecognitionCandidates {
     background:#11151f; border-color:#4c5183; gridline-color:#292e43;
-    color:#dfe3f2; selection-background-color:#323953; selection-color:#edf0ff;
+    color:#dfe3f2; selection-background-color:#352a5e; selection-color:#edf0ff;
 }
 QDialog#MetadataEditorDialog QTableWidget#AudioRecognitionCandidates QHeaderView::section {
     background:#181e2d; color:#a8b0cf; border-right-color:#343a56;
@@ -2987,7 +2988,7 @@ QDialog#MetadataEditorDialog QTableWidget#AudioRecognitionCandidates::item:hover
     background:#1b2130;
 }
 QDialog#MetadataEditorDialog QTableWidget#AudioRecognitionCandidates::item:selected {
-    background:#323953; color:#edf0ff;
+    background:#352a5e; color:#edf0ff;
 }
 QDialog#MetadataEditorDialog QFrame#AudioRecognitionPanel {
     background:#11151f; border:1px solid #575b91; border-left:2px solid #7076b7; border-radius:7px;
