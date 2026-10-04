@@ -16,7 +16,7 @@ def test_start_dashboard_keeps_the_library_path_only_in_its_structure():
     assert "self.library_label = QLabel" not in source
     assert "self.open_folder_button =" not in source
     assert "self.dashboard_title = QLabel('Biblioteka główna')" not in source
-    assert "('root', 'Biblioteka główna', library.root, 'folder'" in source
+    assert "('root', 'Biblioteka główna', library.root, 'folder_root'" in source
 
 
 def test_start_dashboard_has_four_clickable_quick_counters():
@@ -69,18 +69,16 @@ def test_start_dashboard_has_compact_library_statistics_without_unwanted_metrics
 
 def test_start_dashboard_shows_attention_only_when_there_is_something_to_fix():
     source = _dashboard_source()
-    assert 'self.attention_frame.setVisible(bool(parts))' in source
-    for phrase in ('{review} do sprawdzenia', '{duplicate} grup duplikatów',
-                   '{missing_covers} bez okładki', '{missing} brakujących plików'):
-        assert f"parts.append(ui_text(self, f'{phrase}'))" in source
+    assert 'self.attention_line.setVisible(bool(review or missing_covers))' in source
+    assert '{review} utworów wymaga sprawdzenia metadanych' in source
+    assert '{missing_covers} utworów nie ma okładki' in source
 
 
-def test_last_scan_is_compact_and_persisted_per_library():
+def test_last_scan_line_is_replaced_by_attention_and_source_history():
     source = _dashboard_source()
-    assert 'dashboard/last_scan/' in source
-    assert 'Ostatnie skanowanie:' in source
-    assert 'self._save_last_scan(now)' in source
-    assert 'self._load_last_scan()' in source
+    assert 'Ostatnie skanowanie:' not in source
+    assert 'self.last_scan_label' not in source
+    assert 'self.sources = ScanSourcesWidget' in source
 
 
 def test_start_dashboard_does_not_repeat_version_in_bottom_right_corner():

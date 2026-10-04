@@ -71,7 +71,7 @@ def test_real_availability_refreshes_with_data_navigation_and_open_action(window
     assert opened == [str(ready.path)]
 
 
-def test_status_cards_use_larger_type_icons_padding_and_progress_without_extra_data(window):
+def test_status_cards_use_compact_type_icons_padding_and_progress_without_extra_data(window):
     page = window.dashboard
     page.set_summary({'total': 20, 'review': 3})
     page.set_health({'available': 20, 'missing_covers': 5, 'online_checked': 8,
@@ -82,13 +82,13 @@ def test_status_cards_use_larger_type_icons_padding_and_progress_without_extra_d
     assert page.stats_values['missing'].text() == '2'
     assert page.stats_values['suspicious'].text() == '4'
     for key, card in page.metric_cards.items():
-        assert card.height() >= (80 if key in {'covers', 'online'} else 100)
-        assert card.layout().contentsMargins().top() >= 12
-        assert card.findChild(QLabel, 'StartMetricHeading').font().pointSizeF() >= 10
-        assert page.stats_values[key].font().pointSizeF() >= 14
-        assert card.findChild(QLabel, 'StartMetricIcon').pixmap().width() == 20
-    assert all(bar.height() >= 9 for bar in page.stats_progress.values())
-    assert page.attention_frame.minimumHeight() >= 80
+        assert card.height() == (40 if key in {'covers', 'online'} else 36)
+        assert card.layout().contentsMargins().top() == 5
+        assert card.findChild(QLabel, 'StartMetricHeading').font().pointSizeF() >= 8
+        assert page.stats_values[key].font().pointSizeF() == 11
+        assert card.findChild(QLabel, 'StartMetricIcon').pixmap().width() == 14
+    assert all(bar.height() == 4 for bar in page.stats_progress.values())
+    assert not page.status_panel.isAncestorOf(page.attention_line)
 
 
 def test_selected_track_folder_name_is_consistent_in_pl_en_and_runtime_version_is_dev(window):

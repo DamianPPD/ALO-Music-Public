@@ -3081,8 +3081,7 @@ QWidget#StartLibraryPanels QPushButton#QuickAccessOpen:disabled {
     background:#0c1822; color:#566771; border-top-color:#25343c;
     border-right-color:#25343c; border-bottom-color:#25343c; border-left-color:#718793;
 }
-QWidget#StartLibraryPanels QFrame#StartLibraryMetric,
-QWidget#StartLibraryPanels QFrame#StartLibraryAttention {
+QWidget#StartLibraryPanels QFrame#StartLibraryMetric {
     background:#0b1b26; border:1px solid #294451; border-radius:6px;
 }
 QWidget#StartLibraryPanels QLabel#StartMetricIcon,
@@ -3090,18 +3089,53 @@ QWidget#StartLibraryPanels QLabel#QuickAccessIcon {
     background:transparent; border:0; border-radius:0;
 }
 QWidget#StartLibraryPanels QLabel#StartMetricHeading {
-    color:#bed0db; font-size:10.5pt; font-weight:550;
+    color:#b5c7d2; font-size:8pt; font-weight:500;
 }
 QWidget#StartLibraryPanels QLabel#StartMetricValue { color:#e0ebf1; }
 QWidget#StartLibraryPanels QProgressBar#StartMetricProgress {
-    min-height:9px; max-height:9px; background:#203747; border:0; border-radius:3px;
+    min-height:4px; max-height:4px; background:#203747; border:0; border-radius:2px;
 }
 QWidget#StartLibraryPanels QProgressBar#StartMetricProgress::chunk { background:#39abdc; border-radius:2px; }
 QWidget#StartLibraryPanels QProgressBar#StartMetricProgress[metricKind="online"]::chunk { background:#b987ff; }
-QWidget#StartLibraryPanels QLabel#StartAttentionTitle {
-    color:#a8cedd; font-size:10.5pt; font-weight:700;
+QWidget#StartLibraryPanels QLabel#StartFolderOrganization {
+    color:#91a7b4; font-size:8pt; font-weight:400;
 }
-QWidget#StartLibraryPanels QLabel#StartAttentionText { color:#bed0db; font-size:9.5pt; }
+QWidget#StartContent QWidget#StartAttentionLine {
+    background:transparent; border:0;
+}
+QWidget#StartContent QLabel#StartAttentionText {
+    color:#ff6b6b; background:transparent; border:0; padding:0; font-size:9.5pt; font-weight:600;
+}
+QWidget#StartLibraryPanels QTableWidget#StartScanSourcesTable {
+    background:#0b1b26; alternate-background-color:#0b1b26;
+    border:1px solid #294451; border-radius:4px; font-size:8pt; color:#b9cbd6;
+}
+QWidget#StartLibraryPanels QTableWidget#StartScanSourcesTable QHeaderView::section {
+    background:#10212c; color:#91a7b4; border:0; border-bottom:1px solid #294451;
+    padding:3px; font-size:8pt; font-weight:500;
+}
+QWidget#StartLibraryPanels QTableWidget#StartScanSourcesTable::item { padding:2px 5px; border:0; }
+QWidget#StartLibraryPanels QLabel#ScanSourceStatusDot[available="true"] {
+    background:#67e495; border:0; border-radius:3px;
+}
+QWidget#StartLibraryPanels QLabel#ScanSourceStatusDot[available="false"] {
+    background:#ff6b6b; border:0; border-radius:3px;
+}
+QWidget#StartLibraryPanels QToolButton#ScanSourceActions {
+    background:transparent; border:0; padding:0; color:#91a7b4; font-size:13pt;
+}
+QWidget#StartLibraryPanels QToolButton#ScanSourceActions::menu-indicator {
+    image:none; width:0; height:0;
+}
+QWidget#StartLibraryPanels QPushButton#StartAddSource {
+    background:#10212c; border:1px solid #34515f; border-radius:4px;
+    color:#cbdce6; padding:3px 9px; min-height:20px; font-size:8.5pt;
+}
+QMenu#StartScanSourceMenu { font-size:9pt; }
+QMenu#StartScanSourceMenu::item { padding:5px 12px; }
+QDialog#StartScanHistoryDialog QTableWidget {
+    font-size:9pt;
+}
 '''
 DARK_STYLE += START_LIBRARY_PANELS_STYLE
 LIGHT_STYLE += START_LIBRARY_PANELS_STYLE

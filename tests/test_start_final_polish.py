@@ -105,7 +105,7 @@ def test_start_sections_use_c_icons_without_changing_actions(tmp_path, monkeypat
     try:
         window.show()
         _app().processEvents()
-        assert len(window.action_buttons) == 5
+        assert len(window.action_buttons) == 4
         for button, name in zip(window.nav_buttons, window.nav_icon_ids):
             assert _pixels(button.icon().pixmap(20, 20)) == _pixels(icons.start_icon(name, button._icon_color.name(), 20).pixmap(20, 20))
         for button, name in window.action_icon_ids:
@@ -125,7 +125,7 @@ def test_start_sections_use_c_icons_without_changing_actions(tmp_path, monkeypat
         for key, name in metrics.items():
             box = window.dashboard.stats_values[key].parentWidget()
             icon = next(label for label in box.findChildren(QLabel) if label.pixmap() is not None)
-            assert _pixels(icon.pixmap()) == _pixels(icons.start_icon(name, '#628fb0', 20).pixmap(20, 20))
+            assert _pixels(icon.pixmap()) == _pixels(icons.start_icon(name, '#628fb0', 14).pixmap(14, 14))
         assert len(window.dashboard.location_cards) == 6
     finally:
         window.close()
@@ -138,13 +138,13 @@ def test_operation_c_status_and_width_stay_right_of_workflow(tmp_path, monkeypat
         _app().processEvents()
         assert window.operation_frame.parentWidget() is window.action_frame
         assert 405 <= window.operation_frame.width() <= 420
-        gap = window.operation_frame.geometry().left() - window.new_files_btn.geometry().right()
+        gap = window.operation_frame.geometry().left() - window.export_btn.geometry().right()
         # The compact Library toolbar no longer forces a 1997 px minimum
         # window. Start still has a separate status panel at the new minimum.
         assert gap >= 30
         window.resize(1760, window.height())
         _app().processEvents()
-        gap = window.operation_frame.geometry().left() - window.new_files_btn.geometry().right()
+        gap = window.operation_frame.geometry().left() - window.export_btn.geometry().right()
         assert gap >= 70
         assert window.action_frame.width() - window.operation_frame.geometry().right() >= 20
         assert _pixels(window.operation_icon.pixmap()) == _pixels(icons.start_icon('status_ring', '#8fa1b3', 17).pixmap(17, 17))
@@ -211,14 +211,14 @@ def test_start_sections_have_balanced_gaps_without_resizing_cards(tmp_path):
         def gap(upper, lower):
             return lower.mapTo(body, lower.rect().topLeft()).y() - upper.mapTo(body, upper.rect().bottomLeft()).y() - 1
 
-        assert 14 <= gap(page.cards['total'], page.last_scan_label) <= 24
-        assert gap(page.last_scan_label, quick_title) >= 18
+        assert 14 <= gap(page.cards['total'], page.attention_line) <= 24
+        assert gap(page.attention_line, quick_title) >= 18
         assert gap(quick_title, page.location_cards['root']) >= 10
         assert page.metric_cards['covers'].geometry().bottom() < page.metric_cards['online'].y()
-        assert page.metric_cards['suspicious'].geometry().bottom() < page.attention_frame.y()
+        assert page.sources_panel.geometry().bottom() < page.status_panel.y()
         assert page.cards['total'].height() == 92
         assert 70 <= page.location_cards['root'].height() <= 78
-        assert 80 <= page.metric_cards['covers'].height() <= 90
+        assert page.metric_cards['covers'].height() == 40
     finally:
         page.close()
 

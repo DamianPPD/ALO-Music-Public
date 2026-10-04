@@ -218,14 +218,34 @@ class LibraryRegistry:
         else:
             stamp = str(scanned_at)
         entry = ScanHistoryEntry(source_dir, stamp, file_count)
-        key = str(entry.source_dir).casefold()
-        existing = [item for item in self._scan_history.get(profile_id, []) if str(item.source_dir).casefold() != key]
+        existing = self._scan_history.get(profile_id, [])
         self._scan_history[profile_id] = [entry, *existing][:200]
         return entry
 
     def scan_history(self, profile_id: str | None = None) -> tuple[ScanHistoryEntry, ...]:
+        """Latest saved scan per source, preserving the registry's summary API."""
         pid = profile_id or self.active.profile_id
-        return tuple(self._scan_history.get(pid, ()))
+        latest: dict[str, ScanHistoryEntry] = {}
+        for entry in self._scan_history.get(pid, ()):
+            latest.setdefault(str(entry.source_dir).casefold(), entry)
+        return tuple(latest.values())
+
+    def scan_history_for_source(self, source_dir: Path, profile_id: str | None = None) -> tuple[ScanHistoryEntry, ...]:
+        pid = profile_id or self.active.profile_id
+        key = str(Path(source_dir).expanduser().resolve()).casefold()
+        return tuple(entry for entry in self._scan_history.get(pid, ())
+                     if str(entry.source_dir).casefold() == key)
+
+    def remove_source_history(self, source_dir: Path, profile_id: str | None = None) -> int:
+        """Remove this source's history only; scan bindings and disk files stay intact."""
+        pid = profile_id or self.active.profile_id
+        if self.find(pid) is None:
+            raise KeyError(pid)
+        key = str(Path(source_dir).expanduser().resolve()).casefold()
+        entries = self._scan_history.get(pid, [])
+        remaining = [entry for entry in entries if str(entry.source_dir).casefold() != key]
+        self._scan_history[pid] = remaining
+        return len(entries) - len(remaining)
 
     def clear_scan_history(self, profile_id: str | None = None) -> int:
         """Clear informational scan history for one library only.

@@ -42,6 +42,15 @@ def tr(key: str, language: str = 'pl') -> str:
 
 
 TEXT_MAP_EN: dict[str, str] = {
+    'Źródła skanowania': 'Scan sources',
+    'Foldery dodane do skanowania biblioteki.': 'Folders added for library scanning.',
+    'Folder źródłowy': 'Source folder',
+    'Ostatni skan': 'Last scan',
+    'Pliki': 'Files',
+    'Pokaż historię skanów': 'Show scan history',
+    'Historia skanów': 'Scan history',
+    'Usuń z historii': 'Remove from history',
+    '+ Dodaj źródło': '+ Add source',
     'Twoja kolekcja. Pełna kontrola.': 'Your collection. Full control.',
     'Porządkuj • uzupełniaj • analizuj': 'Organize • complete • analyze',
     'Wybierz etap pracy': 'Choose a workflow step',
@@ -408,6 +417,7 @@ def _dynamic_en(text: str) -> str:
         filename, decision, status = decision_message.groups()
         return f'{filename}: selected {translate_static_text(decision, "en")} → Library: {translate_static_text(status, "en")}.'
     for pattern, replacement in (
+        (r'^Wymaga uwagi: (\d+) utworów wymaga sprawdzenia metadanych • (\d+) utworów nie ma okładki$', r'Needs attention: \1 tracks require metadata review • \2 tracks have no cover art'),
         (r'^(\d+) plików • (\d+) grup$', r'\1 files • \2 groups'),
         (r'^Biblioteka wymaga uwagi: (\d+) do sprawdzenia, (\d+) duplikatów\.$', r'Library needs attention: \1 need review, \2 duplicates.'),
         (r'^(\d+) utworów jest gotowych\. Możesz filtrować Bibliotekę albo tworzyć własne foldery MP3\.$', r'\1 tracks are ready. You can filter Library or create your own MP3 folders.'),

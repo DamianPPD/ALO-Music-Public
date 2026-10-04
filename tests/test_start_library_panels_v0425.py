@@ -34,18 +34,18 @@ def page(tmp_path):
     app.setStyleSheet(previous)
 
 
-def test_two_panels_replace_old_sections_and_show_six_real_full_paths(page):
+def test_three_panels_keep_structure_and_show_six_real_full_paths(page):
     texts = [label.text() for label in page.findChildren(QLabel)]
     assert texts.count('Struktura biblioteki') == texts.count('Stan biblioteki') == 1
-    assert texts.count('Wymaga uwagi') == 1
+    assert texts.count('Źródła skanowania') == 1
     assert 'Szybki dostęp' not in texts and 'Statystyki biblioteki' not in texts
     assert not any('Wariant 3' in text for text in texts)
     assert len(page.location_cards) == 6 and len(page.metric_cards) == 6
     assert .61 <= page.structure_panel.width() / page.library_panels_host.width() <= .65
     assert .35 <= page.status_panel.width() / page.library_panels_host.width() <= .39
-    assert page.structure_panel.geometry().right() < page.status_panel.geometry().left()
-    assert page.structure_panel.y() == page.status_panel.y()
-    assert page.attention_frame.parentWidget() is page.status_panel
+    assert page.structure_panel.geometry().right() < page.right_column.geometry().left()
+    assert page.sources_panel.mapTo(page.library_panels_host, QPoint()).y() == page.structure_panel.y()
+    assert not page.status_panel.isAncestorOf(page.attention_line)
     rows = list(page.location_cards.values())
     assert texts.count('Biblioteka główna') == 1
     assert not hasattr(page, 'library_label') and not hasattr(page, 'open_folder_button')
@@ -109,14 +109,14 @@ def test_status_values_progress_and_attention_remain_dynamic(page, monkeypatch):
     assert page.stats_values['missing'].text() == '2'
     assert page.stats_values['suspicious'].text() == '4'
     assert page.stats_values['free_space'].text() == '35.0 GB'
-    assert '3 do sprawdzenia' in page.attention_text.text()
-    assert '5 bez okładki' in page.attention_text.text()
-    assert page.attention_frame.isVisible()
+    assert '3 utworów wymaga sprawdzenia metadanych' in page.attention_text.text()
+    assert '5 utworów nie ma okładki' in page.attention_text.text()
+    assert page.attention_line.isVisible()
     page.set_summary({'total': 2})
     page.set_health({'available': 2, 'online_checked': 1})
     assert page.stats_values['covers'].text() == '2 / 2 (100%)'
     assert page.stats_values['online'].text() == '1 / 2 (50%)'
-    assert not page.attention_frame.isVisible()
+    assert not page.attention_line.isVisible()
     pl = ('Utwory z okładką', 'Utwory rozpoznane online', 'Rozmiar biblioteki',
           'Brakujące pliki', 'Metadane do sprawdzenia', 'Wolne miejsce na dysku')
     en = ('Tracks with cover art', 'Tracks identified online', 'Library size',
@@ -151,7 +151,7 @@ def test_folder_icons_follow_accents_headers_reuse_two_lines_and_tree_starts_und
         assert image.pixelColor(10, 6).blue() > image.pixelColor(10, 3).blue()
     for box in page.metric_cards.values():
         icon = box.findChild(QLabel, 'StartMetricIcon')
-        assert icon.pixmap().width() == 20 and icon.width() == 26
+        assert icon.pixmap().width() == 14 and icon.width() == 18
     QApplication.instance().processEvents()
     image = page.quick_access_host.grab().toImage()
     rows = list(page.location_cards.values())

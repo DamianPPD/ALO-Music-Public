@@ -900,30 +900,23 @@ class MainWindow(QMainWindow):
 
         workflow_separator = QFrame(); workflow_separator.setObjectName('WorkflowToolbarSeparator'); workflow_separator.setFixedWidth(1); workflow_separator.setMinimumHeight(32)
         action.addWidget(workflow_separator)
-        self.new_files_btn = QPushButton('Dodaj utwory do biblioteki'); self.new_files_btn.setObjectName('AddFilesAction'); self.new_files_btn.clicked.connect(self._add_new_files)
-        self.new_files_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
-        action.addWidget(self.new_files_btn)
-
         self.action_icon_ids = [
             (self.scan_btn, 'scan'),
             (self.identify_btn, 'search'),
             (self.review_btn, 'review'),
             (self.export_btn, 'export'),
-            (self.new_files_btn, 'plus'),
         ]
         self.action_icon_colors = {
             self.scan_btn: '#dbe8e2',
             self.identify_btn: '#dbe8e2',
             self.review_btn: '#dbe8e2',
             self.export_btn: '#dbe8e2',
-            self.new_files_btn: '#dbe8e2',
         }
         self.action_visual_roles = {
             self.scan_btn: 'scan',
             self.identify_btn: 'identify',
             self.review_btn: 'review',
             self.export_btn: 'export',
-            self.new_files_btn: 'add',
         }
         for button, icon_name in self.action_icon_ids:
             button.setIcon(start_icon(icon_name, self.action_icon_colors[button], 23))
@@ -934,8 +927,7 @@ class MainWindow(QMainWindow):
         self.identify_btn.setToolTip('Uzupełnij dane z MusicBrainz i Apple/iTunes oraz opcjonalnie AcoustID i Discogs')
         self.review_btn.setToolTip('Sprawdź metadane, okładki i duplikaty przed utworzeniem plików')
         self.export_btn.setToolTip('Utwórz kopie w bibliotece docelowej i wykonaj techniczną kontrolę kopii')
-        self.new_files_btn.setToolTip('Dodaj pliki audio do biblioteki ALO Music')
-        self.action_buttons = [self.scan_btn, self.identify_btn, self.review_btn, self.export_btn, self.new_files_btn]
+        self.action_buttons = [self.scan_btn, self.identify_btn, self.review_btn, self.export_btn]
         self.operation_frame = QFrame(); self.operation_frame.setObjectName('OperationFrame'); self.operation_frame.setProperty('operationKind', 'idle')
         self.operation_frame.setParent(self.action_frame)
         self.operation_frame.setMinimumWidth(410)
@@ -963,6 +955,13 @@ class MainWindow(QMainWindow):
         self.dashboard = DashboardPage(self.app_settings)
         self.dashboard.set_library_name(self.library_registry.active.name)
         self.dashboard.refresh_requested.connect(self.start_scan)
+        if hasattr(self.dashboard, 'sources'):
+            self.new_files_btn = self.dashboard.sources.add_button
+            self.dashboard.context_refresh_requested.connect(self._refresh_start_context)
+        else:
+            self.new_files_btn = QPushButton('+ Dodaj źródło', self.dashboard)
+            self.new_files_btn.hide()
+        self.new_files_btn.clicked.connect(self._add_new_files)
         self.player = PlayerBar()
         self.player.track_activated.connect(self._activate_player_track)
         self.library = LibraryPage()
@@ -1031,6 +1030,7 @@ class MainWindow(QMainWindow):
             apply_static_language(page, self.preferences.language)
         if hasattr(self.dashboard, 'refresh_language'):
             self.dashboard.refresh_language()
+        self._refresh_start_context()
         self.help.set_language(self.preferences.language)
         self.player.refresh_language()
         if hasattr(self, '_last_ui_summary'):
@@ -1774,6 +1774,7 @@ class MainWindow(QMainWindow):
         self.library.set_tracks(tracks); self.duplicates.set_tracks(tracks); self.collections.refresh()
         for page in (self.dashboard, self.library, self.duplicates, self.collections):
             apply_static_language(page, self.preferences.language)
+        self._refresh_start_context()
         duplicate_label = tr('nav.duplicates', self.preferences.language)
         duplicate_groups = duplicate_group_count(tracks)
         if duplicate_groups:
@@ -1782,6 +1783,11 @@ class MainWindow(QMainWindow):
             self.nav_buttons[2].setText(duplicate_label)
         self.nav_buttons[2].setProperty('hasItems', duplicate_groups > 0)
         self.nav_buttons[2].style().unpolish(self.nav_buttons[2]); self.nav_buttons[2].style().polish(self.nav_buttons[2])
+
+    def _refresh_start_context(self):
+        if hasattr(self.dashboard, 'sources'):
+            self.dashboard.sources.set_registry(self.library_registry, self.qt_settings)
+            self.dashboard.set_folder_organization(ProviderSettings.from_store(self.qt_settings).folder_organization)
 
     def _show_operation(self, text: str):
         self._operation_status_source = text
@@ -1797,8 +1803,8 @@ class MainWindow(QMainWindow):
             self.identify_btn.setText(f"2. {tr('action.identify_online', language)}")
         self.review_btn.setText(f"3. {tr('action.review', language)}")
         self.export_btn.setText(f"4. {tr('action.export', language)}")
-        self.new_files_btn.setText(tr('action.add_files', language))
-        self.new_files_btn.setToolTip(tr('action.add_files_tooltip', language))
+        self.new_files_btn.setText(self._t('+ Dodaj źródło'))
+        self.new_files_btn.setToolTip(self._t('Wybierz folder z nowymi plikami'))
 
     def _set_busy(self, busy: bool, message: str = '', *, kind: str | None = None):
         active_kind = kind or self._operation_kind
@@ -1832,7 +1838,7 @@ class MainWindow(QMainWindow):
         export_running_text = 'Creating files…' if self.preferences.language == 'en' else 'Tworzenie plików…'
         self.export_btn.setText(export_running_text if export_running else f"4. {tr('action.export', self.preferences.language)}")
         self.review_btn.setText(f"3. {tr('action.review', self.preferences.language)}")
-        self.new_files_btn.setText(tr('action.add_files', self.preferences.language))
+        self.new_files_btn.setText(self._t('+ Dodaj źródło'))
         self._set_button_running(self.scan_btn, scan_running)
         self._set_button_running(self.identify_btn, online_running)
         self._set_button_running(self.export_btn, export_running)
@@ -1883,7 +1889,6 @@ class MainWindow(QMainWindow):
         if result.cancelled: self._pending_auto_identify = False
         prefix = 'Skan anulowany' if result.cancelled else 'Skan zakończony'
         summary_text = f'{prefix}: {result.scanned} przeanalizowano, {result.skipped_unchanged} bez zmian, błędy: {result.errors}.'
-        self.dashboard.set_last_scan_summary(summary_text)
         self._set_operation_state('done', 'SKANOWANIE ZAKOŃCZONE' if not result.cancelled else 'SKANOWANIE ANULOWANE', summary_text)
 
     def _thread_done(self):

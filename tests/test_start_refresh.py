@@ -30,9 +30,9 @@ def test_refresh_keeps_actions_and_data_but_renders_six_compact_metrics(tmp_path
         page.set_summary({'total': 419, 'review': 211, 'duplicate': 0})
         page.set_health({'available': 419, 'missing_covers': 339, 'online_checked': 47, 'missing': 0})
         assert page.cards['review'].value_label.text() == '211'
-        assert '211 do sprawdzenia' in page.attention_text.text()
-        assert '339 bez okładki' in page.attention_text.text()
-        assert page.attention_frame.findChild(QLabel, 'StartAttentionIcon') is not None
+        assert '211 utworów wymaga sprawdzenia metadanych' in page.attention_text.text()
+        assert '339 utworów nie ma okładki' in page.attention_text.text()
+        assert page.attention_line.findChild(QLabel, 'StartAttentionIcon') is not None
         assert page.stats_progress['covers'].value() == 19
         apply_static_language(page, 'en')
         page.refresh_language()
@@ -84,7 +84,7 @@ def test_final_start_polish_adds_only_small_internal_spacing(tmp_path):
             assert 60 <= card.height() <= 78
         for box in page.metric_cards.values():
             assert box.contentsRect().contains(box.findChild(QLabel, 'StartMetricIcon').geometry())
-        assert page.attention_frame.parentWidget() is page.status_panel
+        assert not page.status_panel.isAncestorOf(page.attention_line)
         assert set(page.stats_progress) == {'covers', 'online'}
     finally:
         page.close()

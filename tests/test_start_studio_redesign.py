@@ -61,13 +61,13 @@ def test_studio_sections_use_dashboard_proportions_without_empty_spacer(tmp_path
         assert all(card.height() >= 90 for card in page.cards.values())
         assert all(60 <= card.height() <= 78 for card in page.location_cards.values())
         metric = page.stats_values['covers'].parentWidget()
-        assert metric.height() >= 58
+        assert metric.height() == 40
         assert page.location_cards['root'].geometry().top() < page.location_cards['not_selected'].geometry().top()
         assert page.metric_cards['covers'].y() < page.metric_cards['size'].y()
         page.set_summary({'total': 10, 'review': 2})
         page.set_health({'available': 10, 'missing_covers': 3})
         _app().processEvents()
-        assert page.attention_frame.isVisible()
+        assert page.attention_line.isVisible()
         # The page may scroll, but the final section follows its content
         # without an empty stretch above the player.
         assert page.scroll.widget().layout().itemAt(page.scroll.widget().layout().count() - 1).spacerItem() is None
@@ -92,7 +92,7 @@ def test_start_has_all_locations_and_six_graphical_statistics_without_copy(tmp_p
         page.set_summary({'total': 10, 'review': 2, 'duplicate': 1})
         page.set_health({'available': 10, 'missing_covers': 3, 'online_checked': 4})
         assert page.stats_values['covers'].text() == '7 / 10 (70%)'
-        assert page.attention_frame.isVisibleTo(page) is False or '2 do sprawdzenia' in page.attention_text.text()
+        assert page.attention_line.isVisibleTo(page) is False or '2 utworów wymaga sprawdzenia metadanych' in page.attention_text.text()
     finally:
         page.close()
 
@@ -105,7 +105,7 @@ def test_operation_is_inside_workflow_and_updates_idle_active_progress(tmp_path,
         _app().processEvents()
         assert window.operation_frame.parentWidget() is window.action_frame
         assert window.operation_frame.layout().count() > 0
-        assert window.operation_frame.geometry().right() > window.new_files_btn.geometry().right()
+        assert not window.action_frame.isAncestorOf(window.new_files_btn)
         assert window.operation_title.text() == 'GOTOWY'
         assert window.operation_status.text() == 'Wybierz etap pracy'
         window._set_operation_state('online', 'ROZPOZNAWANIE ONLINE', '127 / 419 · 30%')

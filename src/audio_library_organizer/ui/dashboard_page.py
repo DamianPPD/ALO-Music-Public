@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-import hashlib
 import html
 from pathlib import Path
 import shutil
 
-from PySide6.QtCore import Qt, QSettings, QUrl, Signal, QRectF
+from PySide6.QtCore import Qt, QUrl, Signal, QRectF
 from PySide6.QtGui import QBrush, QColor, QCursor, QDesktopServices, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QResizeEvent
 from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget
 
@@ -15,6 +13,7 @@ from audio_library_organizer.ui.icons import alo_icon, start_icon
 from audio_library_organizer.ui.i18n import ui_text, language_for
 from audio_library_organizer.ui.widgets import StatCard
 from audio_library_organizer.ui.assets import asset_path
+from audio_library_organizer.ui.scan_sources import ScanSourcesWidget
 
 START_PANEL_ICON_COLOR = '#628fb0'
 
@@ -274,7 +273,15 @@ class LibraryLocationRow(QFrame):
         text_column.setSpacing(3)
         self.title_label = QLabel(title)
         self.title_label.setObjectName('QuickAccessTitle')
-        text_column.addWidget(self.title_label)
+        title_row = QHBoxLayout(); title_row.setSpacing(7)
+        title_row.addWidget(self.title_label)
+        self.detail_label = QLabel('')
+        self.detail_label.setObjectName('StartFolderOrganization')
+        self.detail_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        self.detail_label.hide()
+        title_row.addWidget(self.detail_label)
+        title_row.addStretch(1)
+        text_column.addLayout(title_row)
         self.path_label = ElidedPathLabel(self.path, accent)
         text_column.addWidget(self.path_label)
         layout.addLayout(text_column, 1)
@@ -307,12 +314,14 @@ class LibraryLocationRow(QFrame):
 class DashboardPage(QWidget):
     refresh_requested = Signal()
     quick_view_requested = Signal(str)
+    context_refresh_requested = Signal()
 
     def __init__(self, settings: AppSettings, parent=None):
         super().__init__(parent)
         self._library_root = Path(settings.library.root)
         self._summary: dict[str, int] = {}
         self._health: dict[str, object] = {}
+        self._folder_organization = 'none'
 
         viewport_layout = QVBoxLayout(self)
         viewport_layout.setContentsMargins(0, 0, 0, 0)
@@ -374,10 +383,22 @@ class DashboardPage(QWidget):
         self.cards['duplicate'].clicked.connect(lambda: self.quick_view_requested.emit('duplicate'))
         self.cards['missing_covers'].clicked.connect(lambda: self.quick_view_requested.emit('no_cover'))
 
-        self.last_scan_label = QLabel('Ostatnie skanowanie: brak danych')
-        self.last_scan_label.setObjectName('MutedText')
-        self.last_scan_label.setWordWrap(False)
-        root.addWidget(self.last_scan_label)
+        self.attention_line = QWidget(body)
+        self.attention_line.setObjectName('StartAttentionLine')
+        attention_layout = QHBoxLayout(self.attention_line)
+        attention_layout.setContentsMargins(0, 0, 0, 0); attention_layout.setSpacing(7)
+        attention_icon = QLabel()
+        attention_icon.setObjectName('StartAttentionIcon')
+        attention_icon.setPixmap(start_icon('warning', '#ff6b6b', 16).pixmap(16, 16))
+        attention_icon.setFixedSize(18, 18)
+        attention_layout.addWidget(attention_icon)
+        self.attention_text = QLabel('')
+        self.attention_text.setObjectName('StartAttentionText')
+        self.attention_text.setWordWrap(False)
+        self.attention_text.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        attention_layout.addWidget(self.attention_text, 1)
+        self.attention_line.hide()
+        root.addWidget(self.attention_line)
         root.addSpacing(12)
 
         self.library_panels_host = QWidget()
@@ -389,6 +410,16 @@ class DashboardPage(QWidget):
             'Struktura biblioteki', 'Główna biblioteka i powiązane lokalizacje robocze.')
         self.status_panel, status_layout = self._create_library_panel(
             'Stan biblioteki', 'Podsumowanie zawartości i analiz biblioteki.')
+        self.sources_panel, sources_layout = self._create_library_panel(
+            'Źródła skanowania', 'Foldery dodane do skanowania biblioteki.')
+        self.sources_panel.setFixedHeight(300)
+        self.sources = ScanSourcesWidget(self.sources_panel)
+        sources_layout.addWidget(self.sources, 1)
+        self.right_column = QWidget(self.library_panels_host)
+        right_layout = QVBoxLayout(self.right_column)
+        right_layout.setContentsMargins(0, 0, 0, 0); right_layout.setSpacing(10)
+        right_layout.addWidget(self.sources_panel)
+        right_layout.addWidget(self.status_panel)
 
         self.quick_access_host = LibraryStructureList(self.structure_panel)
         self.quick_access_layout = QGridLayout(self.quick_access_host)
@@ -404,8 +435,8 @@ class DashboardPage(QWidget):
         structure_layout.addWidget(self.quick_access_host, 1)
 
         self.stats_grid = QGridLayout()
-        self.stats_grid.setHorizontalSpacing(8)
-        self.stats_grid.setVerticalSpacing(8)
+        self.stats_grid.setHorizontalSpacing(5)
+        self.stats_grid.setVerticalSpacing(4)
         self.stats_grid.setAlignment(Qt.AlignmentFlag.AlignTop)
         stat_labels = [
             ('covers', 'Utwory z okładką'),
@@ -424,16 +455,16 @@ class DashboardPage(QWidget):
             box = QFrame()
             box.setObjectName('StartLibraryMetric')
             box.setProperty('metricKind', key)
-            box.setFixedHeight(82 if wide else 104)
+            box.setFixedHeight(40 if wide else 36)
             box_layout = QHBoxLayout(box)
-            box_layout.setContentsMargins(14, 12, 14, 12)
-            box_layout.setSpacing(11)
+            box_layout.setContentsMargins(7, 5, 7, 5)
+            box_layout.setSpacing(6)
             icon = QLabel()
             icon_name = {'covers': 'cover', 'online': 'cloud', 'suspicious': 'document_warning',
                          'size': 'database', 'missing': 'document_x', 'free_space': 'disk'}[key]
             icon.setObjectName('StartMetricIcon')
-            icon.setPixmap(start_icon(icon_name, START_PANEL_ICON_COLOR, 20).pixmap(20, 20))
-            icon.setFixedSize(26, 26)
+            icon.setPixmap(start_icon(icon_name, START_PANEL_ICON_COLOR, 14).pixmap(14, 14))
+            icon.setFixedSize(18, 18)
             icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
             box_layout.addWidget(icon)
             heading = QLabel(label)
@@ -441,11 +472,11 @@ class DashboardPage(QWidget):
             heading.setWordWrap(True)
             value = QLabel('—')
             value.setObjectName('StartMetricValue')
-            value.setStyleSheet('font-size:15pt;font-weight:750;')
+            value.setStyleSheet('font-size:11pt;font-weight:750;')
             if wide:
                 box_layout.addWidget(heading, 1)
                 value_column = QVBoxLayout()
-                value_column.setSpacing(7)
+                value_column.setSpacing(3)
                 value_column.addWidget(value)
                 from PySide6.QtWidgets import QProgressBar
                 progress = QProgressBar()
@@ -457,11 +488,8 @@ class DashboardPage(QWidget):
                 box_layout.addLayout(value_column, 1)
                 self.stats_progress[key] = progress
             else:
-                text_column = QVBoxLayout()
-                text_column.setSpacing(6)
-                text_column.addWidget(heading)
-                text_column.addWidget(value)
-                box_layout.addLayout(text_column, 1)
+                box_layout.addWidget(heading, 1)
+                box_layout.addWidget(value)
             self.stats_values[key] = value
             self.metric_cards[key] = box
             if wide:
@@ -469,35 +497,11 @@ class DashboardPage(QWidget):
             else:
                 self.stats_grid.addWidget(box, 2 + (index - 2) // 2, (index - 2) % 2)
 
-        self.attention_frame = QFrame()
-        self.attention_frame.setObjectName('StartLibraryAttention')
-        self.attention_frame.setMinimumHeight(86)
-        attention_layout = QHBoxLayout(self.attention_frame)
-        attention_layout.setContentsMargins(14, 12, 14, 12)
-        attention_layout.setSpacing(11)
-        attention_icon = QLabel()
-        attention_icon.setObjectName('StartAttentionIcon')
-        attention_icon.setPixmap(start_icon('warning', START_PANEL_ICON_COLOR, 20).pixmap(20, 20))
-        attention_icon.setFixedSize(26, 26)
-        attention_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        attention_layout.addWidget(attention_icon)
-        attention_column = QVBoxLayout()
-        attention_column.setSpacing(4)
-        attention_title = QLabel('Wymaga uwagi')
-        attention_title.setObjectName('StartAttentionTitle')
-        attention_column.addWidget(attention_title)
-        self.attention_text = QLabel('')
-        self.attention_text.setObjectName('StartAttentionText')
-        self.attention_text.setWordWrap(True)
-        attention_column.addWidget(self.attention_text)
-        attention_layout.addLayout(attention_column, 1)
-        self.attention_frame.setVisible(False)
-        self.stats_grid.addWidget(self.attention_frame, 4, 0, 1, 2)
-        status_layout.addLayout(self.stats_grid, 1)
+        status_layout.addLayout(self.stats_grid)
         root.addWidget(self.library_panels_host)
         self._reflow_panels()
 
-        self._load_last_scan()
+        self.set_folder_organization('none')
 
     def _create_library_panel(self, title: str, subtitle: str):
         panel = QFrame(self.library_panels_host)
@@ -524,39 +528,12 @@ class DashboardPage(QWidget):
         layout.addLayout(header)
         return panel, layout
 
-    def _library_storage_key(self) -> str:
-        normalized = str(self._library_root.resolve()).casefold().encode('utf-8', errors='replace')
-        digest = hashlib.sha1(normalized).hexdigest()[:16]
-        return f'dashboard/last_scan/{digest}'
-
-    def _save_last_scan(self, when: datetime) -> None:
-        store = QSettings()
-        store.setValue(self._library_storage_key(), when.isoformat(timespec='seconds'))
-        store.sync()
-
-    def _load_last_scan(self) -> None:
-        raw = QSettings().value(self._library_storage_key(), '')
-        if not raw:
-            self.last_scan_label.setText(ui_text(self, 'Ostatnie skanowanie: brak danych'))
-            self.last_scan_label.setToolTip('')
-            return
-        try:
-            when = datetime.fromisoformat(str(raw))
-        except ValueError:
-            self.last_scan_label.setText(ui_text(self, 'Ostatnie skanowanie: brak danych'))
-            self.last_scan_label.setToolTip('')
-            return
-        self._show_last_scan_time(when)
-
-    def _show_last_scan_time(self, when: datetime) -> None:
-        today = datetime.now().date()
-        if when.date() == today:
-            moment = f'{"today" if language_for(self) == "en" else "dzisiaj"}, {when:%H:%M}'
-        elif when.date() == today - timedelta(days=1):
-            moment = f'{"yesterday" if language_for(self) == "en" else "wczoraj"}, {when:%H:%M}'
-        else:
-            moment = when.strftime('%d.%m.%Y, %H:%M')
-        self.last_scan_label.setText(f'{ui_text(self, "Ostatnie skanowanie:")} {moment}')
+    def set_folder_organization(self, mode: str) -> None:
+        self._folder_organization = mode if mode in {'none', 'artist', 'genre'} else 'none'
+        text = {'none': 'Bez podfolderów', 'artist': 'Według wykonawcy', 'genre': 'Według gatunku'}[self._folder_organization]
+        label = self.location_cards['ready'].detail_label
+        label.setText('•  ' + ui_text(self, text))
+        label.show()
 
     @staticmethod
     def _location_specs(settings: AppSettings) -> tuple[tuple[str, str, Path, str, str], ...]:
@@ -586,7 +563,7 @@ class DashboardPage(QWidget):
     def _reflow_panels(self) -> None:
         two_columns = self.width() >= 1050
         self.library_panels_layout.addWidget(self.structure_panel, 0, 0)
-        self.library_panels_layout.addWidget(self.status_panel, 0 if two_columns else 1, 1 if two_columns else 0)
+        self.library_panels_layout.addWidget(self.right_column, 0 if two_columns else 1, 1 if two_columns else 0)
         self.library_panels_layout.setColumnStretch(0, 63 if two_columns else 1)
         self.library_panels_layout.setColumnStretch(1, 37 if two_columns else 0)
 
@@ -600,6 +577,8 @@ class DashboardPage(QWidget):
     def showEvent(self, event) -> None:
         super().showEvent(event)
         self.refresh_locations()
+        self.context_refresh_requested.emit()
+        self.sources.refresh()
 
     def refresh_locations(self) -> None:
         for card in self.location_cards.values():
@@ -607,11 +586,10 @@ class DashboardPage(QWidget):
 
     def set_library(self, settings: AppSettings, library_name: str | None = None):
         self._library_root = Path(settings.library.root)
-        self._last_scan_tooltip_source = ''
         self._update_location_cards(settings)
         if library_name:
             self.set_library_name(library_name)
-        self._load_last_scan()
+        self.sources.refresh()
         if self._health:
             self._update_statistics()
 
@@ -620,16 +598,9 @@ class DashboardPage(QWidget):
         # Its root path is displayed only in the structure panel now.
         self._library_name = name or 'Biblioteka główna'
 
-    def set_last_scan_summary(self, text: str):
-        now = datetime.now()
-        self._last_scan_tooltip_source = text
-        self._save_last_scan(now)
-        self._show_last_scan_time(now)
-        self.last_scan_label.setToolTip(ui_text(self, text or ''))
-
     def refresh_language(self) -> None:
-        self._load_last_scan()
-        self.last_scan_label.setToolTip(ui_text(self, getattr(self, '_last_scan_tooltip_source', '')))
+        self.set_folder_organization(self._folder_organization)
+        self.sources.refresh()
         for card in self.location_cards.values():
             card.set_path(card.path)
         self._update_attention()
@@ -681,30 +652,18 @@ class DashboardPage(QWidget):
             free_gb = shutil.disk_usage(target).free / (1024 ** 3)
             free_label.setText(f'{free_gb:.1f} GB')
             if free_gb < 10:
-                free_label.setStyleSheet('font-size:15pt;font-weight:750;color:#ff6b6b;')
+                free_label.setStyleSheet('font-size:11pt;font-weight:750;color:#ff6b6b;')
             elif free_gb < 20:
-                free_label.setStyleSheet('font-size:15pt;font-weight:750;color:#ffb84d;')
+                free_label.setStyleSheet('font-size:11pt;font-weight:750;color:#ffb84d;')
             else:
-                free_label.setStyleSheet('font-size:15pt;font-weight:750;')
+                free_label.setStyleSheet('font-size:11pt;font-weight:750;')
         except OSError:
             free_label.setText('—')
-            free_label.setStyleSheet('font-size:15pt;font-weight:750;')
+            free_label.setStyleSheet('font-size:11pt;font-weight:750;')
 
     def _update_attention(self) -> None:
         review = int(self._summary.get('review', 0))
-        duplicate = int(self._summary.get('duplicate', 0))
         missing_covers = int(self._health.get('missing_covers', 0))
-        missing = int(self._health.get('missing', 0))
-
-        parts: list[str] = []
-        if review:
-            parts.append(ui_text(self, f'{review} do sprawdzenia'))
-        if duplicate:
-            parts.append(ui_text(self, f'{duplicate} grup duplikatów'))
-        if missing_covers:
-            parts.append(ui_text(self, f'{missing_covers} bez okładki'))
-        if missing:
-            parts.append(ui_text(self, f'{missing} brakujących plików'))
-
-        self.attention_text.setText(' • '.join(parts))
-        self.attention_frame.setVisible(bool(parts))
+        text = f'Wymaga uwagi: {review} utworów wymaga sprawdzenia metadanych • {missing_covers} utworów nie ma okładki'
+        self.attention_text.setText(ui_text(self, text))
+        self.attention_line.setVisible(bool(review or missing_covers))
