@@ -59,7 +59,7 @@ def test_studio_sections_use_dashboard_proportions_without_empty_spacer(tmp_path
         _app().processEvents()
         assert page.hero.height() == 200
         assert all(card.height() >= 90 for card in page.cards.values())
-        assert all(60 <= card.height() <= 70 for card in page.location_cards.values())
+        assert all(60 <= card.height() <= 78 for card in page.location_cards.values())
         metric = page.stats_values['covers'].parentWidget()
         assert metric.height() >= 58
         assert page.location_cards['root'].geometry().top() < page.location_cards['not_selected'].geometry().top()

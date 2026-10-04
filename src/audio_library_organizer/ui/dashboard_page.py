@@ -11,7 +11,7 @@ from PySide6.QtGui import QBrush, QColor, QCursor, QDesktopServices, QLinearGrad
 from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget
 
 from audio_library_organizer.domain.settings import AppSettings
-from audio_library_organizer.ui.icons import start_icon
+from audio_library_organizer.ui.icons import alo_icon, start_icon
 from audio_library_organizer.ui.i18n import ui_text, language_for
 from audio_library_organizer.ui.widgets import StatCard
 from audio_library_organizer.ui.assets import asset_path
@@ -214,26 +214,49 @@ class LibraryStructureList(QWidget):
         super().paintEvent(event)
         if not self.rows:
             return
-        centers = [row.geometry().center().y() for row in self.rows]
+        root, *children = self.rows
+        if not children:
+            return
+        centers = [row.geometry().center().y() for row in children]
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(QPen(QColor('#365568'), 1))
-        painter.drawLine(8, centers[0], 8, centers[-1])
-        for row, center in zip(self.rows, centers):
+        painter.drawLine(8, root.geometry().bottom() + 1, 8, centers[-1])
+        for row, center in zip(children, centers):
             painter.drawLine(8, center, row.x() - 1, center)
             painter.setBrush(QColor(START_PANEL_ICON_COLOR))
             painter.drawEllipse(QRectF(5, center - 3, 6, 6))
         painter.end()
 
 
+class LibraryFolderButton(QPushButton):
+    """Keep the folder action text separate from its trailing chevron."""
+
+    def __init__(self, parent=None):
+        super().__init__('Otwórz folder', parent)
+        self.setObjectName('QuickAccessOpen')
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self._chevron = QLabel(self)
+        self._chevron.setObjectName('StartFolderChevron')
+        self._chevron.setFixedSize(12, 12)
+        self._chevron.setPixmap(alo_icon('chevron-right', START_PANEL_ICON_COLOR, 12).pixmap(12, 12))
+        self._chevron.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._chevron.move(self.width() - self._chevron.width() - 9,
+                           (self.height() - self._chevron.height()) // 2)
+
+
 class LibraryLocationRow(QFrame):
-    def __init__(self, title: str, path: Path, icon_name: str, accent: str, parent=None):
+    def __init__(self, title: str, path: Path, icon_name: str, accent: str, parent=None, *, is_root: bool = False):
         super().__init__(parent)
         self.setObjectName('LibraryLocationRow')
         self.setProperty('accentColor', accent)
-        self.setStyleSheet(f'QFrame#LibraryLocationRow {{ border-left:3px solid {accent}; }}')
+        self.setProperty('isRoot', is_root)
+        self.setStyleSheet(f'QFrame#LibraryLocationRow {{ border-left:{5 if is_root else 3}px solid {accent}; }}')
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        self.setFixedHeight(64)
+        self.setFixedHeight(72 if is_root else 64)
         self.path = Path(path)
 
         layout = QHBoxLayout(self)
@@ -241,7 +264,7 @@ class LibraryLocationRow(QFrame):
         layout.setSpacing(9)
         self.title_icon = QLabel()
         self.title_icon.setObjectName('QuickAccessIcon')
-        self.title_icon.setPixmap(start_icon(icon_name, START_PANEL_ICON_COLOR, 20).pixmap(20, 20))
+        self.title_icon.setPixmap(start_icon(icon_name, accent, 20).pixmap(20, 20))
         self.title_icon.setFixedSize(24, 24)
         self.title_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.title_icon)
@@ -253,22 +276,7 @@ class LibraryLocationRow(QFrame):
         self.path_label = ElidedPathLabel(self.path, accent)
         text_column.addWidget(self.path_label)
         layout.addLayout(text_column, 1)
-        availability_row = QHBoxLayout()
-        availability_row.setSpacing(5)
-        self.availability_dot = QLabel()
-        self.availability_dot.setObjectName('LibraryLocationStatusDot')
-        self.availability_dot.setFixedSize(5, 5)
-        availability_row.addWidget(self.availability_dot)
-        self.availability = QLabel('')
-        self.availability.setObjectName('QuickAccessAvailability')
-        self.availability.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
-        availability_row.addWidget(self.availability)
-        layout.addLayout(availability_row)
-        self.open_button = QPushButton('Otwórz folder')
-        self.open_button.setObjectName('QuickAccessOpen')
-        self.open_button.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.open_button.setIcon(start_icon('folder_open', START_PANEL_ICON_COLOR, 15))
-        self.open_button.setToolTip('Otwórz folder w Eksploratorze')
+        self.open_button = LibraryFolderButton(self)
         layout.addWidget(self.open_button)
 
         self.open_button.clicked.connect(self._open_folder)
@@ -278,13 +286,11 @@ class LibraryLocationRow(QFrame):
         self.path = Path(path)
         self.path_label.set_path(self.path)
         available = self.path.is_dir()
-        self.availability.setText(ui_text(self, 'Dostępna' if available else 'Niedostępna'))
-        self.availability.setProperty('available', available)
-        self.availability.style().unpolish(self.availability)
-        self.availability.style().polish(self.availability)
-        self.availability_dot.setProperty('available', available)
-        self.availability_dot.style().unpolish(self.availability_dot)
-        self.availability_dot.style().polish(self.availability_dot)
+        self.open_button.setProperty('available', available)
+        self.open_button.style().unpolish(self.open_button)
+        self.open_button.style().polish(self.open_button)
+        self.open_button.setToolTip(ui_text(self, 'Otwórz folder w Eksploratorze' if available else 'Niedostępna'))
+        self.open_button.setAccessibleDescription(ui_text(self, 'Dostępna' if available else 'Niedostępna'))
         self.open_button.setEnabled(available)
 
     def _open_folder(self) -> None:
@@ -342,32 +348,6 @@ class DashboardPage(QWidget):
         hero_text.addStretch(1)
         root.addWidget(self.hero)
 
-        self.dashboard_title = QLabel('Biblioteka główna')
-        self.dashboard_title.setStyleSheet('font-size:15pt;font-weight:750;')
-        root.addWidget(self.dashboard_title)
-
-        path_bar = QFrame()
-        path_bar.setObjectName('SessionCard')
-        path_layout = QHBoxLayout(path_bar)
-        path_layout.setContentsMargins(11, 6, 11, 6)
-        path_layout.setSpacing(8)
-        folder_icon = QLabel()
-        folder_icon.setPixmap(start_icon('folder', '#62d6f5', 20).pixmap(20, 20))
-        folder_icon.setFixedSize(24, 24)
-        folder_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        path_layout.addWidget(folder_icon)
-        self.library_label = QLabel(str(settings.library.root))
-        self.library_label.setObjectName('MutedText')
-        self.library_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.library_label.setToolTip(str(settings.library.root))
-        path_layout.addWidget(self.library_label, 1)
-        self.open_folder_button = QPushButton('Otwórz folder')
-        self.open_folder_button.setObjectName('LibrarySecondaryAction')
-        self.open_folder_button.setIcon(start_icon('folder_open', '#d9e8ef', 15))
-        self.open_folder_button.clicked.connect(self._open_library_folder)
-        path_layout.addWidget(self.open_folder_button)
-        root.addWidget(path_bar)
-
         cards_layout = QGridLayout()
         cards_layout.setHorizontalSpacing(10)
         cards_layout.setVerticalSpacing(0)
@@ -399,14 +379,17 @@ class DashboardPage(QWidget):
         self.library_panels_layout.setContentsMargins(0, 0, 0, 0)
         self.library_panels_layout.setSpacing(12)
         self.structure_panel, structure_layout = self._create_library_panel(
-            'Struktura biblioteki', 'Główna biblioteka i powiązane lokalizacje robocze.', 'folder_open')
+            'Struktura biblioteki', 'Główna biblioteka i powiązane lokalizacje robocze.')
         self.status_panel, status_layout = self._create_library_panel(
-            'Stan biblioteki', 'Podsumowanie zawartości i analiz biblioteki.', 'report')
+            'Stan biblioteki', 'Podsumowanie zawartości i analiz biblioteki.')
 
         self.quick_access_host = LibraryStructureList(self.structure_panel)
-        self.quick_access_layout = QVBoxLayout(self.quick_access_host)
-        self.quick_access_layout.setContentsMargins(26, 0, 0, 0)
-        self.quick_access_layout.setSpacing(7)
+        self.quick_access_layout = QGridLayout(self.quick_access_host)
+        self.quick_access_layout.setContentsMargins(0, 0, 0, 0)
+        self.quick_access_layout.setColumnMinimumWidth(0, 26)
+        self.quick_access_layout.setColumnStretch(1, 1)
+        self.quick_access_layout.setHorizontalSpacing(0)
+        self.quick_access_layout.setVerticalSpacing(7)
         self.quick_access_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.location_cards: dict[str, LibraryLocationRow] = {}
         self._location_order = ('root', 'ready', 'review', 'not_selected', 'custom_folders', 'reports')
@@ -418,12 +401,12 @@ class DashboardPage(QWidget):
         self.stats_grid.setVerticalSpacing(8)
         self.stats_grid.setAlignment(Qt.AlignmentFlag.AlignTop)
         stat_labels = [
-            ('covers', 'Okładki'),
-            ('online', 'Rozpoznane online'),
+            ('covers', 'Utwory z okładką'),
+            ('online', 'Utwory rozpoznane online'),
             ('size', 'Rozmiar biblioteki'),
             ('missing', 'Brakujące pliki'),
-            ('suspicious', 'Podejrzane dane'),
-            ('free_space', 'Wolne miejsce'),
+            ('suspicious', 'Metadane do sprawdzenia'),
+            ('free_space', 'Wolne miejsce na dysku'),
         ]
         self._metric_order = tuple(key for key, _label in stat_labels)
         self.metric_cards = {}
@@ -434,7 +417,7 @@ class DashboardPage(QWidget):
             box = QFrame()
             box.setObjectName('StartLibraryMetric')
             box.setProperty('metricKind', key)
-            box.setFixedHeight(74 if wide else 80)
+            box.setFixedHeight(74 if wide else 90)
             box_layout = QHBoxLayout(box)
             box_layout.setContentsMargins(11, 8, 11, 8)
             box_layout.setSpacing(8)
@@ -451,7 +434,7 @@ class DashboardPage(QWidget):
             heading.setWordWrap(True)
             value = QLabel('—')
             value.setObjectName('StartMetricValue')
-            value.setStyleSheet('font-size:12pt;font-weight:750;')
+            value.setStyleSheet('font-size:13pt;font-weight:750;')
             if wide:
                 box_layout.addWidget(heading, 1)
                 value_column = QVBoxLayout()
@@ -509,7 +492,7 @@ class DashboardPage(QWidget):
 
         self._load_last_scan()
 
-    def _create_library_panel(self, title: str, subtitle: str, icon_name: str):
+    def _create_library_panel(self, title: str, subtitle: str):
         panel = QFrame(self.library_panels_host)
         panel.setObjectName('StartLibraryPanel')
         layout = QVBoxLayout(panel)
@@ -517,12 +500,10 @@ class DashboardPage(QWidget):
         layout.setSpacing(9)
         header = QHBoxLayout()
         header.setSpacing(9)
-        icon = QLabel()
-        icon.setObjectName('StartPanelIcon')
-        icon.setPixmap(start_icon(icon_name, START_PANEL_ICON_COLOR, 20).pixmap(20, 20))
-        icon.setFixedSize(24, 24)
-        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header.addWidget(icon)
+        mark = QLabel()
+        mark.setObjectName('LibrarySectionMark')
+        mark.setFixedSize(20, 7)
+        header.addWidget(mark)
         text = QVBoxLayout()
         text.setSpacing(3)
         heading = QLabel(title)
@@ -570,27 +551,23 @@ class DashboardPage(QWidget):
             moment = when.strftime('%d.%m.%Y, %H:%M')
         self.last_scan_label.setText(f'{ui_text(self, "Ostatnie skanowanie:")} {moment}')
 
-    def _open_library_folder(self) -> None:
-        target = self._library_root if self._library_root.exists() else self._library_root.parent
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
-
     @staticmethod
     def _location_specs(settings: AppSettings) -> tuple[tuple[str, str, Path, str, str], ...]:
         library = settings.library
         return (
             ('root', 'Biblioteka główna', library.root, 'folder', '#58c9f3'),
             ('ready', 'Pliki wynikowe / GOTOWE', library.ready, 'folder_check', '#55d98b'),
-            ('review', 'Do sprawdzenia', library.review, 'warning', '#f0b44d'),
+            ('review', 'Do sprawdzenia', library.review, 'folder_warning', '#f0b44d'),
             ('not_selected', 'Niewybrane', library.not_selected, 'folder_x', '#e675a2'),
-            ('custom_folders', 'Moje pliki MP3', library.custom_folders, 'music_note', '#b987ff'),
-            ('reports', 'Raporty', library.reports, 'report', '#50c9da'),
+            ('custom_folders', 'Moje pliki MP3', library.custom_folders, 'folder_music', '#b987ff'),
+            ('reports', 'Raporty', library.reports, 'folder_report', '#50c9da'),
         )
 
     def _create_location_cards(self, settings: AppSettings) -> None:
-        for key, title, path, icon_name, accent in self._location_specs(settings):
-            card = LibraryLocationRow(title, path, icon_name, accent, self.quick_access_host)
+        for index, (key, title, path, icon_name, accent) in enumerate(self._location_specs(settings)):
+            card = LibraryLocationRow(title, path, icon_name, accent, self.quick_access_host, is_root=key == 'root')
             self.location_cards[key] = card
-            self.quick_access_layout.addWidget(card)
+            self.quick_access_layout.addWidget(card, index, 0 if key == 'root' else 1, 1, 2 if key == 'root' else 1)
         self.quick_access_host.rows = list(self.location_cards.values())
 
     def _update_location_cards(self, settings: AppSettings) -> None:
@@ -601,8 +578,8 @@ class DashboardPage(QWidget):
         two_columns = self.width() >= 1050
         self.library_panels_layout.addWidget(self.structure_panel, 0, 0)
         self.library_panels_layout.addWidget(self.status_panel, 0 if two_columns else 1, 1 if two_columns else 0)
-        self.library_panels_layout.setColumnStretch(0, 2 if two_columns else 1)
-        self.library_panels_layout.setColumnStretch(1, 1 if two_columns else 0)
+        self.library_panels_layout.setColumnStretch(0, 63 if two_columns else 1)
+        self.library_panels_layout.setColumnStretch(1, 37 if two_columns else 0)
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
@@ -614,8 +591,6 @@ class DashboardPage(QWidget):
     def set_library(self, settings: AppSettings, library_name: str | None = None):
         self._library_root = Path(settings.library.root)
         self._last_scan_tooltip_source = ''
-        self.library_label.setText(str(settings.library.root))
-        self.library_label.setToolTip(str(settings.library.root))
         self._update_location_cards(settings)
         if library_name:
             self.set_library_name(library_name)
@@ -624,7 +599,9 @@ class DashboardPage(QWidget):
             self._update_statistics()
 
     def set_library_name(self, name: str):
-        self.dashboard_title.setText(ui_text(self, name or 'Biblioteka główna'))
+        # MainWindow keeps this callback when switching the active library.
+        # Its root path is displayed only in the structure panel now.
+        self._library_name = name or 'Biblioteka główna'
 
     def set_last_scan_summary(self, text: str):
         now = datetime.now()
@@ -686,14 +663,14 @@ class DashboardPage(QWidget):
             free_gb = shutil.disk_usage(target).free / (1024 ** 3)
             free_label.setText(f'{free_gb:.1f} GB')
             if free_gb < 10:
-                free_label.setStyleSheet('font-size:12pt;font-weight:750;color:#ff6b6b;')
+                free_label.setStyleSheet('font-size:13pt;font-weight:750;color:#ff6b6b;')
             elif free_gb < 20:
-                free_label.setStyleSheet('font-size:12pt;font-weight:750;color:#ffb84d;')
+                free_label.setStyleSheet('font-size:13pt;font-weight:750;color:#ffb84d;')
             else:
-                free_label.setStyleSheet('font-size:12pt;font-weight:750;')
+                free_label.setStyleSheet('font-size:13pt;font-weight:750;')
         except OSError:
             free_label.setText('—')
-            free_label.setStyleSheet('font-size:12pt;font-weight:750;')
+            free_label.setStyleSheet('font-size:13pt;font-weight:750;')
 
     def _update_attention(self) -> None:
         review = int(self._summary.get('review', 0))

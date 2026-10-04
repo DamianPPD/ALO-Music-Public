@@ -3038,6 +3038,10 @@ QWidget#StartLibraryPanels QLabel#StartPanelTitle {
 QWidget#StartLibraryPanels QLabel#StartPanelSubtitle {
     color:#91a7b4; font-size:8.5pt; font-weight:400;
 }
+QWidget#StartLibraryPanels QLabel#LibrarySectionMark {
+    background:transparent; border:0; border-top:1px solid #91adbe;
+    border-bottom:1px solid #91adbe;
+}
 QWidget#StartLibraryPanels QWidget#LibraryStructureList {
     background:transparent; border:0;
 }
@@ -3048,29 +3052,34 @@ QWidget#StartLibraryPanels QFrame#LibraryLocationRow:hover {
     background:#10212c; border-top-color:#3a5968;
     border-right-color:#3a5968; border-bottom-color:#3a5968;
 }
+QWidget#StartLibraryPanels QFrame#LibraryLocationRow[isRoot="true"] {
+    background:#0d202c; border-top-color:#427087;
+    border-right-color:#427087; border-bottom-color:#427087;
+}
+QWidget#StartLibraryPanels QFrame#LibraryLocationRow[isRoot="true"] QLabel#QuickAccessTitle {
+    color:#e7f3fa; font-size:10.5pt;
+}
 QWidget#StartLibraryPanels QLabel#QuickAccessTitle {
     color:#dee8ef; font-size:9.5pt; font-weight:700;
 }
 QWidget#StartLibraryPanels QLabel#QuickAccessPath {
     color:#8fa7b4; font-size:8.5pt; font-weight:400;
 }
-QWidget#StartLibraryPanels QLabel#QuickAccessAvailability {
-    color:#718793; font-size:8pt; font-weight:500; padding:0;
-}
-QWidget#StartLibraryPanels QLabel#QuickAccessAvailability[available="true"] { color:#71d9aa; }
-QWidget#StartLibraryPanels QLabel#LibraryLocationStatusDot {
-    background:#718793; border:0; border-radius:2px;
-}
-QWidget#StartLibraryPanels QLabel#LibraryLocationStatusDot[available="true"] { background:#71d9aa; }
 QWidget#StartLibraryPanels QPushButton#QuickAccessOpen {
     background:#10212c; border:1px solid #34515f; border-radius:5px;
-    color:#d4e2ea; min-width:0; min-height:24px; padding:3px 8px; font-size:8pt;
+    border-left:3px solid #718793;
+    color:#d4e2ea; min-width:0; min-height:26px; padding:3px 25px 3px 9px; font-size:8.5pt;
+}
+QWidget#StartLibraryPanels QPushButton#QuickAccessOpen[available="true"] {
+    border-left-color:#71d9aa;
 }
 QWidget#StartLibraryPanels QPushButton#QuickAccessOpen:hover {
-    background:#172c38; border-color:#557989; color:#edf3f8;
+    background:#172c38; border-top-color:#557989; border-right-color:#557989;
+    border-bottom-color:#557989; color:#edf3f8;
 }
 QWidget#StartLibraryPanels QPushButton#QuickAccessOpen:disabled {
-    background:#0c1822; color:#566771; border-color:#25343c;
+    background:#0c1822; color:#566771; border-top-color:#25343c;
+    border-right-color:#25343c; border-bottom-color:#25343c; border-left-color:#718793;
 }
 QWidget#StartLibraryPanels QFrame#StartLibraryMetric,
 QWidget#StartLibraryPanels QFrame#StartLibraryAttention {
@@ -3081,11 +3090,11 @@ QWidget#StartLibraryPanels QLabel#QuickAccessIcon {
     background:transparent; border:0; border-radius:0;
 }
 QWidget#StartLibraryPanels QLabel#StartMetricHeading {
-    color:#b0c3ce; font-size:8.5pt; font-weight:500;
+    color:#b0c3ce; font-size:9.5pt; font-weight:500;
 }
 QWidget#StartLibraryPanels QLabel#StartMetricValue { color:#e0ebf1; }
 QWidget#StartLibraryPanels QProgressBar#StartMetricProgress {
-    min-height:5px; max-height:5px; background:#203747; border:0; border-radius:2px;
+    min-height:7px; max-height:7px; background:#203747; border:0; border-radius:2px;
 }
 QWidget#StartLibraryPanels QProgressBar#StartMetricProgress::chunk { background:#39abdc; border-radius:2px; }
 QWidget#StartLibraryPanels QProgressBar#StartMetricProgress[metricKind="online"]::chunk { background:#b987ff; }

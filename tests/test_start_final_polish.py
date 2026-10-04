@@ -114,11 +114,11 @@ def test_start_sections_use_c_icons_without_changing_actions(tmp_path, monkeypat
         for key, name in stat_icons.items():
             card = window.dashboard.cards[key]
             assert _pixels(card.stat_icon.pixmap()) == _pixels(icons.start_icon(name, card._accent, 32).pixmap(32, 32))
-        locations = {'root': 'folder', 'ready': 'folder_check', 'review': 'warning',
-                     'not_selected': 'folder_x', 'custom_folders': 'music_note', 'reports': 'report'}
+        locations = {'root': 'folder', 'ready': 'folder_check', 'review': 'folder_warning',
+                     'not_selected': 'folder_x', 'custom_folders': 'folder_music', 'reports': 'folder_report'}
         for key, name in locations.items():
             card = window.dashboard.location_cards[key]
-            assert _pixels(card.title_icon.pixmap()) == _pixels(icons.start_icon(name, '#628fb0', 20).pixmap(20, 20))
+            assert _pixels(card.title_icon.pixmap()) == _pixels(icons.start_icon(name, card.property('accentColor'), 20).pixmap(20, 20))
         metrics = {'covers': 'cover', 'online': 'cloud', 'suspicious': 'document_warning',
                    'size': 'database', 'missing': 'document_x', 'free_space': 'disk'}
         for key, name in metrics.items():
@@ -216,35 +216,34 @@ def test_start_sections_have_balanced_gaps_without_resizing_cards(tmp_path):
         assert page.metric_cards['covers'].geometry().bottom() < page.metric_cards['online'].y()
         assert page.metric_cards['suspicious'].geometry().bottom() < page.attention_frame.y()
         assert page.cards['total'].height() == 92
-        assert 60 <= page.location_cards['root'].height() <= 70
+        assert 70 <= page.location_cards['root'].height() <= 78
         assert 70 <= page.metric_cards['covers'].height() <= 80
     finally:
         page.close()
 
 
-def test_all_start_open_folder_buttons_use_c_icon_and_keep_callbacks(tmp_path, monkeypatch):
+def test_start_open_folder_buttons_use_trailing_chevrons_and_keep_callbacks(tmp_path, monkeypatch):
     paths = LibraryPaths(tmp_path / 'library')
     paths.ensure_created()
     page = DashboardPage(AppSettings((), paths))
     visited = []
     monkeypatch.setattr(QDesktopServices, 'openUrl', lambda url: visited.append(url.toLocalFile()) or True)
     try:
-        buttons = [page.open_folder_button] + [card.open_button for card in page.location_cards.values()]
-        assert len(buttons) == 7
+        buttons = [card.open_button for card in page.location_cards.values()]
+        assert len(buttons) == 6
         for button in buttons:
             assert button.text() == 'Otwórz folder'
-            assert not button.icon().isNull()
-            color = '#d9e8ef' if button is page.open_folder_button else '#628fb0'
-            expected = _pixels(icons.start_icon('folder_open', color, 15).pixmap(16, 16))
-            assert _pixels(button.icon().pixmap(16, 16)) == expected
-        page.open_folder_button.click()
+            assert button.icon().isNull()
+            chevron = button.findChild(QLabel, 'StartFolderChevron')
+            expected = _pixels(icons.alo_icon('chevron-right', '#628fb0', 12).pixmap(12, 12))
+            assert _pixels(chevron.pixmap()) == expected
         for card in page.location_cards.values():
             card.open_button.click()
-        assert visited == [str(paths.root)] + [str(card.path) for card in page.location_cards.values()]
+        assert visited == [str(card.path) for card in page.location_cards.values()]
 
         apply_static_language(page, 'en')
         page.refresh_language()
-        assert all(button.text() == 'Open folder' and not button.icon().isNull() for button in buttons)
+        assert all(button.text() == 'Open folder' and button.icon().isNull() for button in buttons)
         apply_static_language(page, 'pl')
         page.refresh_language()
         assert all(button.text() == 'Otwórz folder' for button in buttons)

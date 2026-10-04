@@ -10,12 +10,13 @@ def _dashboard_source() -> str:
     return DASHBOARD.read_text(encoding='utf-8')
 
 
-def test_start_dashboard_uses_compact_path_bar_without_redundant_subtitle():
+def test_start_dashboard_keeps_the_library_path_only_in_its_structure():
     source = _dashboard_source()
     assert "QLabel('Biblioteka ALO Music')" not in source
-    assert "self.library_label = QLabel" in source
-    assert "self.open_folder_button = QPushButton('Otwórz folder')" in source
-    assert "self.dashboard_title = QLabel('Biblioteka główna')" in source
+    assert "self.library_label = QLabel" not in source
+    assert "self.open_folder_button =" not in source
+    assert "self.dashboard_title = QLabel('Biblioteka główna')" not in source
+    assert "('root', 'Biblioteka główna', library.root, 'folder'" in source
 
 
 def test_start_dashboard_has_four_clickable_quick_counters():
@@ -51,12 +52,12 @@ def test_start_dashboard_has_compact_library_statistics_without_unwanted_metrics
     assert "'Stan biblioteki', 'Podsumowanie zawartości i analiz biblioteki.'" in source
     assert "QLabel('Statystyki biblioteki')" not in source
     for key, label in (
-        ('covers', 'Okładki'),
-        ('online', 'Rozpoznane online'),
+        ('covers', 'Utwory z okładką'),
+        ('online', 'Utwory rozpoznane online'),
         ('missing', 'Brakujące pliki'),
-        ('suspicious', 'Podejrzane dane'),
+        ('suspicious', 'Metadane do sprawdzenia'),
         ('size', 'Rozmiar biblioteki'),
-        ('free_space', 'Wolne miejsce'),
+        ('free_space', 'Wolne miejsce na dysku'),
     ):
         assert f"('{key}', '{label}')" in source
     assert 'LICZBA GATUNKÓW' not in source
