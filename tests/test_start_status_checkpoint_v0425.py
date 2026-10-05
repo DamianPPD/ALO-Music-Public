@@ -99,11 +99,11 @@ def test_selected_track_folder_name_is_consistent_in_pl_en_and_runtime_version_i
         assert window.nav_buttons[3].text() == name
         assert window.dashboard.location_cards['custom_folders'].title_label.text() == name
         assert name in [label.text() for label in window.collections.findChildren(QLabel)]
-        assert window.findChild(QLabel, 'BrandVersion').text() == 'v0.4.25-dev • 2026'
+        assert window.findChild(QLabel, 'BrandVersion').text() == 'v0.4.25 • 2026'
         assert window.dashboard.location_cards['custom_folders'].path.name == 'MOJE_FOLDERY_MP3'
         titles = [label.text() for label in window.dashboard.findChildren(QLabel)]
         assert 'Moje pliki MP3' not in titles and 'My MP3 files' not in titles
-    assert __version__ == '0.4.25-dev'
+    assert __version__ == '0.4.25'
 
 
 def test_detailed_folder_artwork_and_steel_color_keep_other_semantics(window):

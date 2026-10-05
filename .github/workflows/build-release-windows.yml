@@ -1,10 +1,10 @@
-name: Build Windows release 0.4.24
+name: Build Windows release 0.4.25
 
 on:
   workflow_dispatch:
     inputs:
       source_sha:
-        description: Exact public source commit for ALO Music 0.4.24
+        description: Exact public source commit for ALO Music 0.4.25
         required: true
         type: string
 
@@ -45,8 +45,8 @@ jobs:
             throw "Wrong source commit: $actual"
           }
           $versionFile = Get-Content 'src/audio_library_organizer/__init__.py' -Raw
-          if ($versionFile -notmatch "__version__\s*=\s*'0\.4\.24'") {
-            throw 'Source version is not 0.4.24.'
+          if ($versionFile -notmatch "__version__\s*=\s*'0\.4\.25'") {
+            throw 'Source version is not 0.4.25.'
           }
           python --version
           Write-Host "Building source commit $actual"
@@ -111,9 +111,9 @@ jobs:
       - name: Verify release artifacts and SHA256
         shell: pwsh
         run: |
-          $releaseDir = 'release/v0.4.24'
-          $portable = 'ALO-Music-v0.4.24-Windows-Portable.zip'
-          $installer = 'ALO-Music-v0.4.24-Setup.exe'
+          $releaseDir = 'release/v0.4.25'
+          $portable = 'ALO-Music-v0.4.25-Windows-Portable.zip'
+          $installer = 'ALO-Music-v0.4.25-Setup.exe'
           $expected = @($portable, $installer, 'SHA256SUMS.txt')
           foreach ($name in $expected) {
             $path = Join-Path $releaseDir $name
@@ -168,9 +168,9 @@ jobs:
       - name: Upload final Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ALO-Music-v0.4.24-Windows
+          name: ALO-Music-v0.4.25-Windows
           if-no-files-found: error
           path: |
-            release/v0.4.24/ALO-Music-v0.4.24-Windows-Portable.zip
-            release/v0.4.24/ALO-Music-v0.4.24-Setup.exe
-            release/v0.4.24/SHA256SUMS.txt
+            release/v0.4.25/ALO-Music-v0.4.25-Windows-Portable.zip
+            release/v0.4.25/ALO-Music-v0.4.25-Setup.exe
+            release/v0.4.25/SHA256SUMS.txt
