@@ -174,7 +174,7 @@ def test_toolbar_filters_and_category_palette(tmp_path):
 def test_details_match_final_sections_and_one_edit_action(tmp_path):
     page, track = _page(tmp_path)
     try:
-        assert not page.detail_title_icon.pixmap().isNull()
+        assert page.detail_title_icon.findChild(QLabel, 'LibrarySectionMark') is not None
         assert page.detail_title.text() == 'Szczegóły utworu'
         assert {h.text() for h in page.detail_section_titles} == {
             'Rodzina wersji', 'Dane utworu', 'Dane techniczne'}
@@ -219,7 +219,7 @@ def test_completeness_uses_six_mockup_fields_not_editor_core_checks(tmp_path):
         assert page.completeness_count.text() == '4/6'
         assert page.completeness_title.text() == 'Dane niekompletne'
         assert {name for name, label in page.completeness_fields.items() if label.property('complete') is False} == {'album', 'year'}
-        assert 'Rok' in page.completeness_hint.text() and 'Album' in page.completeness_hint.text()
+        assert not any('Brakuje:' in label.text() for label in page.completeness_card.findChildren(QLabel))
         app.processEvents()
         assert page.completeness_title.palette().color(QPalette.ColorRole.WindowText) == QColor('#ff927c')
         assert page.completeness_fields['year'].palette().color(QPalette.ColorRole.WindowText) == QColor('#ff927c')
@@ -268,7 +268,7 @@ def test_new_details_text_translates_on_live_switch(tmp_path):
         page._show_detail()
         assert page.detail_title.text() == 'Track details'
         assert page.completeness_title.text() == 'Complete data'
-        assert page.completeness_hint.text() == 'All data is complete.'
+        assert not hasattr(page, 'completeness_hint')
         assert page.detail_section_titles[1].text() == 'Track data'
         assert page.detail_section_titles[2].text() == 'Technical data'
         assert page.details_btn.text() == 'Collapse details'
@@ -282,8 +282,9 @@ def test_new_details_text_translates_on_live_switch(tmp_path):
         track.album = None
         apply_static_language(page, 'en')
         page._show_detail()
-        assert page.completeness_title.text() == 'Incomplete data'
-        assert page.completeness_hint.text() == 'Missing: Album'
+        assert page.completeness_title.text() == 'Partial data'
+        assert page.completeness_count.text() == '5/6'
+        assert not any('Missing:' in label.text() for label in page.completeness_card.findChildren(QLabel))
     finally:
         page.close()
 

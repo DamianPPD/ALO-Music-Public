@@ -141,20 +141,18 @@ def test_filter_summary_renders_user_text_literally_and_keeps_full_tooltip(toolb
     assert f'Szukaj: {search}' in _summary(page).toPlainText()
 
 
-def test_completeness_fields_keep_two_columns_and_round_missing_statuses(toolbar_page):
+def test_completeness_fields_keep_one_row_and_semantic_missing_statuses(toolbar_page):
     app, page, tracks = toolbar_page
     page.select_track(tracks[0])
     app.processEvents()
     positions = {key: icon.parentWidget().pos() for key, icon in page.completeness_field_icons.items()}
-    assert positions['artist'].y() == positions['year'].y()
-    assert positions['title'].y() == positions['genre'].y()
-    assert positions['album'].y() == positions['bpm'].y()
-    assert positions['artist'].x() == positions['title'].x() == positions['album'].x()
-    assert positions['year'].x() == positions['genre'].x() == positions['bpm'].x()
+    keys = ['artist', 'title', 'year', 'genre', 'bpm', 'album']
+    assert len({positions[key].y() for key in keys}) == 1
+    assert [positions[key].x() for key in keys] == sorted(positions[key].x() for key in keys)
     tracks[0].album = None
     tracks[0].year = None
     page._show_detail()
     assert page.completeness_count.text() == '4/6'
-    for key in ('album', 'year'):
+    for key, glyph, color in [('album', 'album', '#e5b86a'), ('year', 'calendar', '#ff927c')]:
         assert page.completeness_field_icons[key].pixmap().toImage() == library_icon(
-            'empty_check', '#ff927c', 13).pixmap(13, 13).toImage()
+            glyph, color, 24).pixmap(24, 24).toImage()

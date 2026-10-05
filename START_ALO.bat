@@ -2,11 +2,11 @@
 setlocal
 cd /d "%~dp0"
 
-title ALO Music v0.4.25 - uruchamianie z repozytorium
+title ALO Music v0.4.26-dev - uruchamianie z repozytorium
 
 echo.
 echo ============================================================
-echo   ALO Music v0.4.25 - tryb developerski / GitHub Desktop
+echo   ALO Music v0.4.26-dev - tryb developerski / GitHub Desktop
 echo ============================================================
 echo.
 echo Pierwsze uruchomienie moze potrwac kilka minut.

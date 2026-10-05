@@ -355,8 +355,11 @@ class LibraryPage(QWidget):
         detail_outer = QVBoxLayout(self.detail); detail_outer.setContentsMargins(0, 0, 0, 0); detail_outer.setSpacing(0)
         header = QFrame(); header.setObjectName('LibraryDetailHeader'); header.setFixedHeight(50)
         header_row = QHBoxLayout(header); header_row.setContentsMargins(12, 8, 12, 8); header_row.setSpacing(8)
-        self.detail_title_icon = QLabel(); self.detail_title_icon.setObjectName('LibraryDetailNote')
-        self.detail_title_icon.setPixmap(library_icon('music_note', '#0fe4ad', 25).pixmap(25, 25))
+        self.detail_title_icon = QWidget(); self.detail_title_icon.setObjectName('LibraryDetailHeaderIcon')
+        self.detail_title_icon.setFixedWidth(29)
+        mark_layout = QHBoxLayout(self.detail_title_icon); mark_layout.setContentsMargins(0, 0, 0, 0)
+        mark = QLabel(); mark.setObjectName('LibrarySectionMark'); mark.setFixedSize(20, 7)
+        mark_layout.addWidget(mark, 0, Qt.AlignmentFlag.AlignCenter)
         header_row.addWidget(self.detail_title_icon)
         self.detail_title = QLabel('Szczegóły utworu'); self.detail_title.setObjectName('LibraryDetailTitle')
         header_row.addWidget(self.detail_title); header_row.addStretch(1)
@@ -397,43 +400,53 @@ class LibraryPage(QWidget):
 
         self.completeness_card = QFrame(); self.completeness_card.setObjectName('LibraryCompletenessCard')
         completeness_layout = QVBoxLayout(self.completeness_card)
-        completeness_layout.setContentsMargins(15, 12, 15, 11); completeness_layout.setSpacing(8)
+        completeness_layout.setContentsMargins(12, 12, 12, 11); completeness_layout.setSpacing(12)
         completeness_top = QHBoxLayout(); completeness_top.setSpacing(7)
         self.completeness_icon = QLabel(); self.completeness_icon.setObjectName('LibraryCompletenessIcon')
-        self.completeness_icon.setPixmap(library_icon('approve', '#2de1ac', 21).pixmap(21, 21))
+        self.completeness_icon.setFixedSize(16, 16)
+        self.completeness_icon.setPixmap(library_icon('status_ready', '#2de1ac', 16).pixmap(16, 16))
         completeness_top.addWidget(self.completeness_icon)
         self.completeness_title = QLabel('Dane kompletne'); self.completeness_title.setObjectName('LibraryCompletenessTitle')
-        self.completeness_title.setWordWrap(True)
+        self.completeness_title.setWordWrap(False)
         completeness_top.addWidget(self.completeness_title, 1)
         self.completeness_count = QLabel('0/6'); self.completeness_count.setObjectName('LibraryCompletenessCount')
-        self.completeness_hint = QLabel(''); self.completeness_hint.setObjectName('LibraryCompletenessHint')
-        self.completeness_hint.setWordWrap(True)
+        completeness_top.addWidget(self.completeness_count)
         completeness_layout.addLayout(completeness_top)
-        completeness_layout.addWidget(self.completeness_count)
-        completeness_layout.addWidget(self.completeness_hint)
         separator = QFrame(); separator.setObjectName('LibraryDetailSeparator'); separator.setFixedHeight(1)
         completeness_layout.addWidget(separator)
-        fields_grid = QGridLayout(); fields_grid.setContentsMargins(0, 5, 0, 0)
-        fields_grid.setHorizontalSpacing(6); fields_grid.setVerticalSpacing(5)
+        fields_row = QHBoxLayout(); fields_row.setContentsMargins(0, 12, 0, 0); fields_row.setSpacing(6)
         self.completeness_fields = {}
         self.completeness_field_icons = {}
-        for index, (key, title) in enumerate((('artist', 'Wykonawca'), ('year', 'Rok'),
-                                               ('title', 'Tytuł / wersja'), ('genre', 'Gatunek'),
-                                               ('album', 'Album'), ('bpm', 'BPM'))):
+        self._completeness_glyphs = {
+            'artist': 'artist', 'title': 'music_note', 'year': 'calendar',
+            'genre': 'tag', 'bpm': 'waveform', 'album': 'album',
+        }
+        for key, title in (('artist', 'Wykonawca'), ('title', 'Tytuł / wersja'),
+                           ('year', 'Rok'), ('genre', 'Gatunek'), ('bpm', 'BPM'), ('album', 'Album')):
+            if key == 'album':
+                album_separator = QFrame(); album_separator.setObjectName('LibraryCompletenessAlbumSeparator')
+                album_separator.setFixedWidth(1)
+                fields_row.addWidget(album_separator)
             field = QWidget(); field.setObjectName('LibraryCompletenessFieldRow')
-            field_layout = QHBoxLayout(field)
-            field_layout.setContentsMargins(0, 0, 0, 0); field_layout.setSpacing(5)
+            field_layout = QVBoxLayout(field)
+            field_layout.setContentsMargins(0, 0, 0, 0); field_layout.setSpacing(6)
             icon = QLabel(); icon.setObjectName('LibraryCompletenessFieldIcon')
-            icon.setFixedSize(13, 13)
-            icon.setPixmap(library_icon('empty_check', '#83939e', 13).pixmap(13, 13))
-            field_layout.addWidget(icon)
+            icon.setFixedSize(24, 24)
+            icon.setPixmap(library_icon(self._completeness_glyphs[key], '#83939e', 24).pixmap(24, 24))
+            field_layout.addWidget(icon, 0, Qt.AlignmentFlag.AlignHCenter)
             label = QLabel(title); label.setObjectName('LibraryCompletenessField')
-            label.setProperty('complete', False); label.setWordWrap(False)
-            field_layout.addWidget(label, 1)
-            fields_grid.addWidget(field, index // 2, index % 2)
+            label.setProperty('complete', False); label.setProperty('optional', key == 'album')
+            label.setWordWrap(True); label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+            if key == 'title':
+                label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+                label.setMinimumWidth(44)
+            field_layout.addWidget(label)
+            field_layout.addStretch(1)
+            fields_row.addWidget(field, 1)
             self.completeness_fields[key] = label
             self.completeness_field_icons[key] = icon
-        completeness_layout.addLayout(fields_grid)
+        completeness_layout.addLayout(fields_row)
+        completeness_layout.addStretch(1)
         summary_row.addWidget(self.completeness_card, 1)
         summary_row.setAlignment(self.completeness_card, Qt.AlignmentFlag.AlignTop)
         self.completeness_card.setMinimumHeight(218)
@@ -1088,31 +1101,27 @@ class LibraryPage(QWidget):
             'year': bool(t.year), 'bpm': t.bpm is not None, 'genre': bool(t.genre),
         }
         self.completeness_count.setText(f'{sum(complete.values())}/6')
-        self.completeness_title.setText(
-            tr('library.details.complete' if all(complete.values()) else 'library.details.incomplete', language_for(self)))
+        state = ('complete' if all(complete.values()) else
+                 'partial' if all(complete[key] for key in ('artist', 'title', 'year', 'genre', 'bpm')) else 'incomplete')
+        self.completeness_title.setText(tr(f'library.details.{state}', language_for(self)))
+        self.completeness_card.setProperty('state', state)
         self.completeness_card.setProperty('complete', all(complete.values()))
-        status_icon = (library_icon('approve', '#2de1ac', 21) if all(complete.values())
-                       else alo_icon('warning', '#ff927c', 21))
-        self.completeness_icon.setPixmap(status_icon.pixmap(21, 21))
-        for widget in (self.completeness_card, self.completeness_title, self.completeness_count, self.completeness_hint):
+        glyph, color = {'complete': ('status_ready', '#2de1ac'),
+                        'partial': ('empty_check', '#e5b86a'),
+                        'incomplete': ('status_review', '#ff927c')}[state]
+        self.completeness_icon.setPixmap(library_icon(glyph, color, 16).pixmap(16, 16))
+        for widget in (self.completeness_card, self.completeness_title, self.completeness_count):
             widget.style().unpolish(widget); widget.style().polish(widget)
         for key, label in self.completeness_fields.items():
             label.setText(ui_text(self, {
                 'artist': 'Wykonawca', 'title': 'Tytuł / wersja', 'album': 'Album',
                 'year': 'Rok', 'bpm': 'BPM', 'genre': 'Gatunek',
             }[key]))
-            field_icon = library_icon('approve' if complete[key] else 'empty_check',
-                                      '#84e8c4' if complete[key] else '#ff927c', 13)
-            self.completeness_field_icons[key].setPixmap(field_icon.pixmap(13, 13))
+            color = '#84e8c4' if complete[key] else '#e5b86a' if key == 'album' else '#ff927c'
+            field_icon = library_icon(self._completeness_glyphs[key], color, 24)
+            self.completeness_field_icons[key].setPixmap(field_icon.pixmap(24, 24))
             label.setProperty('complete', complete[key])
             label.style().unpolish(label); label.style().polish(label)
-        if all(complete.values()):
-            self.completeness_hint.setText(ui_text(self, 'Wszystkie dane są uzupełnione.'))
-        else:
-            missing = [ui_text(self, title) for key, title in (
-                ('artist', 'Wykonawca'), ('title', 'Tytuł / wersja'), ('album', 'Album'),
-                ('year', 'Rok'), ('bpm', 'BPM'), ('genre', 'Gatunek')) if not complete[key]]
-            self.completeness_hint.setText(ui_text(self, 'Brakuje:') + ' ' + ', '.join(missing))
         self._load_cover(t)
         crash_debug.record('library.selection.done', **crash_debug.track_context(t.path))
 

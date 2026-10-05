@@ -24,6 +24,7 @@ CATALOG: dict[str, dict[str, str]] = {
     'library.active': {'pl': 'Aktywna biblioteka', 'en': 'Active library'},
     'library.manage': {'pl': 'Biblioteki', 'en': 'Libraries'},
     'library.details.complete': {'pl': 'Dane kompletne', 'en': 'Complete data'},
+    'library.details.partial': {'pl': 'Dane częściowe', 'en': 'Partial data'},
     'library.details.incomplete': {'pl': 'Dane niekompletne', 'en': 'Incomplete data'},
     'library.view.sort': {'pl': 'Sortowanie:', 'en': 'Sort:'},
     'library.view.filters': {'pl': 'Filtry:', 'en': 'Filters:'},

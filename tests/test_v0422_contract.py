@@ -32,9 +32,9 @@ def _app() -> QApplication:
 
 
 def test_version_is_0422_everywhere():
-    assert "__version__ = '0.4.25'" in (ROOT / 'src/audio_library_organizer/__init__.py').read_text(encoding='utf-8')
-    assert 'version = "0.4.25"' in (ROOT / 'pyproject.toml').read_text(encoding='utf-8')
-    assert 'v0.4.25' in (ROOT / 'START_HERE.txt').read_text(encoding='utf-8')
+    assert "__version__ = '0.4.26-dev'" in (ROOT / 'src/audio_library_organizer/__init__.py').read_text(encoding='utf-8')
+    assert 'version = "0.4.26-dev"' in (ROOT / 'pyproject.toml').read_text(encoding='utf-8')
+    assert 'v0.4.26-dev' in (ROOT / 'START_HERE.txt').read_text(encoding='utf-8')
 
 
 def test_a1_asset_pack_has_required_ultra_thin_icons():

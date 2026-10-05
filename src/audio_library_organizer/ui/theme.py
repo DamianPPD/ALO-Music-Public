@@ -2704,7 +2704,6 @@ QWidget#LibraryPage QTableView::indicator {
 QWidget#LibraryPage QFrame#DetailPanel QLabel { background:transparent; border:0; }
 QWidget#LibraryPage QFrame#LibraryDetailHeader { background:#09151b; border:0; border-bottom:1px solid #284453; }
 QWidget#LibraryPage QLabel#LibraryDetailTitle { color:#f3f8fa; font-size:14pt; font-weight:750; }
-QWidget#LibraryPage QFrame#DetailPanel QLabel#LibraryDetailNote { background:#09231f; border-radius:6px; padding:2px; }
 QWidget#LibraryPage QPushButton#DetailsToggle {
     min-height:32px; max-height:32px; color:#dce9ef; font-size:10pt; font-weight:650;
     background:#14262c; border:1px solid #476f6f; border-radius:6px; padding:0 12px;
@@ -2751,20 +2750,24 @@ QWidget#LibraryPage QFrame#DetailPanel QLabel#LibraryDetailCover {
     background:#071118; border:1px solid #168564; border-radius:8px; color:#7a929e;
 }
 QWidget#LibraryPage QFrame#LibraryCompletenessCard {
-    background:#22191b; border:1px solid #79504b; border-radius:8px;
+    background:#22191b; border:1px solid #79504b; border-top:3px solid #ff927c; border-radius:8px;
 }
-QWidget#LibraryPage QFrame#LibraryCompletenessCard[complete="true"] {
-    background:#10271f; border-color:#315f4c;
+QWidget#LibraryPage QFrame#LibraryCompletenessCard[state="complete"] {
+    background:#10271f; border-color:#315f4c; border-top-color:#2de1ac;
+}
+QWidget#LibraryPage QFrame#LibraryCompletenessCard[state="partial"] {
+    background:#241e16; border-color:#685432; border-top-color:#e5b86a;
 }
 QWidget#LibraryPage QWidget#LibraryCompletenessFieldRow { background:transparent; }
 QWidget#LibraryPage QLabel#LibraryViewState { font-weight:400; }
-QWidget#LibraryPage QLabel#LibraryCompletenessTitle { color:#ff927c; font-size:11.5pt; font-weight:750; }
-QWidget#LibraryPage QFrame#LibraryCompletenessCard[complete="true"] QLabel#LibraryCompletenessTitle { color:#64e8bc; }
-QWidget#LibraryPage QLabel#LibraryCompletenessCount { color:#fff3ef; font-size:22pt; font-weight:780; }
-QWidget#LibraryPage QLabel#LibraryCompletenessHint { color:#ffc1b2; font-size:10pt; }
-QWidget#LibraryPage QFrame#LibraryCompletenessCard[complete="true"] QLabel#LibraryCompletenessHint { color:#c1d5d7; }
+QWidget#LibraryPage QLabel#LibraryCompletenessTitle { color:#ff927c; font-size:10.5pt; font-weight:750; }
+QWidget#LibraryPage QFrame#LibraryCompletenessCard[state="complete"] QLabel#LibraryCompletenessTitle { color:#64e8bc; }
+QWidget#LibraryPage QFrame#LibraryCompletenessCard[state="partial"] QLabel#LibraryCompletenessTitle { color:#e5b86a; }
+QWidget#LibraryPage QLabel#LibraryCompletenessCount { color:#fff3ef; font-size:18pt; font-weight:780; }
 QWidget#LibraryPage QLabel#LibraryCompletenessField { color:#ff927c; font-size:9.2pt; }
+QWidget#LibraryPage QLabel#LibraryCompletenessField[complete="false"][optional="true"] { color:#e5b86a; }
 QWidget#LibraryPage QLabel#LibraryCompletenessField[complete="true"] { color:#84e8c4; }
+QWidget#LibraryPage QFrame#LibraryCompletenessAlbumSeparator { background:#3e4a4f; border:0; }
 QWidget#LibraryPage QFrame#LibraryDetailSeparator,
 QWidget#LibraryPage QFrame#LibraryMetricDivider { background:#2c4b55; border:0; }
 QWidget#LibraryPage QFrame#LibraryValueRow { background:transparent; border:0; border-bottom:1px solid #25414c; }

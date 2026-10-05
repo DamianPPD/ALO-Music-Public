@@ -1,6 +1,6 @@
 #define MyAppName "ALO Music"
 #ifndef MyAppVersion
-  #define MyAppVersion "0.4.25"
+  #define MyAppVersion "0.4.26-dev"
 #endif
 #define MyAppPublisher "Damian"
 #define MyAppExeName "ALO-Music.exe"
