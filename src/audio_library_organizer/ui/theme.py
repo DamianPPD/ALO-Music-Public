@@ -2774,17 +2774,33 @@ QWidget#LibraryPage QFrame#LibraryCompletenessCard[state="partial"] QLabel#Libra
 QWidget#LibraryPage QLabel#LibraryCompletenessCount { color:#ff927c; font-size:18pt; font-weight:780; }
 QWidget#LibraryPage QFrame#LibraryCompletenessCard[state="complete"] QLabel#LibraryCompletenessCount { color:#64e8bc; }
 QWidget#LibraryPage QFrame#LibraryCompletenessCard[state="partial"] QLabel#LibraryCompletenessCount { color:#e5b86a; }
-QWidget#LibraryPage QLabel#LibraryCompletenessField { color:#ff927c; font-size:9.2pt; min-height:32px; max-height:32px; }
-QWidget#LibraryPage QLabel#LibraryCompletenessField[complete="false"][optional="true"] { color:#e5b86a; }
-QWidget#LibraryPage QLabel#LibraryCompletenessField[complete="true"] { color:#84e8c4; }
 QWidget#LibraryPage QFrame#LibraryCompletenessAlbumSeparator { background:#3e4a4f; border:0; }
 QWidget#LibraryPage QFrame#LibraryDetailSeparator,
 QWidget#LibraryPage QFrame#LibraryMetricDivider { background:#2c4b55; border:0; }
-QWidget#LibraryPage QFrame#LibraryValueRow { background:transparent; border:0; border-bottom:1px solid #25414c; }
+QWidget#LibraryPage QFrame#LibraryValueRow {
+    background:#1c1519; border:1px solid #79504b; border-left:3px solid #ff927c; border-radius:6px;
+}
+QWidget#LibraryPage QFrame#LibraryValueRow[complete="true"] {
+    background:#0b201d; border-color:#2e6854; border-left-color:#4dc5a0;
+}
+QWidget#LibraryPage QFrame#LibraryValueRow[complete="false"][optional="true"] {
+    background:#211c13; border-color:#78613d; border-left-color:#e5b86a;
+}
+QWidget#LibraryPage QFrame#LibraryValueRow QLabel,
+QWidget#LibraryPage QFrame#LibraryTechnicalCard QFrame#LibraryMetric QLabel {
+    background:transparent; border:0; padding:0;
+}
 QWidget#LibraryPage QLabel#LibraryFieldName,
 QWidget#LibraryPage QLabel#LibraryMetricName { color:#a0bdd1; font-size:9pt; }
 QWidget#LibraryPage QLabel#LibraryFieldValue,
 QWidget#LibraryPage QLabel#LibraryMetricValue { color:#f0f4f5; font-size:9.5pt; }
+QWidget#LibraryPage QFrame#LibraryValueRow[primary="true"] QLabel#LibraryFieldValue {
+    font-size:14pt; font-weight:700;
+}
+QWidget#LibraryPage QFrame#LibraryTechnicalCard QFrame#LibraryMetric {
+    background:#09171f; border:1px solid #274655; border-radius:6px;
+}
+QWidget#LibraryPage QFrame#LibraryTechnicalCard QLabel#LibraryMetricValue { font-size:10.5pt; font-weight:600; }
 QWidget#LibraryPage QFrame#PinnedDetailActions { background:#09151b; border:0; border-top:1px solid #284453; }
 '''
 DARK_STYLE += LIBRARY_A_STYLE

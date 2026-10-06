@@ -222,7 +222,9 @@ def test_completeness_uses_six_mockup_fields_not_editor_core_checks(tmp_path):
         assert not any('Brakuje:' in label.text() for label in page.completeness_card.findChildren(QLabel))
         app.processEvents()
         assert page.completeness_title.palette().color(QPalette.ColorRole.WindowText) == QColor('#ff927c')
-        assert page.completeness_fields['year'].palette().color(QPalette.ColorRole.WindowText) == QColor('#ff927c')
+        field = page.completeness_fields['year']
+        border = field.grab().toImage().pixelColor(0, field.height() // 2)
+        assert border.red() > border.green() and border.red() > border.blue()
     finally:
         page.close()
         app.setStyleSheet(previous)
@@ -312,14 +314,13 @@ def test_detail_geometry_and_scroll_at_supported_logical_dpi_widths(tmp_path):
             metrics = [page.detail_labels[key].mapTo(page.detail_scroll.widget(),
                        page.detail_labels[key].rect().topLeft())
                        for key in ('year', 'bpm', 'genre')]
-            assert len({point.y() for point in metrics}) == 1
+            assert metrics[0].y() == metrics[1].y() < metrics[2].y()
             for key in ('year', 'bpm', 'genre', 'sample_rate', 'channels'):
                 value = page.detail_labels[key]
                 assert value.fontMetrics().horizontalAdvance(value.text()) <= value.width()
-            metric_hosts = [page.detail_labels[key].parentWidget() for key in ('year', 'bpm', 'genre')]
+            metric_hosts = [page.detail_labels[key].parentWidget() for key in ('year', 'bpm')]
             assert max(host.width() for host in metric_hosts) - min(host.width() for host in metric_hosts) <= 1
-            for key in ('year', 'bpm', 'genre'):
-                assert page.detail_labels[key].alignment() == Qt.AlignmentFlag.AlignCenter
+            assert page.detail_labels['genre'].parentWidget().width() > metric_hosts[0].width()
             technical = page.technical_panel
             first = page.detail_labels['sample_rate']
             second = page.detail_labels['size']

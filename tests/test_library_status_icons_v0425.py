@@ -195,12 +195,15 @@ def test_status_rows_have_no_colored_horizontal_grid(status_page):
             assert image.pixelColor(round((box.left() + 12) * ratio), round(y * ratio)).name() == tint
 
 
-def test_default_split_matches_reference_and_keeps_quality_format_visible(status_page):
+def test_default_split_matches_reference_and_quality_format_remain_accessible(status_page):
     app, page, _ = status_page
     page.resize(1600, 900)
     app.processEvents()
     table_width, detail_width = page.split.sizes()
     assert .58 <= table_width / (table_width + detail_width) <= .62
+    # Data columns keep their chosen widths; the scrollbar exposes the right end.
+    page.table.horizontalScrollBar().setValue(page.table.horizontalScrollBar().maximum())
+    app.processEvents()
     for column in (8, 9):
         box = page.table.visualRect(page.model.index(0, column))
         assert box.right() < page.table.viewport().width()

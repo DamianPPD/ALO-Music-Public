@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from html import escape
+from math import isfinite
 from pathlib import Path
 from weakref import ref
 
@@ -20,6 +21,7 @@ from audio_library_organizer.domain.models import TrackRecord
 from audio_library_organizer.duplicates.families import group_version_families
 from audio_library_organizer.metadata.artwork import extract_embedded_cover
 from audio_library_organizer.metadata.online_lock import is_online_locked
+from audio_library_organizer.metadata.genre import genre_items, primary_genre
 from audio_library_organizer.ui.state import (
     library_status_text, library_status_presentation, track_matches_quick_filter,
     display_bpm, effective_status, review_severity, track_matches_library_filters,
@@ -35,6 +37,7 @@ PLAYING_ROLE = int(Qt.ItemDataRole.UserRole) + 1
 VISUAL_ORDER_ROLE = int(Qt.ItemDataRole.UserRole) + 2
 STATUS_ACCENT_ROLE = int(Qt.ItemDataRole.UserRole) + 3
 STATUS_BACKGROUND_ROLE = int(Qt.ItemDataRole.UserRole) + 4
+LIBRARY_SORT_ROLE = int(Qt.ItemDataRole.UserRole) + 5
 PLAYING_BACKGROUND = QColor('#142b23')
 PLAYING_ACCENT = QColor('#4cb68a')
 SELECTED_BACKGROUND = QColor('#203038')
@@ -64,18 +67,11 @@ class LibraryCheckHeader(QHeaderView):
         self._page = ref(page)
         self._check_hovered = False
         self.setMouseTracking(True)
+        self.setSectionsClickable(True)
 
     def checkState(self):
         page = self._page()
-        if page is None:
-            return Qt.CheckState.Unchecked
-        keys = {page._path_key(track) for track in page.visible_tracks()}
-        checked = page._visible_checked_paths()
-        if not keys or not checked:
-            return Qt.CheckState.Unchecked
-        if keys <= checked:
-            return Qt.CheckState.Checked
-        return Qt.CheckState.PartiallyChecked
+        return page._visible_check_state if page is not None else Qt.CheckState.Unchecked
 
     def toggleVisibleChecks(self):
         page = self._page()
@@ -109,19 +105,18 @@ class LibraryCheckHeader(QHeaderView):
 
 
 class StableTableView(QTableView):
-    """Keeps status visible and limits keyboard navigation to vertical rows."""
+    """Preserves the chosen horizontal position during vertical row navigation."""
 
     def scrollTo(self, index, hint=QAbstractItemView.ScrollHint.EnsureVisible):
+        horizontal = self.horizontalScrollBar().value()
         super().scrollTo(index, hint)
-        self.horizontalScrollBar().setValue(0)
+        self.horizontalScrollBar().setValue(horizontal)
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key.Key_Left, Qt.Key.Key_Right):
             event.accept()
-            self.horizontalScrollBar().setValue(0)
             return
         super().keyPressEvent(event)
-        self.horizontalScrollBar().setValue(0)
 
 
 class LibraryRowDelegate(QStyledItemDelegate):
@@ -215,6 +210,7 @@ class LibraryPage(QWidget):
     queue_next_requested = Signal(object)
 
     HEADERS = ['', 'Status', 'Wykonawca', 'Tytuł', 'Rok', 'Gatunek', 'BPM', 'Długość', 'Jakość', 'Format']
+    COLUMN_MINIMUMS = {2: 70, 3: 70, 4: 48, 5: 70, 6: 48, 7: 64, 8: 72, 9: 56}
     CATEGORY_ICONS = {
         'all': 'all_tracks', 'ready': 'ready', 'duplicate': 'duplicates',
         'review': 'review', 'not_selected': 'unselected', 'no_cover': 'no_cover',
@@ -239,6 +235,7 @@ class LibraryPage(QWidget):
         self._version_family_by_path: dict[str, list[TrackRecord]] = {}
         self._checked_paths: set[str] = set()
         self._syncing_checks = False
+        self._visible_check_state = Qt.CheckState.Unchecked
 
         root = QVBoxLayout(self)
         root.setContentsMargins(4, 4, 4, 4)
@@ -328,21 +325,24 @@ class LibraryPage(QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
-        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.table.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.table.setShowGrid(False)
         self.model = QStandardItemModel(0, len(self.HEADERS)); self.model.setHorizontalHeaderLabels(self.HEADERS)
+        self.model.setSortRole(LIBRARY_SORT_ROLE)
         self.table.setModel(self.model)
         self.model.itemChanged.connect(self._on_check_item_changed)
         header = self.table.horizontalHeader(); header.setStretchLastSection(False)
-        for col in (0, 1, 4, 6, 7, 9): header.setSectionResizeMode(col, QHeaderView.ResizeMode.Fixed)
-        for col in (2, 5, 8): header.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        header.setMinimumSectionSize(36)
+        for col in (0, 1): header.setSectionResizeMode(col, QHeaderView.ResizeMode.Fixed)
+        for col in range(2, len(self.HEADERS)): header.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
         self.table.setColumnWidth(0, 36); self._ensure_status_column_width()
         self.table.setColumnWidth(2, 165); self.table.setColumnWidth(4, 62)
+        self.table.setColumnWidth(3, 280)
         self.table.setColumnWidth(5, 150); self.table.setColumnWidth(6, 62); self.table.setColumnWidth(7, 76)
         self.table.setColumnWidth(8, 125); self.table.setColumnWidth(9, 72)
+        header.sectionResized.connect(self._limit_column_width)
         self.table.sortByColumn(1, Qt.SortOrder.AscendingOrder)
         self.table.verticalHeader().setDefaultSectionSize(38)
         self.table.doubleClicked.connect(self._play_selected)
@@ -439,45 +439,37 @@ class LibraryPage(QWidget):
             icon.setFixedSize(32, 32)
             field_color = '#e5b86a' if key == 'album' else '#ff927c'
             icon.setPixmap(library_icon(self._completeness_glyphs[key], field_color, 32).pixmap(32, 32))
+            icon.setAccessibleName(ui_text(self, title)); icon.setToolTip(ui_text(self, title))
             field_layout.addWidget(icon, 0, Qt.AlignmentFlag.AlignHCenter)
-            label = QLabel(title); label.setObjectName('LibraryCompletenessField')
-            label.setProperty('complete', False); label.setProperty('optional', key == 'album')
-            label.setWordWrap(True); label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
-            if key == 'title':
-                label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-                label.setMinimumWidth(44)
-            field_layout.addWidget(label)
             field_layout.addStretch(1)
             fields_row.addWidget(field, 1)
-            self.completeness_fields[key] = label
+            self.completeness_fields[key] = field
             self.completeness_field_icons[key] = icon
         completeness_layout.addLayout(fields_row, 1)
         summary_row.addWidget(self.completeness_card, 1)
         summary_row.setAlignment(self.completeness_card, Qt.AlignmentFlag.AlignTop)
         self.completeness_card.setMinimumHeight(218)
+        self.completeness_card.setMinimumWidth(373)
         summary_host = QWidget(); summary_host.setObjectName('LibrarySummary')
         summary_host.setMinimumHeight(218); summary_host.setLayout(summary_row)
         detail_root.addWidget(summary_host)
 
         self.detail_labels: dict[str, QLabel] = {}
+        self.detail_field_tiles: dict[str, QFrame] = {}
 
         track_card = QFrame(); track_card.setObjectName('LibraryTrackDataCard')
         data_layout = QVBoxLayout(track_card); data_layout.setContentsMargins(0, 0, 0, 7); data_layout.setSpacing(0)
         data_head, _ = self._detail_section_header('Dane utworu'); data_layout.addWidget(data_head)
-        data_layout.addSpacing(2)
-        for key, title, icon in (('artist', 'Wykonawca', 'artist'),
-                                 ('title', 'Tytuł / wersja', 'music_note'),
-                                 ('album', 'Album / Release', 'album')):
-            data_layout.addWidget(self._detail_value_row(key, title, icon))
-        metrics = QHBoxLayout(); metrics.setContentsMargins(6, 5, 6, 0); metrics.setSpacing(0)
-        for index, (key, title, icon) in enumerate((('year', 'Rok', 'calendar'),
-                                                   ('bpm', 'BPM', 'waveform'),
-                                                   ('genre', 'Gatunek', 'tag'))):
-            if index:
-                divider = QFrame(); divider.setObjectName('LibraryMetricDivider'); divider.setFixedWidth(1)
-                metrics.addWidget(divider)
-            metrics.addWidget(self._detail_metric(key, title, icon, centered=True), 1)
-        data_layout.addLayout(metrics)
+        data_body = QWidget(); data_rows = QVBoxLayout(data_body)
+        data_rows.setContentsMargins(8, 6, 8, 0); data_rows.setSpacing(6)
+        for key, title in (('artist', 'Wykonawca'), ('title', 'Tytuł / wersja'), ('album', 'Album / Release')):
+            data_rows.addWidget(self._detail_value_row(key, title, primary=key in ('artist', 'title')))
+        metrics = QHBoxLayout(); metrics.setContentsMargins(0, 0, 0, 0); metrics.setSpacing(8)
+        metrics.addWidget(self._detail_value_row('year', 'Rok'), 1)
+        metrics.addWidget(self._detail_value_row('bpm', 'BPM'), 1)
+        data_rows.addLayout(metrics)
+        data_rows.addWidget(self._detail_value_row('genre', 'Gatunek'))
+        data_layout.addWidget(data_body)
         detail_root.addWidget(track_card)
 
         self.technical_panel = QFrame(); self.technical_panel.setObjectName('LibraryTechnicalCard')
@@ -485,24 +477,17 @@ class LibraryPage(QWidget):
         technical_layout.setContentsMargins(0, 0, 0, 7); technical_layout.setSpacing(5)
         technical_head, _ = self._detail_section_header('Dane techniczne')
         technical_layout.addWidget(technical_head)
-        first_row = QHBoxLayout(); first_row.setContentsMargins(6, 3, 6, 0); first_row.setSpacing(0)
+        technical_body = QWidget(); technical_grid = QGridLayout(technical_body)
+        technical_grid.setContentsMargins(8, 0, 8, 0); technical_grid.setSpacing(6)
         for index, (key, title, icon) in enumerate((('format', 'Format', 'file_format'),
                                                    ('bitrate', 'Bitrate', 'waveform'),
                                                    ('sample_rate', 'Sample rate', 'waveform'),
-                                                   ('channels', 'Kanały', 'channels'))):
-            if index:
-                divider = QFrame(); divider.setObjectName('LibraryMetricDivider'); divider.setFixedWidth(1)
-                first_row.addWidget(divider)
-            first_row.addWidget(self._detail_metric(key, title, icon), 1)
-        technical_layout.addLayout(first_row)
-        second_row = QHBoxLayout(); second_row.setContentsMargins(6, 2, 6, 0); second_row.setSpacing(0)
-        for index, (key, title, icon) in enumerate((('duration', 'Czas trwania', 'clock'),
+                                                   ('channels', 'Kanały', 'channels'),
+                                                   ('duration', 'Czas trwania', 'clock'),
                                                    ('size', 'Rozmiar pliku', 'file_size'))):
-            if index:
-                divider = QFrame(); divider.setObjectName('LibraryMetricDivider'); divider.setFixedWidth(1)
-                second_row.addWidget(divider)
-            second_row.addWidget(self._detail_metric(key, title, icon), 1)
-        technical_layout.addLayout(second_row)
+            technical_grid.addWidget(self._detail_metric(key, title, icon), index // 3, index % 3)
+        for col in range(3): technical_grid.setColumnStretch(col, 1)
+        technical_layout.addWidget(technical_body)
         detail_root.addWidget(self.technical_panel)
         detail_root.addStretch(1)
         self.detail_scroll.setWidget(body); detail_outer.addWidget(self.detail_scroll, 1)
@@ -551,40 +536,34 @@ class LibraryPage(QWidget):
             row.addWidget(self.family_arrow)
         return host, heading
 
-    def _detail_value_row(self, key: str, title: str, icon: str) -> QFrame:
+    def _detail_value_row(self, key: str, title: str, *, primary: bool = False) -> QFrame:
         host = QFrame(); host.setObjectName('LibraryValueRow')
-        row = QHBoxLayout(host); row.setContentsMargins(12, 8, 12, 8); row.setSpacing(8)
-        glyph = QLabel(); glyph.setObjectName('LibraryFieldIcon')
-        glyph.setPixmap(library_icon(icon, '#8babc0', 17).pixmap(17, 17)); row.addWidget(glyph)
-        label = QLabel(title); label.setObjectName('LibraryFieldName'); label.setFixedWidth(123); row.addWidget(label)
+        host.setProperty('primary', primary); host.setProperty('complete', False)
+        host.setProperty('optional', key == 'album')
+        host.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        row = QVBoxLayout(host) if primary else QHBoxLayout(host)
+        row.setContentsMargins(12, 7, 10, 7); row.setSpacing(2 if primary else 10)
+        label = QLabel(title); label.setObjectName('LibraryFieldName')
+        if not primary: label.setFixedWidth(110 if key == 'album' else 58 if key == 'genre' else 34)
+        row.addWidget(label)
         value = QLabel('—'); value.setObjectName('LibraryFieldValue'); value.setWordWrap(True)
+        value.setTextFormat(Qt.TextFormat.PlainText); value.setProperty('literalText', True)
+        value.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        row.addWidget(value, 1); self.detail_labels[key] = value
+        row.addWidget(value, 1); self.detail_labels[key] = value; self.detail_field_tiles[key] = host
         return host
 
-    def _detail_metric(self, key: str, title: str, icon: str, *, centered: bool = False) -> QWidget:
-        host = QWidget(); host.setObjectName('LibraryMetric')
-        if centered:
-            host.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-            column = QVBoxLayout(host); column.setContentsMargins(7, 8, 7, 8); column.setSpacing(2)
-            heading = QHBoxLayout(); heading.setSpacing(5)
-            heading.addStretch(1)
-            glyph = QLabel(); glyph.setObjectName('LibraryFieldIcon')
-            glyph.setPixmap(library_icon(icon, '#8babc0', 16).pixmap(16, 16)); heading.addWidget(glyph)
-            label = QLabel(title); label.setObjectName('LibraryMetricName'); heading.addWidget(label)
-            heading.addStretch(1); column.addLayout(heading)
-            value = QLabel('—'); value.setObjectName('LibraryMetricValue'); value.setWordWrap(True)
-            value.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            column.addWidget(value)
-            self.detail_labels[key] = value
-            return host
-        row = QHBoxLayout(host); row.setContentsMargins(7, 8, 7, 8); row.setSpacing(5)
+    def _detail_metric(self, key: str, title: str, icon: str) -> QFrame:
+        host = QFrame(); host.setObjectName('LibraryMetric')
+        host.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        row = QHBoxLayout(host); row.setContentsMargins(10, 9, 8, 9); row.setSpacing(8)
         glyph = QLabel(); glyph.setObjectName('LibraryFieldIcon')
-        glyph.setPixmap(library_icon(icon, '#8babc0', 16).pixmap(16, 16)); row.addWidget(glyph)
+        glyph.setFixedSize(24, 24)
+        glyph.setPixmap(library_icon(icon, '#8babc0', 24).pixmap(24, 24)); row.addWidget(glyph)
         stack = QVBoxLayout(); stack.setSpacing(1)
-        label = QLabel(title); label.setObjectName('LibraryMetricName'); stack.addWidget(label)
+        label = QLabel(title); label.setObjectName('LibraryMetricName'); label.setWordWrap(True); stack.addWidget(label)
         value = QLabel('—'); value.setObjectName('LibraryMetricValue'); value.setWordWrap(True)
+        value.setTextFormat(Qt.TextFormat.PlainText); value.setProperty('literalText', True)
         value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         stack.addWidget(value); row.addLayout(stack, 1)
         self.detail_labels[key] = value
@@ -702,6 +681,9 @@ class LibraryPage(QWidget):
             finally:
                 self._syncing_checks = False
         count = len(self._checked_paths)
+        self._visible_check_state = (Qt.CheckState.Unchecked if not count else
+                                     Qt.CheckState.Checked if count == len(visible) else
+                                     Qt.CheckState.PartiallyChecked)
         self.selected_count.setText(f'{ui_text(self, "Zaznaczono:")} {count}')
         self.selected_count.setVisible(count > 0)
         self.collection_btn.setEnabled(count > 0)
@@ -727,6 +709,17 @@ class LibraryPage(QWidget):
         required = max(58, text_width + 26)
         if self.table.columnWidth(1) != required:
             self.table.setColumnWidth(1, required)
+
+    def _limit_column_width(self, column: int, _old: int, width: int):
+        if column == 0:
+            minimum = 36
+        elif column == 1:
+            self._ensure_status_column_width()
+            return
+        else:
+            minimum = self.COLUMN_MINIMUMS.get(column, 36)
+        if width < minimum or (column == 0 and width != minimum):
+            self.table.horizontalHeader().resizeSection(column, minimum)
 
     def eventFilter(self, watched, event):
         handled = super().eventFilter(watched, event)
@@ -797,7 +790,7 @@ class LibraryPage(QWidget):
     def _restore_view_state(self, state: dict):
         widths = state.get('column_widths') or []
         for col, width in enumerate(widths):
-            if col < self.model.columnCount() and width > 0:
+            if 2 <= col < self.model.columnCount() and width > 0:
                 self.table.setColumnWidth(col, int(width))
         self._ensure_status_column_width()
 
@@ -886,8 +879,17 @@ class LibraryPage(QWidget):
         self._paint_category_icons()
         self.table.sortByColumn(1, Qt.SortOrder.AscendingOrder)
         self.table.verticalScrollBar().setValue(0)
+        self.table.horizontalScrollBar().setValue(0)
         self.refresh(clear_checks=True)
         self.table.selectionModel().clearSelection()
+
+    @staticmethod
+    def _numeric_sort_value(value) -> float:
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return float('-inf')
+        return numeric if isfinite(numeric) else float('-inf')
 
     def refresh(self, *_, preserve_order: bool = False, clear_checks: bool = False):
         checked = set() if clear_checks else self._checked_paths.copy()
@@ -924,6 +926,14 @@ class LibraryPage(QWidget):
                 display_bpm(track.bpm), duration, quality, self._format_of(track),
             ]
             items = [QStandardItem(str(value)) for value in values]
+            # Cache raw values once. Header clicks use native Qt sorting without
+            # opening files, parsing display strings or rebuilding the model.
+            sort_values = ['', status_text, (track.artist or '').casefold(), (track.title or '').casefold(),
+                           self._numeric_sort_value(track.year), (primary_genre(track.genre) or '').casefold(),
+                           self._numeric_sort_value(track.bpm), self._numeric_sort_value(track.duration_seconds),
+                           self._numeric_sort_value(track.bitrate_kbps), self._format_of(track).casefold()]
+            for item, value in zip(items, sort_values):
+                item.setData(value, LIBRARY_SORT_ROLE)
             status = effective_status(track)
             problem = status == 'error' or (status == 'review' and review_severity(track) == 'critical')
             tint, row_accent = None, None
@@ -973,8 +983,8 @@ class LibraryPage(QWidget):
         self.table.setSortingEnabled(True)
         if preserve_existing_order:
             # The refresh has now restored the visual order. Future explicit
-            # header clicks sort by the visible cell values again.
-            self.model.setSortRole(Qt.ItemDataRole.DisplayRole)
+            # header clicks sort by cached raw values again.
+            self.model.setSortRole(LIBRARY_SORT_ROLE)
         self._restore_view_state(view_state)
         self._show_detail()
         self._update_selection_count()
@@ -1066,7 +1076,7 @@ class LibraryPage(QWidget):
         self.detail_labels['album'].setText(t.album or '—')
         self.detail_labels['year'].setText(t.year or '—')
         self.detail_labels['bpm'].setText(display_bpm(t.bpm) or '—')
-        self.detail_labels['genre'].setText(t.genre or '—')
+        self.detail_labels['genre'].setText(' / '.join(genre_items(t.genre, limit=len(t.genre or '') + 1)) or '—')
         self.detail_labels['format'].setText(self._format_of(t))
         self.detail_labels['bitrate'].setText(f'{t.bitrate_kbps} kb/s' if t.bitrate_kbps else '—')
         self.detail_labels['sample_rate'].setText(f'{t.sample_rate_hz / 1000:g} kHz' if t.sample_rate_hz else '—')
@@ -1117,19 +1127,21 @@ class LibraryPage(QWidget):
         self.completeness_icon.setPixmap(library_icon(glyph, color, 16).pixmap(16, 16))
         for widget in (self.completeness_card, self.completeness_title, self.completeness_count):
             widget.style().unpolish(widget); widget.style().polish(widget)
-        for key, label in self.completeness_fields.items():
-            label.setText(ui_text(self, {
+        for key, field in self.completeness_fields.items():
+            name = ui_text(self, {
                 'artist': 'Wykonawca', 'title': 'Tytuł / wersja', 'album': 'Album',
                 'year': 'Rok', 'bpm': 'BPM', 'genre': 'Gatunek',
-            }[key]))
+            }[key])
             color = '#84e8c4' if complete[key] else '#e5b86a' if key == 'album' else '#ff927c'
             field_icon = library_icon(self._completeness_glyphs[key], color, 32)
             self.completeness_field_icons[key].setPixmap(field_icon.pixmap(32, 32))
-            label.setProperty('complete', complete[key])
-            field = label.parentWidget()
+            self.completeness_field_icons[key].setAccessibleName(name)
+            self.completeness_field_icons[key].setToolTip(name)
             field.setProperty('complete', complete[key])
             field.style().unpolish(field); field.style().polish(field)
-            label.style().unpolish(label); label.style().polish(label)
+            detail_field = self.detail_field_tiles[key]
+            detail_field.setProperty('complete', complete[key])
+            detail_field.style().unpolish(detail_field); detail_field.style().polish(detail_field)
         self._load_cover(t)
         crash_debug.record('library.selection.done', **crash_debug.track_context(t.path))
 

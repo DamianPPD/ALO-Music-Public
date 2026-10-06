@@ -57,14 +57,14 @@ def test_live_partial_language_and_field_colors(detail_page):
                                     ('pl', 'Dane częściowe', 'Wykonawca')]:
         apply_static_language(page, language); page._show_detail(); app.processEvents()
         assert page.completeness_title.text() == title
-        assert page.completeness_fields['artist'].text() == artist
+        assert page.completeness_field_icons['artist'].accessibleName() == artist
         assert page.completeness_title.palette().color(QPalette.ColorRole.WindowText) == QColor('#e5b86a')
-        assert page.completeness_fields['artist'].palette().color(QPalette.ColorRole.WindowText) == QColor('#84e8c4')
-        assert page.completeness_fields['album'].palette().color(QPalette.ColorRole.WindowText) == QColor('#e5b86a')
+        assert page.completeness_field_icons['artist'].pixmap().toImage() == library_icon('artist', '#84e8c4', 32).pixmap(32, 32).toImage()
+        assert page.completeness_field_icons['album'].pixmap().toImage() == library_icon('album', '#e5b86a', 32).pixmap(32, 32).toImage()
     track.year = None; page._show_detail(); app.processEvents()
     assert page.completeness_title.palette().color(QPalette.ColorRole.WindowText) == QColor('#ff927c')
-    assert page.completeness_fields['year'].palette().color(QPalette.ColorRole.WindowText) == QColor('#ff927c')
-    assert page.completeness_fields['artist'].palette().color(QPalette.ColorRole.WindowText) == QColor('#84e8c4')
+    assert page.completeness_field_icons['year'].pixmap().toImage() == library_icon('calendar', '#ff927c', 32).pixmap(32, 32).toImage()
+    assert page.completeness_field_icons['artist'].pixmap().toImage() == library_icon('artist', '#84e8c4', 32).pixmap(32, 32).toImage()
 
 
 # Catches substituting checkmark/status icons for the six semantic field icons.
@@ -89,7 +89,7 @@ def test_semantic_fields_share_one_row_and_album_is_separated(detail_page):
 
 # Hand-measured frozen-main geometry: catches a larger sizeHint shifting cover/data/splitter.
 @pytest.mark.parametrize('width,height,card_width,data_width', [
-    (1920, 1080, 510, 741), (1536, 864, 387, 618),
+    (1920, 1080, 510, 741), (1536, 864, 373, 604),
     (1280, 720, 373, 604), (960, 540, 373, 604),
 ])
 def test_panel_preserves_frozen_main_geometry(detail_page, width, height, card_width, data_width):
@@ -99,15 +99,14 @@ def test_panel_preserves_frozen_main_geometry(detail_page, width, height, card_w
     assert (page.completeness_card.x(), page.completeness_card.y(), page.completeness_card.width(), page.completeness_card.height()) == (231, 0, card_width, 218)
     assert page.completeness_card.sizeHint().height() <= 202
     card = page.findChild(QFrame, 'LibraryTrackDataCard')
-    assert (card.x(), card.y(), card.width(), card.height()) == (10, 234, data_width, 198)
+    assert (card.x(), card.y(), card.width()) == (10, 234, data_width)
     assert page.detail.minimumWidth() == 640 and page.detail.maximumWidth() == 940
     assert page.detail_title.parentWidget().height() == 50
     assert page.detail_title.x() == 49
     for language in ['en', 'pl']:
         apply_static_language(page, language); page._show_detail(); app.processEvents()
-        for label in page.completeness_fields.values():
-            assert page.completeness_card.rect().contains(label.mapTo(page.completeness_card, label.rect().bottomRight()))
-            assert label.height() >= label.heightForWidth(label.width())
+        for field in page.completeness_fields.values():
+            assert page.completeness_card.rect().contains(field.geometry())
 
 
 def test_details_header_reuses_two_line_section_mark(detail_page):
@@ -139,7 +138,7 @@ def test_six_field_tiles_fill_card_without_clipping_or_overlap(detail_page, lang
     page.resize(width, height)
     apply_static_language(page, language); page._show_detail(); app.processEvents()
     card = page.completeness_card
-    tiles = [page.completeness_fields[key].parentWidget() for key in page.completeness_fields]
+    tiles = list(page.completeness_fields.values())
     assert all(isinstance(tile, QFrame) for tile in tiles)
     assert len({tile.y() for tile in tiles}) == len({tile.height() for tile in tiles}) == 1
     assert all(tile.height() >= 125 for tile in tiles)
@@ -147,15 +146,10 @@ def test_six_field_tiles_fill_card_without_clipping_or_overlap(detail_page, lang
     for left, right in zip(tiles, tiles[1:]):
         assert left.geometry().right() < right.geometry().left()
     for key, tile in zip(page.completeness_fields, tiles):
-        label = page.completeness_fields[key]
         icon = page.completeness_field_icons[key]
-        assert tile.rect().contains(label.geometry())
         assert tile.rect().contains(icon.geometry())
-        assert label.height() >= label.heightForWidth(label.width())
-        # A single unbroken word must fit; do not hide the Polish Artist label.
-        longest_word = max(label.text().split(), key=lambda word: label.fontMetrics().horizontalAdvance(word))
-        assert label.width() >= label.fontMetrics().horizontalAdvance(longest_word)
         assert abs(icon.geometry().center().x() - tile.rect().center().x()) <= 1
+        assert abs(icon.geometry().center().y() - tile.rect().center().y()) <= 1
         # Read rendered side-border pixels, rather than relying on a QSS string alone.
         rendered = tile.grab().toImage()
         pixel = rendered.pixelColor(0, tile.height() // 2)

@@ -70,7 +70,7 @@ def test_library_details_keep_dense_cover_and_data_sections():
 
 def test_library_table_navigation_and_selection_stays_stable():
     assert 'for item in items:' in LIBRARY
-    assert 'self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)' in LIBRARY
+    assert 'self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)' in LIBRARY
     assert 'resizeColumnToContents' not in LIBRARY
     assert 'self.table.clicked.connect(self._stabilize_clicked_row)' not in LIBRARY
     assert 'class StableTableView' in LIBRARY
