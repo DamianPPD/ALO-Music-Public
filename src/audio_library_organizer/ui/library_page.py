@@ -399,14 +399,15 @@ class LibraryPage(QWidget):
         summary_row.addWidget(self.cover, 0, Qt.AlignmentFlag.AlignTop)
 
         self.completeness_card = QFrame(); self.completeness_card.setObjectName('LibraryCompletenessCard')
+        self.completeness_card.setProperty('state', 'incomplete')
         completeness_layout = QVBoxLayout(self.completeness_card)
-        completeness_layout.setContentsMargins(12, 12, 12, 11); completeness_layout.setSpacing(12)
+        completeness_layout.setContentsMargins(12, 12, 12, 11); completeness_layout.setSpacing(9)
         completeness_top = QHBoxLayout(); completeness_top.setSpacing(7)
         self.completeness_icon = QLabel(); self.completeness_icon.setObjectName('LibraryCompletenessIcon')
         self.completeness_icon.setFixedSize(16, 16)
-        self.completeness_icon.setPixmap(library_icon('status_ready', '#2de1ac', 16).pixmap(16, 16))
+        self.completeness_icon.setPixmap(library_icon('status_review', '#ff927c', 16).pixmap(16, 16))
         completeness_top.addWidget(self.completeness_icon)
-        self.completeness_title = QLabel('Dane kompletne'); self.completeness_title.setObjectName('LibraryCompletenessTitle')
+        self.completeness_title = QLabel('Dane niekompletne'); self.completeness_title.setObjectName('LibraryCompletenessTitle')
         self.completeness_title.setWordWrap(False)
         completeness_top.addWidget(self.completeness_title, 1)
         self.completeness_count = QLabel('0/6'); self.completeness_count.setObjectName('LibraryCompletenessCount')
@@ -414,7 +415,7 @@ class LibraryPage(QWidget):
         completeness_layout.addLayout(completeness_top)
         separator = QFrame(); separator.setObjectName('LibraryDetailSeparator'); separator.setFixedHeight(1)
         completeness_layout.addWidget(separator)
-        fields_row = QHBoxLayout(); fields_row.setContentsMargins(0, 12, 0, 0); fields_row.setSpacing(6)
+        fields_row = QHBoxLayout(); fields_row.setContentsMargins(0, 0, 0, 0); fields_row.setSpacing(4)
         self.completeness_fields = {}
         self.completeness_field_icons = {}
         self._completeness_glyphs = {
@@ -425,14 +426,19 @@ class LibraryPage(QWidget):
                            ('year', 'Rok'), ('genre', 'Gatunek'), ('bpm', 'BPM'), ('album', 'Album')):
             if key == 'album':
                 album_separator = QFrame(); album_separator.setObjectName('LibraryCompletenessAlbumSeparator')
-                album_separator.setFixedWidth(1)
-                fields_row.addWidget(album_separator)
-            field = QWidget(); field.setObjectName('LibraryCompletenessFieldRow')
+                album_separator.setFixedSize(1, 108)
+                fields_row.addWidget(album_separator, 0, Qt.AlignmentFlag.AlignVCenter)
+            field = QFrame(); field.setObjectName('LibraryCompletenessFieldRow')
+            field.setProperty('complete', False); field.setProperty('optional', key == 'album')
+            field.setMinimumHeight(125)
+            field.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
             field_layout = QVBoxLayout(field)
-            field_layout.setContentsMargins(0, 0, 0, 0); field_layout.setSpacing(6)
+            field_layout.setContentsMargins(3, 10, 3, 10); field_layout.setSpacing(8)
+            field_layout.addStretch(1)
             icon = QLabel(); icon.setObjectName('LibraryCompletenessFieldIcon')
-            icon.setFixedSize(24, 24)
-            icon.setPixmap(library_icon(self._completeness_glyphs[key], '#83939e', 24).pixmap(24, 24))
+            icon.setFixedSize(32, 32)
+            field_color = '#e5b86a' if key == 'album' else '#ff927c'
+            icon.setPixmap(library_icon(self._completeness_glyphs[key], field_color, 32).pixmap(32, 32))
             field_layout.addWidget(icon, 0, Qt.AlignmentFlag.AlignHCenter)
             label = QLabel(title); label.setObjectName('LibraryCompletenessField')
             label.setProperty('complete', False); label.setProperty('optional', key == 'album')
@@ -445,8 +451,7 @@ class LibraryPage(QWidget):
             fields_row.addWidget(field, 1)
             self.completeness_fields[key] = label
             self.completeness_field_icons[key] = icon
-        completeness_layout.addLayout(fields_row)
-        completeness_layout.addStretch(1)
+        completeness_layout.addLayout(fields_row, 1)
         summary_row.addWidget(self.completeness_card, 1)
         summary_row.setAlignment(self.completeness_card, Qt.AlignmentFlag.AlignTop)
         self.completeness_card.setMinimumHeight(218)
@@ -1118,9 +1123,12 @@ class LibraryPage(QWidget):
                 'year': 'Rok', 'bpm': 'BPM', 'genre': 'Gatunek',
             }[key]))
             color = '#84e8c4' if complete[key] else '#e5b86a' if key == 'album' else '#ff927c'
-            field_icon = library_icon(self._completeness_glyphs[key], color, 24)
-            self.completeness_field_icons[key].setPixmap(field_icon.pixmap(24, 24))
+            field_icon = library_icon(self._completeness_glyphs[key], color, 32)
+            self.completeness_field_icons[key].setPixmap(field_icon.pixmap(32, 32))
             label.setProperty('complete', complete[key])
+            field = label.parentWidget()
+            field.setProperty('complete', complete[key])
+            field.style().unpolish(field); field.style().polish(field)
             label.style().unpolish(label); label.style().polish(label)
         self._load_cover(t)
         crash_debug.record('library.selection.done', **crash_debug.track_context(t.path))

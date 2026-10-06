@@ -155,4 +155,4 @@ def test_completeness_fields_keep_one_row_and_semantic_missing_statuses(toolbar_
     assert page.completeness_count.text() == '4/6'
     for key, glyph, color in [('album', 'album', '#e5b86a'), ('year', 'calendar', '#ff927c')]:
         assert page.completeness_field_icons[key].pixmap().toImage() == library_icon(
-            glyph, color, 24).pixmap(24, 24).toImage()
+            glyph, color, 32).pixmap(32, 32).toImage()

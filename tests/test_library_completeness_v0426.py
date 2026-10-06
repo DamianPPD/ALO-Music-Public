@@ -77,8 +77,8 @@ def test_semantic_fields_share_one_row_and_album_is_separated(detail_page):
     assert [p.x() for p in points] == sorted(p.x() for p in points)
     for key, glyph in zip(keys, ['artist', 'music_note', 'calendar', 'tag', 'waveform', 'album']):
         icon = page.completeness_field_icons[key]
-        assert icon.width() == icon.height() == 24
-        assert icon.pixmap().toImage() == library_icon(glyph, '#84e8c4', 24).pixmap(24, 24).toImage()
+        assert icon.width() == icon.height() == 32
+        assert icon.pixmap().toImage() == library_icon(glyph, '#84e8c4', 32).pixmap(32, 32).toImage()
         assert icon.width() > page.completeness_icon.pixmap().width() / page.completeness_icon.pixmap().devicePixelRatio()
     separator = page.completeness_card.findChild(QFrame, 'LibraryCompletenessAlbumSeparator')
     assert separator is not None and separator.width() == 1
@@ -116,3 +116,52 @@ def test_details_header_reuses_two_line_section_mark(detail_page):
     assert mark is not None and (mark.width(), mark.height()) == (20, 7)
     assert not mark.pixmap() or mark.pixmap().isNull()
     assert page.detail_title_icon.width() == 29
+
+
+@pytest.mark.parametrize('missing,accent', [
+    ((), '#64e8bc'), (('album',), '#e5b86a'), (('year', 'album'), '#ff927c'),
+])
+def test_completeness_counter_uses_the_current_status_accent(detail_page, missing, accent):
+    app, page, track = detail_page
+    for key in missing:
+        setattr(track, key, None)
+    page._show_detail(); app.processEvents()
+    assert page.completeness_count.palette().color(QPalette.ColorRole.WindowText) == QColor(accent)
+    assert page.completeness_count.palette().color(QPalette.ColorRole.WindowText) == (
+        page.completeness_title.palette().color(QPalette.ColorRole.WindowText))
+
+
+@pytest.mark.parametrize('language', ['pl', 'en'])
+@pytest.mark.parametrize('width,height', [(1920, 1080), (1536, 864), (1280, 720)])
+def test_six_field_tiles_fill_card_without_clipping_or_overlap(detail_page, language, width, height):
+    app, page, track = detail_page
+    track.year = None; track.album = None
+    page.resize(width, height)
+    apply_static_language(page, language); page._show_detail(); app.processEvents()
+    card = page.completeness_card
+    tiles = [page.completeness_fields[key].parentWidget() for key in page.completeness_fields]
+    assert all(isinstance(tile, QFrame) for tile in tiles)
+    assert len({tile.y() for tile in tiles}) == len({tile.height() for tile in tiles}) == 1
+    assert all(tile.height() >= 125 for tile in tiles)
+    assert card.height() - max(tile.geometry().bottom() for tile in tiles) <= 16
+    for left, right in zip(tiles, tiles[1:]):
+        assert left.geometry().right() < right.geometry().left()
+    for key, tile in zip(page.completeness_fields, tiles):
+        label = page.completeness_fields[key]
+        icon = page.completeness_field_icons[key]
+        assert tile.rect().contains(label.geometry())
+        assert tile.rect().contains(icon.geometry())
+        assert label.height() >= label.heightForWidth(label.width())
+        # A single unbroken word must fit; do not hide the Polish Artist label.
+        longest_word = max(label.text().split(), key=lambda word: label.fontMetrics().horizontalAdvance(word))
+        assert label.width() >= label.fontMetrics().horizontalAdvance(longest_word)
+        assert abs(icon.geometry().center().x() - tile.rect().center().x()) <= 1
+        # Read rendered side-border pixels, rather than relying on a QSS string alone.
+        rendered = tile.grab().toImage()
+        pixel = rendered.pixelColor(0, tile.height() // 2)
+        if key == 'year':
+            assert pixel.red() > pixel.green() and pixel.red() > pixel.blue()
+        elif key == 'album':
+            assert pixel.red() > pixel.blue() and pixel.green() > pixel.blue()
+        else:
+            assert pixel.green() > pixel.red() and pixel.green() > pixel.blue()
