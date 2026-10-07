@@ -55,6 +55,8 @@ class TrackRecord:
     field_source_values: dict[str, dict[str, Any]] = field(default_factory=dict)
     audio_recognition: dict[str, Any] = field(default_factory=dict)
     is_available: bool = True
+    # Assigned once by repository on the first successful save, never on read.
+    track_id: str | None = None
 
     @property
     def filename(self) -> str:

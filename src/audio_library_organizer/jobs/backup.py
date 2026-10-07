@@ -5,6 +5,10 @@ import json
 from pathlib import Path
 import zipfile
 import re
+import os
+import tempfile
+
+from audio_library_organizer.storage.database import snapshot_database
 
 
 def create_alo_backup(
@@ -27,13 +31,23 @@ def create_alo_backup(
         'database_file': 'library.sqlite3',
         'profile_databases': profile_files,
     }
-    with zipfile.ZipFile(target, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr('manifest.json', json.dumps(manifest, ensure_ascii=False, indent=2))
+    # Snapshot every database before opening the archive. Failure leaves an
+    # existing archive intact and no live WAL-dependent SQLite is copied.
+    with tempfile.TemporaryDirectory(prefix='.alo-backup-', dir=target.parent) as workspace:
+        snapshots: list[tuple[Path, str]] = []
         db = Path(database_path)
         if db.is_file():
-            zf.write(db, 'library.sqlite3')
-        for profile_id, archive_name in profile_files.items():
-            zf.write(Path((profile_databases or {})[profile_id]), archive_name)
+            copy = snapshot_database(db, Path(workspace) / 'main.sqlite3')
+            snapshots.append((copy, 'library.sqlite3'))
+        for index, (profile_id, archive_name) in enumerate(profile_files.items()):
+            copy = snapshot_database(Path((profile_databases or {})[profile_id]), Path(workspace) / f'profile-{index}.sqlite3')
+            snapshots.append((copy, archive_name))
+        archive = Path(workspace) / 'backup.zip'
+        with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr('manifest.json', json.dumps(manifest, ensure_ascii=False, indent=2))
+            for copy, archive_name in snapshots:
+                zf.write(copy, archive_name)
+        os.replace(archive, target)
     return target
 
 

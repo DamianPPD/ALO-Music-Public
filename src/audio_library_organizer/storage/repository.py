@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import UUID, uuid4
 
 from audio_library_organizer.domain.models import TrackRecord
-from .database import SCHEMA, connect, ensure_track_columns
+from .database import connect, require_current_schema
+from .migrations import migrate_library
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,9 +24,8 @@ class LibraryRepository:
         self.database_path = Path(database_path)
 
     def initialize(self) -> None:
-        with connect(self.database_path) as conn:
-            conn.executescript(SCHEMA)
-            ensure_track_columns(conn)
+        with closing(connect(self.database_path)) as conn:
+            migrate_library(conn, self.database_path)
 
     def upsert_track(self, track: TrackRecord) -> None:
         values = (
@@ -42,16 +44,24 @@ class LibraryRepository:
             json.dumps(track.audio_recognition, ensure_ascii=False),
             int(track.is_available),
         )
-        with connect(self.database_path) as conn:
+        with closing(connect(self.database_path)) as conn, conn:
+            conn.execute('BEGIN IMMEDIATE')
+            require_current_schema(conn)
+            track_id = track.track_id
+            if track_id is None:
+                # Transitional callers still construct a record from a locator.
+                existing = conn.execute('SELECT track_id FROM tracks WHERE path=?', (values[0],)).fetchone()
+                track_id = existing['track_id'] if existing else str(uuid4())
+            UUID(track_id)
             conn.execute('''
                 INSERT INTO tracks (
-                    path,size_bytes,mtime_ns,duration_seconds,bitrate_kbps,sample_rate_hz,
+                    track_id,path,size_bytes,mtime_ns,duration_seconds,bitrate_kbps,sample_rate_hz,
                     channels,codec,artist,title,album,year,genre,bpm,bpm_raw,bpm_confidence,fingerprint,fingerprint_duration,comment,has_cover,
                     sha256,status,confidence,proposed_filename,filename_override,original_tags_json,
                     discogs_release_id,discogs_url,musicbrainz_recording_id,musicbrainz_release_id,cover_art_url,manual_cover_path,cover_choice,match_reasons_json,locked_fields_json,pre_online_metadata_json,field_sources_json,field_source_values_json,audio_recognition_json,is_available
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(path) DO UPDATE SET
-                    size_bytes=excluded.size_bytes, mtime_ns=excluded.mtime_ns,
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(track_id) DO UPDATE SET
+                    path=excluded.path, size_bytes=excluded.size_bytes, mtime_ns=excluded.mtime_ns,
                     duration_seconds=excluded.duration_seconds, bitrate_kbps=excluded.bitrate_kbps,
                     sample_rate_hz=excluded.sample_rate_hz, channels=excluded.channels,
                     codec=excluded.codec, artist=excluded.artist, title=excluded.title,
@@ -71,7 +81,13 @@ class LibraryRepository:
                     field_source_values_json=excluded.field_source_values_json,
                     audio_recognition_json=excluded.audio_recognition_json,
                     is_available=excluded.is_available
-            ''', values)
+            ''', (track_id, *values))
+        track.track_id = track_id
+
+    def get_track(self, track_id: str) -> TrackRecord | None:
+        with closing(connect(self.database_path)) as conn:
+            row = conn.execute('SELECT * FROM tracks WHERE track_id=?', (track_id,)).fetchone()
+        return self._row_to_track(row) if row is not None else None
 
     def list_tracks(self, *, status: str | None = None, available_only: bool = False) -> list[TrackRecord]:
         query = 'SELECT * FROM tracks'
@@ -86,7 +102,7 @@ class LibraryRepository:
             query += ' WHERE ' + ' AND '.join(clauses)
         args = tuple(args_list)
         query += ' ORDER BY path COLLATE NOCASE'
-        with connect(self.database_path) as conn:
+        with closing(connect(self.database_path)) as conn:
             rows = conn.execute(query, args).fetchall()
         return [self._row_to_track(row) for row in rows]
 
@@ -94,35 +110,42 @@ class LibraryRepository:
         tracks = self.list_tracks()
         available = 0
         missing = 0
-        missing_paths: list[str] = []
-        updates: list[tuple[int, str]] = []
+        missing_ids: list[tuple[str, str]] = []
+        updates: list[tuple[int, str, str]] = []
         for track in tracks:
             exists = track.path.is_file()
-            path_text = str(track.path)
             if exists:
                 available += 1
             else:
                 missing += 1
-                missing_paths.append(path_text)
+                missing_ids.append((track.track_id, str(track.path)))
             if exists != track.is_available:
-                updates.append((int(exists), path_text))
+                updates.append((int(exists), track.track_id, str(track.path)))
 
-        with connect(self.database_path) as conn:
+        purged = 0
+        with closing(connect(self.database_path)) as conn, conn:
+            conn.execute('BEGIN IMMEDIATE')
+            require_current_schema(conn)
             if updates:
-                conn.executemany('UPDATE tracks SET is_available=? WHERE path=?', updates)
-            if purge_missing and missing_paths:
-                conn.executemany('DELETE FROM tracks WHERE path=?', ((path,) for path in missing_paths))
-        return AvailabilitySummary(total=len(tracks), available=available, missing=missing, purged=(len(missing_paths) if purge_missing else 0))
+                # A filesystem observation is valid only for the locator read.
+                # Another writer may have moved the same UUID in the meantime.
+                conn.executemany('UPDATE tracks SET is_available=? WHERE track_id=? AND path=?', updates)
+            if purge_missing and missing_ids:
+                deleted = conn.executemany('DELETE FROM tracks WHERE track_id=? AND path=?', missing_ids)
+                purged = deleted.rowcount
+        return AvailabilitySummary(total=len(tracks), available=available, missing=missing, purged=purged)
 
     def purge_missing(self) -> int:
-        with connect(self.database_path) as conn:
+        with closing(connect(self.database_path)) as conn, conn:
+            conn.execute('BEGIN IMMEDIATE')
+            require_current_schema(conn)
             row = conn.execute('SELECT COUNT(*) AS count FROM tracks WHERE is_available = 0').fetchone()
             count = int(row['count'] if row else 0)
             conn.execute('DELETE FROM tracks WHERE is_available = 0')
         return count
 
     def scan_needed(self, path: Path, size_bytes: int, mtime_ns: int) -> bool:
-        with connect(self.database_path) as conn:
+        with closing(connect(self.database_path)) as conn:
             row = conn.execute('SELECT size_bytes, mtime_ns FROM tracks WHERE path=?', (str(Path(path).resolve()),)).fetchone()
         return row is None or row['size_bytes'] != size_bytes or row['mtime_ns'] != mtime_ns
 
@@ -140,11 +163,12 @@ class LibraryRepository:
             original_tags=json.loads(row['original_tags_json'] or '{}'),
             discogs_release_id=row['discogs_release_id'], discogs_url=row['discogs_url'],
             musicbrainz_recording_id=row['musicbrainz_recording_id'], musicbrainz_release_id=row['musicbrainz_release_id'],
-            cover_art_url=row['cover_art_url'], manual_cover_path=row['manual_cover_path'], cover_choice=(row['cover_choice'] or 'auto'), match_reasons=json.loads(row['match_reasons_json'] or '[]'),
+            cover_art_url=row['cover_art_url'], manual_cover_path=row['manual_cover_path'], cover_choice=row['cover_choice'], match_reasons=json.loads(row['match_reasons_json'] or '[]'),
             locked_fields=set(json.loads(row['locked_fields_json'] or '[]')),
             pre_online_metadata=json.loads(row['pre_online_metadata_json'] or '{}'),
             field_sources=json.loads(row['field_sources_json'] or '{}'),
             field_source_values=json.loads(row['field_source_values_json'] or '{}'),
             audio_recognition=json.loads(row['audio_recognition_json'] or '{}'),
             is_available=bool(row['is_available']),
+            track_id=row['track_id'],
         )
