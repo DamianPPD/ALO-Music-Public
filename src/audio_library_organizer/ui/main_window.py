@@ -1763,12 +1763,12 @@ class MainWindow(QMainWindow):
             self._set_operation_state('scan', 'ANULOWANIE SKANOWANIA', 'Zatrzymanie nastąpi bezpiecznie po zakończeniu bieżącego pliku…')
 
     def _sync_availability(self):
-        self.availability = self.repository.sync_availability(purge_missing=True)
+        self.availability = self.repository.sync_availability()
         return self.repository.list_tracks(available_only=True)
 
     def refresh_data(self):
         all_tracks = self.repository.list_tracks()
-        tracks = [track for track in all_tracks if track.is_available and Path(track.path).is_file()]
+        tracks = all_tracks
         cfg = ProviderSettings.from_store(self.qt_settings)
         template = cfg.filename_template
         for track in tracks:
@@ -1882,10 +1882,7 @@ class MainWindow(QMainWindow):
         if should_refresh_live_scan(current, total, every=every): self.refresh_data()
 
     def _scan_finished(self, result):
-        full_library_scan = self._active_scan_source_dirs is None
-        self.availability = self.repository.sync_availability(
-            purge_missing=(full_library_scan and not result.cancelled)
-        )
+        self.availability = self.repository.sync_availability()
         if not result.cancelled:
             active_id = self.library_registry.active.profile_id
             for source_text, file_count in getattr(result, 'source_counts', ()):

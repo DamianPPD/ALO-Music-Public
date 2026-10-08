@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import dataclass, replace
+import hashlib
+import wave
 from pathlib import Path
 from collections.abc import Callable
 
@@ -10,13 +13,31 @@ from audio_library_organizer.audio.fingerprint import fingerprint_audio
 from audio_library_organizer.domain.models import TrackRecord
 from audio_library_organizer.domain.settings import AppSettings
 from audio_library_organizer.duplicates.comparator import sha256_file
-from audio_library_organizer.duplicates.grouper import mark_duplicate_statuses
-from audio_library_organizer.jobs.scanner import iter_audio_files
+from audio_library_organizer.jobs.scanner import SourceScanOutcome, SourceScanStatus, scan_audio_sources
 from audio_library_organizer.metadata.naming import propose_filename, normalize_title_case
 from audio_library_organizer.metadata.filename_hints import parse_filename_hint, parse_filename_bpm
 from audio_library_organizer.metadata.tags import read_tags
 from audio_library_organizer.metadata.genre import normalize_genre_list
 from audio_library_organizer.storage.repository import LibraryRepository
+from audio_library_organizer.storage.scan_merge import SCAN_AUDIO_KEY, SCAN_STAT_KEY, stat_observation
+
+
+def _wav_audio_observation(path: Path) -> dict | None:
+    # Hash PCM frames and their format, not tags/container bytes. Only attempted
+    # for new/changed WAVs. Other formats and legacy observations remain
+    # conservative when their whole-file SHA changes.
+    if path.suffix.lower() != '.wav':
+        return None
+    try:
+        with wave.open(str(path), 'rb') as stream:
+            digest = hashlib.sha256()
+            digest.update(str((stream.getnchannels(), stream.getsampwidth(),
+                               stream.getframerate(), stream.getnframes())).encode('ascii'))
+            while frames := stream.readframes(65536):
+                digest.update(frames)
+        return {'kind': 'wav-pcm-sha256', 'digest': digest.hexdigest()}
+    except (OSError, EOFError, wave.Error):
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +48,7 @@ class ScanResult:
     errors: int
     cancelled: bool = False
     source_counts: tuple[tuple[str, int], ...] = ()
+    source_outcomes: tuple[SourceScanOutcome, ...] = ()
 
 
 class LibraryService:
@@ -42,34 +64,61 @@ class LibraryService:
         progress: Callable[[int, int, str], None] | None = None,
         track_ready: Callable[[int, int, TrackRecord], None] | None = None,
     ) -> ScanResult:
-        scan_roots = tuple(Path(root).expanduser().resolve() for root in (source_dirs or self.settings.source_dirs))
-        files = list(iter_audio_files(scan_roots))
-        source_count_map = {str(root): 0 for root in scan_roots}
-        for path in files:
-            resolved = Path(path).resolve()
-            for root in scan_roots:
-                try:
-                    inside = resolved.is_relative_to(root)
-                except AttributeError:
-                    inside = root == resolved or root in resolved.parents
-                if inside:
-                    source_count_map[str(root)] += 1
-                    break
-        scanned = skipped = errors = 0
-        was_cancelled = False
+        requested = self.settings.source_dirs if source_dirs is None else source_dirs
+        # Normalization failures are optional source errors, not startup failures.
+        inventory = scan_audio_sources(requested, cancelled=cancelled)
+        files = inventory.files
+        outcomes = list(inventory.outcomes)
+        file_roots = dict(inventory.file_roots)
+        scanned = skipped = 0
+        errors = sum(item.status == SourceScanStatus.ERROR for item in outcomes)
+        was_cancelled = any(item.status == SourceScanStatus.CANCELLED for item in outcomes)
+        excluded_ids = set()
+
+        def mark_roots(path: Path, status: SourceScanStatus, reason: str):
+            for index in file_roots.get(path, ()):
+                outcome = outcomes[index]
+                if outcome.status == SourceScanStatus.SUCCESS:
+                    outcomes[index] = replace(outcome, status=status, reason=reason)
+
         for index, path in enumerate(files, 1):
-            if cancelled and cancelled():
+            if was_cancelled or (cancelled and cancelled()):
                 was_cancelled = True
                 break
             if progress:
                 progress(index, len(files), path.name)
+            baseline = None
             try:
+                snapshot = self.repository.scan_snapshot(path)
+                baseline = snapshot.track
                 stat = path.stat()
-                if not self.repository.scan_needed(path, stat.st_size, stat.st_mtime_ns):
+                same_size_time = baseline is not None and (baseline.size_bytes, baseline.mtime_ns) == (stat.st_size, stat.st_mtime_ns)
+                if same_size_time and baseline.original_tags.get(SCAN_STAT_KEY) == stat_observation(stat):
+                    skipped += 1
+                    continue
+                if same_size_time and SCAN_STAT_KEY not in baseline.original_tags:
+                    # Legacy rows have no inode/ctime observation. Compare their
+                    # saved exact SHA once before seeding a trusted stat/PCM
+                    # observation; later unchanged scans need neither hash nor tags.
+                    observed = deepcopy(baseline)
+                    observed.sha256 = sha256_file(path)
+                    observed.original_tags = {SCAN_STAT_KEY: stat_observation(stat)}
+                    audio = _wav_audio_observation(path)
+                    if audio is not None:
+                        observed.original_tags[SCAN_AUDIO_KEY] = audio
+                    if cancelled and cancelled():
+                        was_cancelled = True
+                        break
+                    merged = self.repository.merge_scan_track(observed, snapshot, observations_only=True)
+                    if merged is None:
+                        raise ValueError('Legacy audio differs from its saved exact SHA; work was retained.')
                     skipped += 1
                     continue
                 tags = read_tags(path)
                 info = probe_audio(path)
+                if not any(value is not None and value > 0 for value in (
+                        info.duration_seconds, info.bitrate_kbps, info.sample_rate_hz, info.channels)):
+                    raise ValueError('No readable audio stream was confirmed by the probe.')
                 # Trust explicit BPM metadata first, then an explicit [139bpm]
                 # filename hint. Only estimate from audio when neither exists.
                 bpm_value = tags.bpm if tags.bpm is not None else parse_filename_bpm(path.stem)
@@ -134,36 +183,50 @@ class LibraryService:
                     },
                 )
                 track.proposed_filename = propose_filename(track)
-                self.repository.upsert_track(track)
+                audio_observation = _wav_audio_observation(path)
+                if audio_observation is not None:
+                    track.original_tags[SCAN_AUDIO_KEY] = audio_observation
+                track.original_tags[SCAN_STAT_KEY] = stat_observation(stat)
+                after = path.stat()
+                if (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns) != (
+                        after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+                    raise ValueError('File changed while scanner observations were being read.')
+                if cancelled and cancelled():
+                    was_cancelled = True
+                    break
+                merged = self.repository.merge_scan_track(track, snapshot)
+                if merged is None:
+                    raise ValueError('Audio continuity is ambiguous; saved work was retained.')
                 scanned += 1
                 if track_ready:
-                    track_ready(index, len(files), track)
-            except Exception:
+                    track_ready(index, len(files), merged)
+            except Exception as exc:
                 errors += 1
+                if baseline is not None:
+                    excluded_ids.add(baseline.track_id)
+                mark_roots(path, SourceScanStatus.ERROR, str(exc))
 
-        # Re-evaluate duplicate relationships only inside sources currently
-        # registered for this library (plus explicit roots from this scan).  This
-        # keeps stale records from removed/old source folders from influencing a
-        # new scan, while still comparing newly added files with the rest of the
-        # active library.  Detection never chooses a winner; the user does.
-        active_roots: list[Path] = []
-        for root in (*self.settings.source_dirs, *scan_roots):
-            resolved_root = Path(root).expanduser().resolve()
-            if resolved_root not in active_roots:
-                active_roots.append(resolved_root)
+        if cancelled and cancelled():
+            was_cancelled = True
+        if was_cancelled:
+            outcomes = [replace(item, status=SourceScanStatus.CANCELLED, reason='Scan cancelled')
+                        if item.status == SourceScanStatus.SUCCESS else item for item in outcomes]
 
-        def belongs_to_active_source(track: TrackRecord) -> bool:
-            try:
-                path = Path(track.path).resolve()
-                return any(path == root or path.is_relative_to(root) for root in active_roots)
-            except (OSError, ValueError):
-                return False
-
-        tracks = [
-            track for track in self.repository.list_tracks()
-            if getattr(track, 'is_available', True) and belongs_to_active_source(track)
-        ]
-        mark_duplicate_statuses(tracks)
-        for track in tracks:
-            self.repository.upsert_track(track)
-        return ScanResult(len(files), scanned, skipped, errors, was_cancelled, tuple(source_count_map.items()))
+        # Classification re-reads current decisions in one write transaction.
+        # A no-op scan does not rewrite every record or recalculate statuses.
+        if scanned and not was_cancelled:
+            active_roots = []
+            incomplete_context = any(item.status != SourceScanStatus.SUCCESS for item in outcomes)
+            for root in (*self.settings.source_dirs, *requested):
+                try:
+                    resolved = Path(root).expanduser().resolve()
+                    if resolved not in active_roots:
+                        active_roots.append(resolved)
+                    if not resolved.is_dir():
+                        incomplete_context = True
+                except (OSError, RuntimeError, ValueError):
+                    incomplete_context = True
+            self.repository.reconcile_scan_duplicates(active_roots, excluded_ids=excluded_ids,
+                                                      incomplete_context=incomplete_context)
+        counts = tuple((item.root, item.files) for item in outcomes if item.status == SourceScanStatus.SUCCESS)
+        return ScanResult(len(files), scanned, skipped, errors, was_cancelled, counts, tuple(outcomes))

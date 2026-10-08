@@ -24,5 +24,19 @@ def test_advanced_settings_exposes_full_clean_reset_not_library_manager():
     assert 'Resetuj ALO do czystego stanu' in WINDOW.split("class MainWindow", 1)[0]
 
 
-def test_full_sync_path_requests_missing_record_purge():
-    assert 'sync_availability(purge_missing=True)' in WINDOW
+def test_full_sync_path_retains_missing_work(tmp_path):
+    from audio_library_organizer.domain.models import TrackRecord
+    from audio_library_organizer.storage.repository import LibraryRepository
+    from audio_library_organizer.ui.main_window import MainWindow
+
+    repo = LibraryRepository(tmp_path/'library.sqlite3'); repo.initialize()
+    track = TrackRecord(tmp_path/'unavailable.mp3', title='Saved work', status='not_selected')
+    repo.upsert_track(track)
+    class Window:
+        repository = repo
+    window = Window()
+    assert MainWindow._sync_availability(window) == []
+    saved = repo.get_track(track.track_id)
+    assert saved.title == 'Saved work' and saved.status == 'not_selected'
+    assert saved.is_available is False
+    assert window.availability.purged == 0

@@ -279,8 +279,6 @@ def track_matches_quick_filter(track, key: str) -> bool:
 
 
 def track_matches_library_filters(track, *, genres_text: str = '', bpm_min=None, bpm_max=None) -> bool:
-    if not getattr(track, 'is_available', True):
-        return False
     requested = {item.casefold() for item in genre_items(genres_text, limit=50)}
     actual = {item.casefold() for item in genre_items(getattr(track, 'genre', None), limit=50)}
     if requested and not requested.issubset(actual):

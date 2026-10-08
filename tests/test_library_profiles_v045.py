@@ -56,22 +56,26 @@ def test_add_source_dir_is_scoped_to_selected_library(tmp_path):
     assert registry.find('main').source_dirs == (main_src.resolve(),)
 
 
-def test_scan_result_reports_file_count_per_explicit_source(monkeypatch, tmp_path):
+def test_scan_result_reports_file_count_per_explicit_source(tmp_path):
+    import struct
+    import wave
     from audio_library_organizer.jobs.library_service import LibraryService
+    from audio_library_organizer.storage.repository import LibraryRepository
 
     a = tmp_path/'A'; b = tmp_path/'B'; a.mkdir(); b.mkdir()
-    files = [a/'one.mp3', b/'two.mp3', b/'three.mp3']
-    for path in files: path.write_bytes(b'x')
-
-    class Repo:
-        def scan_needed(self, *_): return False
-        def list_tracks(self): return []
-        def upsert_track(self, _track): pass
-
+    files = [a/'one.wav', b/'two.wav', b/'three.wav']
+    for index, path in enumerate(files):
+        with wave.open(str(path), 'wb') as audio:
+            audio.setnchannels(1); audio.setsampwidth(2); audio.setframerate(8000)
+            audio.writeframes(struct.pack('<h', index) * 800)
     settings = AppSettings((a, b), LibraryPaths(tmp_path/'out'))
-    monkeypatch.setattr('audio_library_organizer.jobs.library_service.iter_audio_files', lambda roots: iter(files))
-    result = LibraryService(settings, Repo()).scan(source_dirs=(a, b))
+    repo = LibraryRepository(settings.library.database); repo.initialize()
+    repo.bootstrap_sources((a, b))
+    result = LibraryService(settings, repo).scan(source_dirs=(a, b))
+    assert result.errors == 0 and result.scanned == 3
     assert dict(result.source_counts) == {str(a.resolve()): 1, str(b.resolve()): 2}
+    assert all(item.status == 'success' for item in result.source_outcomes)
+    assert len({track.track_id for track in repo.list_tracks()}) == 3
 
 
 def test_scan_history_can_be_cleared_for_one_library_only(tmp_path):

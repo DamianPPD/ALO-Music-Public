@@ -223,50 +223,34 @@ def test_scan_records_local_source_candidates(monkeypatch, tmp_path: Path):
     assert track.field_source_values['bpm']['Nazwa pliku'] == 139.0
 
 
-def test_scan_can_be_limited_to_new_source_dirs(monkeypatch, tmp_path):
-    from audio_library_organizer.domain.settings import AppSettings, LibraryPaths
-    from audio_library_organizer.jobs.library_service import LibraryService
-
+def test_scan_can_be_limited_to_new_source_dirs(tmp_path):
     source_a = tmp_path/'a'; source_b = tmp_path/'b'; source_a.mkdir(); source_b.mkdir()
-    picked = source_b/'new.mp3'; picked.write_bytes(b'x')
+    write_wav(source_a/'unrequested.wav')
+    write_wav(source_b/'picked.wav')
     settings = AppSettings((source_a,), LibraryPaths(tmp_path/'out'))
-
-    class Repo:
-        def scan_needed(self, path, size, mtime): return False
-        def list_tracks(self): return []
-        def upsert_track(self, track): pass
-
-    seen = {}
-    def fake_iter(dirs):
-        seen['dirs'] = tuple(dirs)
-        return iter([picked])
-
-    monkeypatch.setattr('audio_library_organizer.jobs.library_service.iter_audio_files', fake_iter)
-    service = LibraryService(settings, Repo())
+    repo = LibraryRepository(settings.library.database); repo.initialize()
+    repo.bootstrap_sources((source_a, source_b))
+    service = LibraryService(settings, repo)
+    first = service.scan(source_dirs=(source_b,))
     result = service.scan(source_dirs=(source_b,))
+    assert first.total_seen == first.scanned == 1
+    assert result.total_seen == result.skipped_unchanged == 1
+    assert [track.path.name for track in repo.list_tracks()] == ['picked.wav']
+    assert result.source_counts == ((str(source_b), 1),)
 
-    assert seen['dirs'] == (source_b,)
-    assert result.total_seen == 1
-    assert result.skipped_unchanged == 1
 
-
-def test_limited_new_file_scan_rechecks_duplicates_against_existing_library(monkeypatch, tmp_path):
-    from audio_library_organizer.domain.settings import AppSettings, LibraryPaths
-    from audio_library_organizer.jobs.library_service import LibraryService
-    from audio_library_organizer.domain.models import TrackRecord
-
+def test_limited_new_file_scan_rechecks_duplicates_against_existing_library(tmp_path):
     source_a = tmp_path/'a'; source_b = tmp_path/'b'; source_a.mkdir(); source_b.mkdir()
+    write_wav(source_a/'old.wav')
     settings = AppSettings((source_a,), LibraryPaths(tmp_path/'out'))
-    existing = TrackRecord(path=source_a/'old.mp3', size_bytes=1, mtime_ns=1, sha256='same')
-    new = TrackRecord(path=source_b/'new.mp3', size_bytes=1, mtime_ns=1, sha256='same')
-
-    class Repo:
-        def scan_needed(self, path, size, mtime): return False
-        def list_tracks(self, **kwargs): return [existing, new]
-        def upsert_track(self, track): pass
-
-    monkeypatch.setattr('audio_library_organizer.jobs.library_service.iter_audio_files', lambda dirs: iter(()))
-    captured = {}
-    monkeypatch.setattr('audio_library_organizer.jobs.library_service.mark_duplicate_statuses', lambda tracks: captured.setdefault('tracks', list(tracks)) or [])
-    LibraryService(settings, Repo()).scan(source_dirs=(source_b,))
-    assert captured['tracks'] == [existing, new]
+    repo = LibraryRepository(settings.library.database); repo.initialize()
+    repo.bootstrap_sources((source_a, source_b))
+    service = LibraryService(settings, repo)
+    service.scan()
+    existing, = repo.list_tracks()
+    (source_b/'new.wav').write_bytes((source_a/'old.wav').read_bytes())
+    result = service.scan(source_dirs=(source_b,))
+    tracks = repo.list_tracks()
+    assert result.scanned == 1 and len(tracks) == 2
+    assert {track.status for track in tracks} == {'duplicate'}
+    assert existing.track_id in {track.track_id for track in tracks}
