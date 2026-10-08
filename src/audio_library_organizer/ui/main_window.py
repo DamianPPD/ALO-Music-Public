@@ -39,6 +39,7 @@ from audio_library_organizer.providers.musicbrainz import MusicBrainzClient
 from audio_library_organizer.providers.discogs import DiscogsClient
 from audio_library_organizer.providers.itunes import ITunesSearchClient
 from audio_library_organizer.storage.repository import LibraryRepository
+from audio_library_organizer.storage.migrations import MigrationError
 from audio_library_organizer.storage.library_profiles import LibraryRegistry
 from audio_library_organizer.duplicates.grouper import apply_duplicate_decision, duplicate_group_count
 from audio_library_organizer.metadata.manual_edits import apply_manual_field, approve_as_ready
@@ -843,6 +844,7 @@ class MainWindow(QMainWindow):
         self.qt_settings = qt_settings
         self.preferences = AppPreferences.from_store(qt_settings)
         self.library_registry = LibraryRegistry.from_store(qt_settings, app_settings)
+        self.main_settings = self.library_registry.main_settings
         self.app_settings = self.library_registry.settings_for(self.library_registry.active)
         self.setWindowTitle('ALO Music — Audio Library Organizer')
         self.setWindowIcon(QIcon(str(asset_path('alo.ico'))))
@@ -1072,6 +1074,7 @@ class MainWindow(QMainWindow):
             return
         try:
             updated = AppSettings(self.main_settings.source_dirs, LibraryPaths(new_root))
+            self.library_registry.validate_database_location(new_root, exclude_profile_id='main')
             for profile in self.library_registry.profiles:
                 if profile.kind == 'library':
                     profile_root = Path(profile.library_root).resolve()
@@ -1105,15 +1108,15 @@ class MainWindow(QMainWindow):
             candidate_repository = LibraryRepository(updated.library.database)
             candidate_repository.initialize()
             candidate_availability = candidate_repository.sync_availability()
-        except (OSError, ValueError, sqlite3.Error) as exc:
+        except (OSError, ValueError, sqlite3.Error, MigrationError) as exc:
             QMessageBox.warning(self, self._t('Nie można użyć lokalizacji biblioteki'), self._t(str(exc)))
             return
 
-        self.main_settings = updated
         self.library_registry.update_main_settings(updated)
-        save_app_settings(self.qt_settings, updated)
+        self.main_settings = self.library_registry.main_settings
+        save_app_settings(self.qt_settings, self.main_settings)
         self.library_registry.save(self.qt_settings)
-        self.settings_page.refresh_main_settings(updated)
+        self.settings_page.refresh_main_settings(self.main_settings)
         apply_static_language(self.settings_page, self.preferences.language)
         if self.library_registry.active.profile_id == 'main':
             self._rebind_active_profile(
@@ -1186,6 +1189,9 @@ class MainWindow(QMainWindow):
         try:
             profile = self.library_registry.activate(profile_id)
         except KeyError:
+            return
+        except (OSError, ValueError, sqlite3.Error, MigrationError) as exc:
+            QMessageBox.warning(self, self._t('Nie można użyć lokalizacji biblioteki'), self._t(str(exc)))
             return
         self.library_registry.save(self.qt_settings)
         self._rebind_active_profile(profile)

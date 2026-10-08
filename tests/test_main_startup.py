@@ -144,9 +144,10 @@ def test_first_run_acceptance_uses_qdialog_dialog_code(monkeypatch, tmp_path: Pa
     monkeypatch.setitem(sys.modules, 'PySide6.QtCore', qtcore)
     monkeypatch.setitem(sys.modules, 'PySide6.QtWidgets', qtwidgets)
 
-    settings_result = types.SimpleNamespace(
+    from audio_library_organizer.domain.settings import AppSettings, LibraryPaths
+    settings_result = AppSettings(
         source_dirs=(tmp_path / 'source',),
-        library=types.SimpleNamespace(root=tmp_path / 'library'),
+        library=LibraryPaths(tmp_path / 'library'),
     )
 
     first_run = types.ModuleType('audio_library_organizer.ui.first_run')

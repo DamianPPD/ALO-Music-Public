@@ -42,14 +42,15 @@ def test_full_reset_clears_alo_state_and_databases_but_keeps_music(tmp_path: Pat
     source = tmp_path / 'source'; source.mkdir()
     song = source / 'keep.mp3'; song.write_bytes(b'music')
     main = AppSettings((source,), LibraryPaths(tmp_path / 'main-library'))
-    main.library.ensure_created(); main.library.database.write_bytes(b'main-db')
+    main.library.ensure_created()
+    LibraryRepository(main.library.database).initialize()
 
     store = Store({'sources': '["old"]', 'library_root': 'old', 'ui/language': 'en', 'ui/language_selected': True})
     registry = LibraryRegistry(main)
     extra_source = tmp_path / 'extra-source'; extra_source.mkdir()
     extra = registry.add_library('Extra', (extra_source,), profile_id='extra')
     extra_settings = registry.settings_for(extra)
-    extra_settings.library.database.write_bytes(b'extra-db')
+    LibraryRepository(extra_settings.library.database).initialize()
     registry.save(store)
 
     result = reset_alo_state(store, main, registry)

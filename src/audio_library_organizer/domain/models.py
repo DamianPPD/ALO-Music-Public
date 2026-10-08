@@ -57,6 +57,9 @@ class TrackRecord:
     is_available: bool = True
     # Assigned once by repository on the first successful save, never on read.
     track_id: str | None = None
+    # Derived by the repository from this library's durable source roots.
+    source_id: str | None = None
+    source_relative_path: str | None = None
 
     @property
     def filename(self) -> str:

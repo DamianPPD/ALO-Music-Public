@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 from audio_library_organizer.domain.models import TrackRecord
 from .database import connect, require_current_schema
 from .migrations import migrate_library
+from .source_registry import SourceRoot, canonical_locator, list_sources, match_source, write_sources
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,9 +28,59 @@ class LibraryRepository:
         with closing(connect(self.database_path)) as conn:
             migrate_library(conn, self.database_path)
 
+    @property
+    def library_id(self) -> str:
+        with closing(connect(self.database_path)) as conn:
+            require_current_schema(conn)
+            return conn.execute('SELECT library_id FROM library_metadata WHERE singleton=1').fetchone()[0]
+
+    @property
+    def sources_initialized(self) -> bool:
+        with closing(connect(self.database_path)) as conn:
+            require_current_schema(conn)
+            return bool(conn.execute('SELECT sources_initialized FROM library_metadata WHERE singleton=1').fetchone()[0])
+
+    def list_sources(self, *, active_only: bool = False) -> list[SourceRoot]:
+        with closing(connect(self.database_path)) as conn:
+            require_current_schema(conn)
+            return list_sources(conn, active_only=active_only)
+
+    def bootstrap_sources(self, roots) -> None:
+        """Import legacy profile roots once; a stale cache cannot seed them again."""
+        with closing(connect(self.database_path)) as conn, conn:
+            conn.execute('BEGIN IMMEDIATE')
+            require_current_schema(conn)
+            initialized = conn.execute('SELECT sources_initialized FROM library_metadata WHERE singleton=1').fetchone()[0]
+            if not initialized:
+                write_sources(conn, roots, replace=True)
+
+    def replace_sources(self, roots) -> None:
+        """Change active scan roots, retaining identities and every track."""
+        with closing(connect(self.database_path)) as conn, conn:
+            conn.execute('BEGIN IMMEDIATE')
+            require_current_schema(conn)
+            write_sources(conn, roots, replace=True)
+
+    def register_source(self, root: str | Path) -> SourceRoot:
+        key = canonical_locator(root)[1]
+        with closing(connect(self.database_path)) as conn, conn:
+            conn.execute('BEGIN IMMEDIATE')
+            require_current_schema(conn)
+            write_sources(conn, (root,), replace=False)
+            registered = next(source for source in list_sources(conn) if source.canonical_root_key == key)
+        return registered
+
+    @staticmethod
+    def _find_locator(conn, locator):
+        key = canonical_locator(locator)[1]
+        matches = conn.execute('SELECT * FROM tracks WHERE path_key=? LIMIT 2', (key,)).fetchall()
+        if len(matches) > 1:
+            raise ValueError('Ambiguous track locator; no identity was selected.')
+        return matches[0] if matches else None
+
     def upsert_track(self, track: TrackRecord) -> None:
         values = (
-            str(track.path.resolve()), track.size_bytes, track.mtime_ns,
+            canonical_locator(track.path)[0], track.size_bytes, track.mtime_ns,
             track.duration_seconds, track.bitrate_kbps, track.sample_rate_hz,
             track.channels, track.codec, track.artist, track.title, track.album,
             track.year, track.genre, track.bpm, track.bpm_raw, track.bpm_confidence, track.fingerprint, track.fingerprint_duration, track.comment, int(track.has_cover),
@@ -50,18 +101,18 @@ class LibraryRepository:
             track_id = track.track_id
             if track_id is None:
                 # Transitional callers still construct a record from a locator.
-                existing = conn.execute('SELECT track_id FROM tracks WHERE path=?', (values[0],)).fetchone()
+                existing = self._find_locator(conn, values[0])
                 track_id = existing['track_id'] if existing else str(uuid4())
             UUID(track_id)
             conn.execute('''
                 INSERT INTO tracks (
-                    track_id,path,size_bytes,mtime_ns,duration_seconds,bitrate_kbps,sample_rate_hz,
+                    track_id,path_key,path,size_bytes,mtime_ns,duration_seconds,bitrate_kbps,sample_rate_hz,
                     channels,codec,artist,title,album,year,genre,bpm,bpm_raw,bpm_confidence,fingerprint,fingerprint_duration,comment,has_cover,
                     sha256,status,confidence,proposed_filename,filename_override,original_tags_json,
                     discogs_release_id,discogs_url,musicbrainz_recording_id,musicbrainz_release_id,cover_art_url,manual_cover_path,cover_choice,match_reasons_json,locked_fields_json,pre_online_metadata_json,field_sources_json,field_source_values_json,audio_recognition_json,is_available
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(track_id) DO UPDATE SET
-                    path=excluded.path, size_bytes=excluded.size_bytes, mtime_ns=excluded.mtime_ns,
+                    path=excluded.path, path_key=excluded.path_key, size_bytes=excluded.size_bytes, mtime_ns=excluded.mtime_ns,
                     duration_seconds=excluded.duration_seconds, bitrate_kbps=excluded.bitrate_kbps,
                     sample_rate_hz=excluded.sample_rate_hz, channels=excluded.channels,
                     codec=excluded.codec, artist=excluded.artist, title=excluded.title,
@@ -81,8 +132,13 @@ class LibraryRepository:
                     field_source_values_json=excluded.field_source_values_json,
                     audio_recognition_json=excluded.audio_recognition_json,
                     is_available=excluded.is_available
-            ''', (track_id, *values))
+            ''', (track_id, canonical_locator(values[0])[1], *values))
+            source_id, relative = match_source(values[0], list_sources(conn))
+            conn.execute('UPDATE tracks SET source_id=?,source_relative_path=? WHERE track_id=?',
+                         (source_id, relative, track_id))
         track.track_id = track_id
+        track.source_id = source_id
+        track.source_relative_path = relative
 
     def get_track(self, track_id: str) -> TrackRecord | None:
         with closing(connect(self.database_path)) as conn:
@@ -146,7 +202,7 @@ class LibraryRepository:
 
     def scan_needed(self, path: Path, size_bytes: int, mtime_ns: int) -> bool:
         with closing(connect(self.database_path)) as conn:
-            row = conn.execute('SELECT size_bytes, mtime_ns FROM tracks WHERE path=?', (str(Path(path).resolve()),)).fetchone()
+            row = self._find_locator(conn, canonical_locator(path)[0])
         return row is None or row['size_bytes'] != size_bytes or row['mtime_ns'] != mtime_ns
 
     @staticmethod
@@ -171,4 +227,5 @@ class LibraryRepository:
             audio_recognition=json.loads(row['audio_recognition_json'] or '{}'),
             is_available=bool(row['is_available']),
             track_id=row['track_id'],
+            source_id=row['source_id'], source_relative_path=row['source_relative_path'],
         )

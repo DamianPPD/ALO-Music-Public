@@ -10,6 +10,7 @@ from .database import (
     SCHEMA_VERSION, TRACK_COLUMNS, TRACK_INDEXES, check_integrity,
     create_tracks_sql, ensure_track_columns, quoted, schema_version, snapshot_database,
 )
+from .source_registry import create_source_schema, validate_source_schema
 
 
 class MigrationError(RuntimeError):
@@ -103,7 +104,7 @@ def _migrate_tracks(conn: sqlite3.Connection) -> None:
 
 
 def migrate_library(conn: sqlite3.Connection, database_path: Path) -> Path | None:
-    """Initialize v1 or upgrade v0 atomically. Retry never regenerates saved IDs."""
+    """Upgrade v0/v1 to v2 atomically. Retry never regenerates saved IDs."""
     backup_path = None
     try:
         version = schema_version(conn)
@@ -116,21 +117,25 @@ def migrate_library(conn: sqlite3.Connection, database_path: Path) -> Path | Non
         if version > SCHEMA_VERSION:
             raise ValueError(f'Unsupported newer schema version {version}.')
         check_integrity(conn)
+        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        if version < SCHEMA_VERSION and tables:
+            snapshot = database_path.parent / 'migration-backups' / f'pre-v{SCHEMA_VERSION}-{uuid4().hex}.sqlite3'
+            snapshot_database(database_path, snapshot)
+            backup_path = snapshot
         if version == SCHEMA_VERSION:
             validate_track_ids(conn)
-        elif version == 0:
-            tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-            if tables:
-                snapshot = database_path.parent / 'migration-backups' / f'pre-v1-{uuid4().hex}.sqlite3'
-                snapshot_database(database_path, snapshot)
-                backup_path = snapshot  # Set only after successful verification.
-            if any(row[0].lower() == 'tracks' for row in tables):
-                _migrate_tracks(conn)
-            else:
-                conn.execute(create_tracks_sql())
-                for sql in TRACK_INDEXES:
-                    conn.execute(sql)
+            validate_source_schema(conn)
+        elif version in (0, 1):
+            if version == 0:
+                if any(row[0].lower() == 'tracks' for row in tables):
+                    _migrate_tracks(conn)
+                else:
+                    conn.execute(create_tracks_sql())
+                    for sql in TRACK_INDEXES:
+                        conn.execute(sql)
             validate_track_ids(conn)
+            create_source_schema(conn)
+            validate_source_schema(conn)
             check_integrity(conn)
             conn.execute(f'PRAGMA user_version={SCHEMA_VERSION}')
         else:

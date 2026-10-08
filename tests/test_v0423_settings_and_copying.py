@@ -255,9 +255,15 @@ def test_main_library_location_is_not_persisted_when_destination_validation_fail
         'audio_library_organizer.ui.main_window.QMessageBox.warning',
         lambda _parent, _title, text, *_args: warnings.append(str(text)) or QMessageBox.StandardButton.Ok,
     )
+    from audio_library_organizer.storage.repository import LibraryRepository
+    real_initialize = LibraryRepository.initialize
+    def fail_destination_only(repo):
+        if repo.database_path == LibraryPaths(new_root).database:
+            raise OSError('destination unavailable')
+        return real_initialize(repo)
     monkeypatch.setattr(
         'audio_library_organizer.ui.main_window.LibraryRepository.initialize',
-        lambda _self: (_ for _ in ()).throw(OSError('destination unavailable')),
+        fail_destination_only,
     )
     try:
         window._change_main_library_location()

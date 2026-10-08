@@ -11,6 +11,10 @@ from audio_library_organizer.jobs.file_health import file_health_reasons
 
 
 def save_app_settings(store, settings) -> None:
+    from audio_library_organizer.storage.repository import LibraryRepository
+    repo = LibraryRepository(settings.library.database)
+    repo.initialize()
+    repo.replace_sources(settings.source_dirs)
     store.setValue('sources', json.dumps([str(p) for p in settings.source_dirs], ensure_ascii=False))
     store.setValue('library_root', str(settings.library.root))
 
@@ -18,23 +22,30 @@ def save_app_settings(store, settings) -> None:
 
 def load_app_settings(store):
     from audio_library_organizer.domain.settings import AppSettings, LibraryPaths
+    from audio_library_organizer.storage.repository import LibraryRepository
     raw_sources = store.value('sources', '')
     raw_library = str(store.value('library_root', '') or '').strip()
-    if not raw_sources or not raw_library:
+    if not raw_library:
         return None
+    library = LibraryPaths(Path(raw_library))
+    repo = LibraryRepository(library.database)
+    repo.initialize()
+    if repo.sources_initialized:
+        return AppSettings(tuple(Path(s.root_path) for s in repo.list_sources(active_only=True)), library)
     try:
-        if isinstance(raw_sources, str):
+        if not raw_sources:
+            sources_data = []
+        elif isinstance(raw_sources, str):
             sources_data = json.loads(raw_sources)
         else:
             sources_data = list(raw_sources)
         sources = tuple(Path(item) for item in sources_data if str(item).strip())
-        if not sources:
-            return None
-        settings = AppSettings(sources, LibraryPaths(Path(raw_library)))
+        settings = AppSettings(sources, library)
         settings.library.ensure_created()
-        return settings
     except Exception:
         return None
+    repo.bootstrap_sources(settings.source_dirs)
+    return AppSettings(tuple(Path(s.root_path) for s in repo.list_sources(active_only=True)), settings.library)
 
 def reset_folder_preferences(store) -> None:
     # Only forget the app's remembered folder choices. This intentionally

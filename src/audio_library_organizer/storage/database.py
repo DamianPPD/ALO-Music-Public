@@ -8,7 +8,7 @@ import tempfile
 import time
 
 # Application schema version. SQLite's schema_version is an internal DDL counter.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 BACKUP_BUSY_TIMEOUT = 5.0
 
 TRACK_COLUMNS = {
@@ -60,6 +60,7 @@ def connect(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path, timeout=5.0)
     conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA foreign_keys=ON')
     return conn
 
 
