@@ -10,6 +10,7 @@ from audio_library_organizer.domain.models import TrackRecord
 from audio_library_organizer.domain.settings import AppSettings, LibraryPaths
 from audio_library_organizer.storage.library_profiles import LibraryProfile, LibraryRegistry
 from audio_library_organizer.storage.repository import LibraryRepository
+from audio_library_organizer.storage.database import SCHEMA_VERSION
 from audio_library_organizer.ui.state import load_app_settings, save_app_settings
 from test_library_migration_v0427 import LEGACY_COLUMNS, legacy_database, raw_rows
 
@@ -326,7 +327,7 @@ def test_schema_v1_migration_preserves_every_value_uuid_and_backup(tmp_path):
     assert raw_rows(db, before[0].keys()) == before
     assert len({r['track_id'] for r in raw_rows(db)}) == 3
     with sqlite3.connect(db) as conn:
-        assert conn.execute('PRAGMA user_version').fetchone()[0] == 2
+        assert conn.execute('PRAGMA user_version').fetchone()[0] == SCHEMA_VERSION
         assert conn.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
         assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
     backups = list((tmp_path / 'migration-backups').glob('*.sqlite3'))

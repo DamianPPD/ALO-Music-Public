@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from audio_library_organizer.storage.repository import LibraryRepository
+from audio_library_organizer.storage.database import SCHEMA_VERSION
 
 
 # Frozen pre-UUID schema, independent of the production schema being migrated.
@@ -84,7 +85,7 @@ def test_migration_preserves_every_legacy_field(tmp_path, variant):
     assert len({row['track_id'] for row in after}) == 3
     assert all(UUID(row['track_id']).version == 4 for row in after)
     with sqlite3.connect(db) as conn:
-        assert conn.execute('PRAGMA user_version').fetchone()[0] == 2
+        assert conn.execute('PRAGMA user_version').fetchone()[0] == SCHEMA_VERSION
         assert conn.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
         assert conn.execute('SELECT payload FROM other_data').fetchone()[0] == b'\x00\xffpersist'
         pk = [row[1] for row in conn.execute('PRAGMA table_info(tracks)') if row[5]]

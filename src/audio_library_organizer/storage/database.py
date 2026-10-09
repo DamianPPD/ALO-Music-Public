@@ -8,7 +8,7 @@ import tempfile
 import time
 
 # Application schema version. SQLite's schema_version is an internal DDL counter.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 BACKUP_BUSY_TIMEOUT = 5.0
 
 TRACK_COLUMNS = {

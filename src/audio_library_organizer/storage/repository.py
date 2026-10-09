@@ -7,7 +7,9 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from audio_library_organizer.domain.models import TrackRecord
+from audio_library_organizer.domain.file_state import FileFacts, FileStateEvaluation
 from .database import connect, require_current_schema
+from .file_state_cache import CachedFileState, read_file_state, write_file_facts
 from .migrations import migrate_library
 from .scan_merge import SCAN_AUDIO_KEY, SCAN_CONFLICT, SCAN_STAT_KEY, audio_continuity_confirmed, merge_scan_metadata, stat_observation
 from .source_registry import SourceRoot, canonical_locator, list_sources, match_source, write_sources
@@ -36,6 +38,19 @@ class LibraryRepository:
     def initialize(self) -> None:
         with closing(connect(self.database_path)) as conn:
             migrate_library(conn, self.database_path)
+
+    def save_file_facts(self, facts: FileFacts) -> FileStateEvaluation:
+        """Atomically save prepared observations, never metadata or audio files."""
+        with closing(connect(self.database_path)) as conn, conn:
+            conn.execute('BEGIN IMMEDIATE')
+            require_current_schema(conn)
+            return write_file_facts(conn, facts)
+
+    def get_file_state(self, track_id: str) -> CachedFileState | None:
+        """Read historical knowledge without writes or filesystem probing."""
+        with closing(connect(self.database_path)) as conn:
+            require_current_schema(conn)
+            return read_file_state(conn, track_id)
 
     @property
     def library_id(self) -> str:

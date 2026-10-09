@@ -11,6 +11,7 @@ from .database import (
     create_tracks_sql, ensure_track_columns, quoted, schema_version, snapshot_database,
 )
 from .source_registry import create_source_schema, validate_source_schema
+from .file_state_cache import create_file_state_schema, validate_file_state_schema
 
 
 class MigrationError(RuntimeError):
@@ -104,7 +105,7 @@ def _migrate_tracks(conn: sqlite3.Connection) -> None:
 
 
 def migrate_library(conn: sqlite3.Connection, database_path: Path) -> Path | None:
-    """Upgrade v0/v1 to v2 atomically. Retry never regenerates saved IDs."""
+    """Upgrade v0/v1/v2 to v3 atomically. Retry never regenerates saved IDs."""
     backup_path = None
     try:
         version = schema_version(conn)
@@ -125,7 +126,8 @@ def migrate_library(conn: sqlite3.Connection, database_path: Path) -> Path | Non
         if version == SCHEMA_VERSION:
             validate_track_ids(conn)
             validate_source_schema(conn)
-        elif version in (0, 1):
+            validate_file_state_schema(conn)
+        elif version in (0, 1, 2):
             if version == 0:
                 if any(row[0].lower() == 'tracks' for row in tables):
                     _migrate_tracks(conn)
@@ -134,8 +136,11 @@ def migrate_library(conn: sqlite3.Connection, database_path: Path) -> Path | Non
                     for sql in TRACK_INDEXES:
                         conn.execute(sql)
             validate_track_ids(conn)
-            create_source_schema(conn)
+            if version < 2:
+                create_source_schema(conn)
             validate_source_schema(conn)
+            create_file_state_schema(conn)
+            validate_file_state_schema(conn)
             check_integrity(conn)
             conn.execute(f'PRAGMA user_version={SCHEMA_VERSION}')
         else:
