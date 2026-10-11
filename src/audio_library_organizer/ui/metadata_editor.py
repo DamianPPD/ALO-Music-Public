@@ -752,6 +752,9 @@ class MetadataEditorDialog(QDialog):
         self.saved_notice = QLabel('Zapisano')
         self.saved_notice.setObjectName('SavedNotice')
         self.saved_notice.setVisible(False)
+        self._saved_notice_timer = QTimer(self.saved_notice)
+        self._saved_notice_timer.setSingleShot(True)
+        self._saved_notice_timer.timeout.connect(self.saved_notice.hide)
         heading_row.addWidget(self.saved_notice)
         self.file_counter = QLabel(f'Plik {self.navigation_index + 1} z {self.navigation_total}')
         self.file_counter.setObjectName('EditorFileCounter')
@@ -2404,7 +2407,7 @@ class MetadataEditorDialog(QDialog):
         self._last_observed_state = deepcopy(self._saved_state)
         self.dirty_notice.setVisible(False)
         self.saved_notice.setVisible(True)
-        QTimer.singleShot(2200, lambda: self.saved_notice.setVisible(False))
+        self._saved_notice_timer.start(2200)
         return True
 
     def values(self) -> dict[str, object]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,7 +10,7 @@ from uuid import UUID, uuid4
 from audio_library_organizer.domain.models import TrackRecord
 from audio_library_organizer.domain.file_state import FileFacts, FileStateEvaluation
 from .database import connect, require_current_schema
-from .file_state_cache import CachedFileState, read_file_state, write_file_facts
+from .file_state_cache import CachedFileState, FileStateCacheError, read_file_state, write_file_facts
 from .migrations import migrate_library
 from .scan_merge import SCAN_AUDIO_KEY, SCAN_CONFLICT, SCAN_STAT_KEY, audio_continuity_confirmed, merge_scan_metadata, stat_observation
 from .source_registry import SourceRoot, canonical_locator, list_sources, match_source, write_sources
@@ -29,6 +30,17 @@ class ScanSnapshot:
     track: TrackRecord | None
     source_id: str | None
     source_relative_path: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class FileCheckSnapshot:
+    library_id: str
+    sources: tuple[SourceRoot, ...]
+    tracks: tuple[TrackRecord, ...]
+    path_keys: tuple[tuple[str, str], ...]
+    locators: tuple[tuple[str, str], ...]
+    cached: tuple[tuple[str, CachedFileState], ...]
+    cache_errors: tuple[tuple[str, str], ...]
 
 
 class LibraryRepository:
@@ -51,6 +63,62 @@ class LibraryRepository:
         with closing(connect(self.database_path)) as conn:
             require_current_schema(conn)
             return read_file_state(conn, track_id)
+
+    def file_check_snapshot(self) -> FileCheckSnapshot:
+        """Pin registry/records/cache in one read transaction, without creating a DB.
+
+        Records are fresh private copies, never objects borrowed from the GUI.
+        A damaged optional cache row is retained and does not hide other tracks.
+        """
+        with closing(sqlite3.connect(self.database_path.resolve().as_uri() + '?mode=ro', uri=True)) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute('BEGIN')
+            require_current_schema(conn)
+            library_id = conn.execute('SELECT library_id FROM library_metadata WHERE singleton=1').fetchone()[0]
+            rows = conn.execute('SELECT * FROM tracks ORDER BY track_id').fetchall()
+            cached, errors = [], []
+            for row in rows:
+                try:
+                    state = read_file_state(conn, row['track_id'])
+                    if state is not None:
+                        cached.append((row['track_id'], state))
+                except FileStateCacheError as exc:
+                    errors.append((row['track_id'], str(exc)))
+            return FileCheckSnapshot(library_id, tuple(list_sources(conn)),
+                                     tuple(self._row_to_track(row) for row in rows),
+                                     tuple((row['track_id'], row['path_key']) for row in rows),
+                                     tuple((row['track_id'], row['path']) for row in rows),
+                                     tuple(cached), tuple(errors))
+
+    def save_file_facts_batch(self, facts, *, snapshot: FileCheckSnapshot, cancelled=None):
+        """All-or-nothing cache writes with pinned identity and existing watermarks.
+
+        mode=rw prevents an offline/deleted library from becoming an empty DB.
+        No record/source/metadata table is written, including on rollback.
+        """
+        with closing(sqlite3.connect(self.database_path.resolve().as_uri() + '?mode=rw', uri=True)) as conn, conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute('PRAGMA foreign_keys=ON')
+            conn.execute('BEGIN IMMEDIATE')
+            require_current_schema(conn)
+            library_id = conn.execute('SELECT library_id FROM library_metadata WHERE singleton=1').fetchone()[0]
+            if library_id != snapshot.library_id or tuple(list_sources(conn)) != snapshot.sources:
+                raise ValueError('Library/source context changed during file check.')
+            bindings = tuple((row['track_id'], row['path'], row['source_id'], row['size_bytes'], row['mtime_ns'], row['sha256'])
+                             for row in conn.execute('SELECT track_id,path,source_id,size_bytes,mtime_ns,sha256 FROM tracks ORDER BY track_id'))
+            locators = dict(snapshot.locators)
+            expected = tuple((t.track_id, locators[t.track_id], t.source_id, t.size_bytes, t.mtime_ns, t.sha256)
+                             for t in snapshot.tracks)
+            if bindings != expected:
+                raise ValueError('Track locator/evidence changed during file check.')
+            evaluations = []
+            for item in facts:
+                if cancelled and cancelled():
+                    raise InterruptedError('File check cancelled before cache commit.')
+                evaluations.append(write_file_facts(conn, item))
+            if cancelled and cancelled():
+                raise InterruptedError('File check cancelled before cache commit.')
+            return tuple(evaluations)
 
     @property
     def library_id(self) -> str:

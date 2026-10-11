@@ -5,6 +5,8 @@ from threading import Event
 import subprocess
 import requests
 
+from audio_library_organizer.jobs.file_reconciliation import check_library
+
 
 def _audio_error_text(exc: Exception) -> str:
     if isinstance(exc, requests.Timeout):
@@ -44,6 +46,37 @@ class ScanWorker(QObject):
             ))
         except Exception as exc:
             self.failed.emit(str(exc))
+
+
+class FileReconciliationWorker(QObject):
+    """One pinned operation, with context on every GUI-bound message."""
+
+    finished = Signal(object)
+    failed = Signal(str, str, str)
+    progress = Signal(str, str, int, int, str)
+
+    def __init__(self, repository, *, library_id, operation_id, managed_roots=()):
+        super().__init__()
+        self.repository = repository
+        self.library_id = library_id
+        self.operation_id = operation_id
+        self.managed_roots = tuple(managed_roots)
+        self._cancelled = Event()
+
+    def cancel(self):
+        self._cancelled.set()
+
+    @Slot()
+    def run(self):
+        try:
+            result = check_library(self.repository, library_id=self.library_id,
+                operation_id=self.operation_id, managed_roots=self.managed_roots,
+                cancelled=self._cancelled.is_set,
+                progress=lambda current, total, name: self.progress.emit(
+                    self.library_id, self.operation_id, current, total, name))
+            self.finished.emit(result)
+        except Exception as exc:
+            self.failed.emit(self.library_id, self.operation_id, str(exc))
 
 
 class _GuiThreadRelay(QObject):

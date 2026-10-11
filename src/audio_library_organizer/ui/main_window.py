@@ -7,8 +7,9 @@ import shutil
 import html
 import json
 import sqlite3
+from uuid import uuid4
 
-from PySide6.QtCore import Qt, QThread, QSettings, Signal, QUrl, QTimer, QSize, QVariantAnimation
+from PySide6.QtCore import Qt, QThread, QSettings, Signal, Slot, QUrl, QTimer, QSize, QVariantAnimation
 from PySide6.QtGui import QPixmap, QDesktopServices, QIcon, QColor
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -61,7 +62,7 @@ from audio_library_organizer.jobs.backup import create_alo_backup, inspect_alo_b
 from audio_library_organizer.jobs.reset import reset_alo_state
 from audio_library_organizer.ui.metadata_editor import MetadataEditorDialog
 from audio_library_organizer.ui.player import PlayerBar
-from audio_library_organizer.ui.workers import ScanWorker, IdentificationWorker, AudioIdentificationWorker, ExportWorker
+from audio_library_organizer.ui.workers import ScanWorker, FileReconciliationWorker, IdentificationWorker, AudioIdentificationWorker, ExportWorker
 from audio_library_organizer.ui.assets import asset_path
 from audio_library_organizer.ui.icons import alo_icon, start_icon
 from audio_library_organizer.ui.theme import style_for_theme, GENRE_ACCENT
@@ -856,6 +857,12 @@ class MainWindow(QMainWindow):
         self.change_history = ChangeHistory()
         self._thread = None; self._worker = None; self._pending_auto_identify = False; self._operation_kind = 'idle'; self._identification_was_cancelled = False; self._active_scan_source_dirs = None
         self._active_metadata_editor = None
+        self._file_check_generation = 0
+        self._file_check_context = None
+        self._file_check_repository = None
+        self._file_check_closing = False
+        self.last_reconciliation_result = None
+        QApplication.instance().aboutToQuit.connect(self._stop_file_check_on_quit)
 
         central = QWidget(); self.setCentralWidget(central)
         self.statusBar().hide()
@@ -892,7 +899,7 @@ class MainWindow(QMainWindow):
         workflow = QHBoxLayout(workflow_group); workflow.setContentsMargins(4, 3, 4, 3); workflow.setSpacing(4)
         self.scan_btn = QPushButton('1. Skanuj foldery'); self.scan_btn.setObjectName('Primary'); self.scan_btn.clicked.connect(self._scan_button_clicked)
         self.identify_btn = QPushButton('2. Rozpoznaj utwory online'); self.identify_btn.setObjectName('IdentifyOnlineAction'); self.identify_btn.clicked.connect(self._identify_button_clicked)
-        self.review_btn = QPushButton('3. Sprawdź w Bibliotece'); self.review_btn.setObjectName('ReviewAction'); self.review_btn.clicked.connect(self._open_review)
+        self.review_btn = QPushButton('3. Sprawdź w Bibliotece'); self.review_btn.setObjectName('ReviewAction'); self.review_btn.clicked.connect(self._check_library_clicked)
         self.export_btn = QPushButton('4. Utwórz pliki wynikowe'); self.export_btn.setObjectName('ExportAction'); self.export_btn.clicked.connect(self.export_library)
         step_arrow_1 = _icon_label('chevron-right', '#6d7c88', 15); step_arrow_1.setObjectName('WorkflowStepArrow')
         step_arrow_2 = _icon_label('chevron-right', '#6d7c88', 15); step_arrow_2.setObjectName('WorkflowStepArrow')
@@ -1209,6 +1216,11 @@ class MainWindow(QMainWindow):
         self._show_operation(f'Biblioteka „{profile.name}” została wyzerowana. Możesz dodać nowe pliki do skanowania.')
 
     def _rebind_active_profile(self, profile, *, repository=None, availability=None):
+        self._file_check_generation += 1
+        if isinstance(self._worker, FileReconciliationWorker):
+            self._worker.cancel()
+        self._file_check_context = None
+        self.last_reconciliation_result = None
         self.app_settings = self.library_registry.settings_for(profile)
         if repository is None:
             repository = LibraryRepository(self.app_settings.library.database)
@@ -1456,6 +1468,98 @@ class MainWindow(QMainWindow):
             self._set_action_highlight(self.review_btn)
             self._set_operation_state('review', 'WERYFIKACJA W BIBLIOTECE', 'Sprawdź utwory oznaczone jako DO SPRAWDZENIA.')
         self._navigate(1)
+
+    def _check_library_clicked(self):
+        """Only an explicit button click starts disk checks; review stays intact."""
+        if isinstance(self._worker, FileReconciliationWorker):
+            self._worker.cancel()
+            return
+        self._open_review()
+        if self._thread is not None or self._file_check_closing:
+            return
+        library_id = self.library_registry.active.library_id
+        operation_id = str(uuid4())
+        self._file_check_generation += 1
+        self._file_check_context = (library_id, operation_id, self._file_check_generation)
+        self._file_check_repository = self.repository
+        self.last_reconciliation_result = None
+        self._pending_auto_identify = False
+        paths = self.app_settings.library
+        thread = QThread(self)
+        worker = FileReconciliationWorker(self.repository, library_id=library_id,
+            operation_id=operation_id, managed_roots=(paths.ready, paths.review, paths.not_selected))
+        worker.moveToThread(thread)
+        self._thread, self._worker = thread, worker
+        self._set_operation_state('review', 'WERYFIKACJA W BIBLIOTECE', 'Sprawdzanie plików…')
+        self._set_busy(True, kind='check')
+        self.review_btn.setText('Cancel check' if self.preferences.language == 'en' else 'Anuluj sprawdzanie')
+        thread.started.connect(worker.run)
+        worker.progress.connect(self._file_check_progress, Qt.ConnectionType.QueuedConnection)
+        worker.finished.connect(self._file_check_finished, Qt.ConnectionType.QueuedConnection)
+        worker.failed.connect(self._file_check_failed, Qt.ConnectionType.QueuedConnection)
+        # quit() is thread-safe; shutdown must not depend on GUI event dispatch.
+        worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        worker.failed.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(self._file_check_thread_done)
+        thread.finished.connect(thread.deleteLater)
+        thread.start()
+
+    def _file_check_matches(self, library_id, operation_id):
+        return (not self._file_check_closing and self._file_check_context ==
+                (library_id, operation_id, self._file_check_generation)
+                and self._file_check_repository is self.repository
+                and library_id == self.library_registry.active.library_id)
+
+    @Slot(str, str, int, int, str)
+    def _file_check_progress(self, library_id, operation_id, current, total, name):
+        if not self._file_check_matches(library_id, operation_id):
+            return
+        self.progress.setRange(0, max(1, total)); self.progress.setValue(current)
+        self._show_operation(f'Check {current}/{total}: {name}' if self.preferences.language == 'en'
+                             else f'Sprawdzanie {current}/{total}: {name}')
+
+    @Slot(object)
+    def _file_check_finished(self, result):
+        if not self._file_check_matches(result.library_id, result.operation_id):
+            return
+        self.last_reconciliation_result = result
+        summary = result.summary
+        if self.preferences.language == 'en':
+            text = (f'{"Check cancelled" if result.cancelled else "Check complete"}: '
+                    f'{summary.present} present, {summary.missing} missing, {summary.offline} offline; '
+                    f'{summary.new_sources} new candidates, {summary.possible_moves} possible moves. '
+                    'Review metadata in the Library.')
+        else:
+            text = (f'{"Kontrola anulowana" if result.cancelled else "Kontrola zakończona"}: '
+                    f'dostępne {summary.present}, brakujące {summary.missing}, offline {summary.offline}; '
+                    f'nowi kandydaci {summary.new_sources}, możliwe przeniesienia {summary.possible_moves}. '
+                    'Metadane możesz przeglądać w Bibliotece.')
+        self._show_operation(text)
+
+    @Slot(str, str, str)
+    def _file_check_failed(self, library_id, operation_id, message):
+        if self._file_check_matches(library_id, operation_id):
+            self._show_operation(message)
+
+    @Slot()
+    def _file_check_thread_done(self):
+        self._thread = None; self._worker = None
+        self._file_check_context = None; self._file_check_repository = None
+        if self._file_check_closing:
+            self.close()
+            return
+        self._set_busy(False)
+        self._set_action_highlight(self.review_btn if self.stack.currentIndex() == 1 else None)
+
+    @Slot()
+    def _stop_file_check_on_quit(self):
+        if isinstance(self._worker, FileReconciliationWorker):
+            self._file_check_closing = True
+            self._file_check_generation += 1
+            self._worker.cancel()
+            self._thread.quit()
+            self._thread.wait()
 
     def _open_help_topic(self, title: str):
         self._navigate(4)
@@ -2054,4 +2158,10 @@ class MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event):
+        if isinstance(self._worker, FileReconciliationWorker):
+            self._file_check_closing = True
+            self._file_check_generation += 1
+            self._worker.cancel()
+            event.ignore()
+            return
         super().closeEvent(event)
