@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import replace
 from threading import Event
 from uuid import uuid4
 
@@ -15,6 +16,7 @@ from PySide6.QtWidgets import (
 
 from audio_library_organizer import __version__
 from audio_library_organizer.domain.models import TrackRecord
+from audio_library_organizer.jobs.managed_files import ReadPurpose, ReadResult, resolve_read_path, track_identity
 from audio_library_organizer.metadata.artwork import extract_embedded_cover
 from audio_library_organizer.ui.widgets import ClickableCoverLabel, ElidedLabel, show_cover_preview
 from audio_library_organizer.ui.assets import asset_path
@@ -22,7 +24,13 @@ from audio_library_organizer.ui.icons import alo_icon, editor_icon
 from audio_library_organizer.ui.i18n import ui_text, localized_no_cover_name
 from audio_library_organizer.ui.playback_sync import PendingPlaybackPosition
 from audio_library_organizer.ui.waveform import WaveformSlider, WaveformJob, read_waveform
+from audio_library_organizer.ui.workers import ReadTask
 from audio_library_organizer import crash_debug
+
+
+def replace_purpose(plan, purpose):
+    return replace(plan, purpose=purpose,
+                   fallback=replace_purpose(plan.fallback, purpose) if plan.fallback else None)
 
 
 def track_display_lines(track: TrackRecord) -> tuple[str, str, str]:
@@ -223,6 +231,12 @@ class PlayerBar(QWidget):
         self.setMinimumHeight(114)
         self._waveform_generation = 0
         self._waveform_cancel = Event()
+        self._read_context = None
+        self._read_generation = 0
+        self._read_cancel = Event()
+        self._closed = False
+        self._active_read_plan = None
+        self.destroyed.connect(self._read_cancel.set)
         self._debug_player_id = uuid4().hex
         player_id = self._debug_player_id
         self.destroyed.connect(lambda: crash_debug.record('player.destroyed', player_id=player_id))
@@ -244,6 +258,7 @@ class PlayerBar(QWidget):
         self._pending_source_url: QUrl | None = None
         self._pending_source_changed = False
         self._pending_autoplay = False
+        self._read_pending = False
         self._pending_source_ready = False
         self._pending_seek_retry_count = 0
         self._pending_seek_retry_scheduled = False
@@ -360,20 +375,80 @@ class PlayerBar(QWidget):
             self.output_device.setToolTip(device.description())
 
     def _debug(self, event, **fields):
-        crash_debug.record(event, **crash_debug.track_context(self.current_path),
+        crash_debug.record(event, path=str(self.current_path) if self.current_path else None,
+                           track_id=self.current_track.track_id if self.current_track else None,
                            player_id=self._debug_player_id, generation=self._waveform_generation,
                            job_id=f'{self._debug_player_id}:{self._waveform_generation}', **fields)
 
+    def set_read_context(self, context):
+        previous = self._read_context
+        if previous == context:
+            return
+        self._read_context = context
+        if previous is not None and (context is None or previous.library_id != context.library_id):
+            self._read_generation += 1
+            self._read_cancel.set()
+            self._waveform_cancel.set()
+            self._waveform_generation += 1
+            self._cancel_cover_request()
+            self.player.stop(); self.player.setSource(QUrl())
+            self._clear_pending_seek_state()
+            self.current_track = None; self.current_path = None
+            self._active_read_plan = None
+            self.clear_queue(); self.seek.set_peaks([]); self.waveform_changed.emit([])
+            self.track_changed.emit(None)
+
+    def read_plan(self, track, purpose, *, generation=None):
+        if self._read_context is None:
+            return None
+        return resolve_read_path(track, self._read_context, purpose,
+                                 generation=self._read_generation if generation is None else generation)
+
+    def accepts_read_result(self, resolution):
+        if self._closed or self.current_track is None or self._read_context is None:
+            return False
+        current = self.read_plan(self.current_track, resolution.purpose, generation=resolution.generation)
+        return (resolution.generation == self._read_generation
+                and resolution.guard_key in {current.guard_key,
+                    current.fallback.guard_key if current.fallback else None})
+
+    def reconcile_tracks(self, tracks):
+        library_id = self._read_context.library_id if self._read_context else ''
+        by_id = {track_identity(t, library_id): t for t in tracks}
+        if self.queued_track is not None:
+            self.queued_track = by_id.get(track_identity(self.queued_track, library_id))
+            if self.queued_track is None:
+                self.clear_queue()
+        if self.current_track is not None:
+            current = by_id.get(track_identity(self.current_track, library_id))
+            if current is not None:
+                plan = self.read_plan(current, ReadPurpose.PLAYBACK)
+                if plan is not None and self._active_read_plan is not None and plan.guard_key != self._active_read_plan.guard_key:
+                    self.load_track(current, position_ms=self.player.position(),
+                                    autoplay=self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState,
+                                    source_label=self.current_source_label)
+                else:
+                    self.current_track = current
+
+    def closeEvent(self, event):
+        self._closed = True
+        self._read_cancel.set(); self._waveform_cancel.set()
+        self._waveform_generation += 1
+        self._cancel_cover_request()
+        self.player.stop()
+        super().closeEvent(event)
+
     def load_track(self, track: TrackRecord, *, position_ms: int = 0, autoplay: bool = True, source_label: str = 'Biblioteka'):
-        crash_debug.record('player.track.enter', **crash_debug.track_context(track.path),
+        crash_debug.record('player.track.enter', path=str(track.path), track_id=track.track_id,
                            player_id=self._debug_player_id, autoplay=autoplay)
         self._playback_error_text = ''
+        self._closed = False
+        self._read_cancel.set(); self._read_cancel = Event()
+        self.destroyed.connect(self._read_cancel.set)
+        self._read_generation += 1
         same_track = False
-        if self.current_path is not None:
-            try:
-                same_track = self.current_path.resolve() == Path(track.path).resolve()
-            except OSError:
-                same_track = self.current_path == Path(track.path)
+        if self._read_context is None and self.current_path is not None:
+            same_track = track_identity(self.current_track) == track_identity(track) and self.current_path == Path(track.path)
         self.current_track = track
         self.current_source_label = source_label or '—'
         artist, title, meta = track_display_lines(track)
@@ -383,7 +458,7 @@ class PlayerBar(QWidget):
         self.meta.setText(meta or track.path.name)
         self.source_label.setText(f"{ui_text(self, 'Źródło:')} {ui_text(self, self.current_source_label)}")
         self._load_cover(track)
-        crash_debug.record('player.track.cover.done', **crash_debug.track_context(track.path),
+        crash_debug.record('player.track.cover.done', path=str(track.path), track_id=track.track_id,
                            player_id=self._debug_player_id)
         if same_track:
             self._clear_pending_seek_state()
@@ -391,7 +466,15 @@ class PlayerBar(QWidget):
             if autoplay:
                 self.player.play()
         else:
-            self.load(track.path, position_ms=position_ms, autoplay=autoplay, keep_display=True)
+            plan = self.read_plan(track, ReadPurpose.PLAYBACK)
+            self._active_read_plan = plan
+            if plan is not None and plan.locator is None:
+                self._waveform_cancel.set(); self._waveform_generation += 1
+                self.current_path = None; self.seek.set_peaks([]); self.waveform_changed.emit([])
+                self.player.stop(); self.player.setSource(QUrl())
+            else:
+                path = Path(plan.locator) if plan else track.path
+                self.load(path, position_ms=position_ms, autoplay=autoplay, keep_display=True, read_plan=plan)
         self.track_changed.emit(track)
         self._debug('player.track.done')
 
@@ -419,7 +502,7 @@ class PlayerBar(QWidget):
         self._pending_seek_retry_count = 0
         self._pending_seek_retry_scheduled = False
 
-    def load(self, path: Path, *, position_ms: int = 0, autoplay: bool = True, keep_display: bool = False):
+    def load(self, path: Path, *, position_ms: int = 0, autoplay: bool = True, keep_display: bool = False, read_plan=None):
         self._debug('player.waveform.cancel.request', reason='replace')
         self._playback_error_text = ''
         self.current_path = Path(path)
@@ -427,12 +510,12 @@ class PlayerBar(QWidget):
         self._waveform_cancel = Event()
         self.destroyed.connect(self._waveform_cancel.set)
         self._waveform_generation += 1
+        self._playback_resolution = None
         self.seek.set_peaks([])
         self.waveform_changed.emit([])
-        job = WaveformJob(self.current_path, self._waveform_generation, self._waveform_cancel,
-                          job_id=f'{self._debug_player_id}:{self._waveform_generation}')
-        job.signals.ready.connect(self._waveform_ready, Qt.ConnectionType.QueuedConnection)
-        QThreadPool.globalInstance().start(job)
+        self._waveform_read_plan = replace_purpose(read_plan, ReadPurpose.WAVEFORM) if read_plan else None
+        if read_plan is None:
+            self._start_waveform(None)
         requested_position = max(0, int(position_ms))
         self._pending_seek_generation = self._pending_seek.request(requested_position)
         self._pending_autoplay = bool(autoplay and requested_position > 0)
@@ -440,7 +523,10 @@ class PlayerBar(QWidget):
         self._pending_source_changed = False
         self._pending_seek_retry_count = 0
         self._pending_seek_retry_scheduled = False
-        source_url = QUrl.fromLocalFile(str(self.current_path.resolve()))
+        if read_plan is None:
+            source_url = QUrl.fromLocalFile(str(self.current_path.resolve()))
+        else:
+            source_url = QUrl.fromLocalFile(str(self.current_path))
         self._pending_source_url = source_url
         if not keep_display:
             self._cancel_cover_request()
@@ -454,6 +540,14 @@ class PlayerBar(QWidget):
             self._cover_pixmap = QPixmap()
             self.surface.set_cover_pixmap(QPixmap())
         self._debug('player.source.enter', source=source_url.toString())
+        self._read_pending = read_plan is not None
+        if read_plan is not None:
+            self.player.stop(); self.player.setSource(QUrl())
+            self._read_position_ms, self._read_autoplay = requested_position, autoplay
+            task = ReadTask(read_plan, lambda _path: None, self._read_cancel)
+            task.signals.ready.connect(self._playback_read_ready, Qt.ConnectionType.QueuedConnection)
+            QThreadPool.globalInstance().start(task)
+            return
         self.player.setSource(source_url)
         self._debug('player.source.done')
         if requested_position <= 0:
@@ -462,12 +556,51 @@ class PlayerBar(QWidget):
                 self.player.play()
 
     @Slot(int, object)
+    def _playback_read_ready(self, generation, result):
+        if not self.accepts_read_result(result.resolution):
+            return
+        self._read_pending = False
+        if not result.resolution.is_verified:
+            self.current_path = None
+            self._clear_pending_seek_state()
+            return
+        self.current_path = Path(result.resolution.locator)
+        self._playback_resolution = result.resolution
+        self._start_waveform(replace_purpose(result.resolution, ReadPurpose.WAVEFORM))
+        source_url = QUrl.fromLocalFile(str(self.current_path))
+        self._pending_source_url = source_url
+        self.player.setSource(source_url)
+        if self._read_position_ms <= 0:
+            self._clear_pending_seek_state()
+            if self._read_autoplay:
+                self.player.play()
+
+    def _start_waveform(self, plan):
+        job = WaveformJob(self.current_path, self._waveform_generation, self._waveform_cancel,
+                          job_id=f'{self._debug_player_id}:{self._waveform_generation}', read_plan=plan)
+        self._waveform_read_plan = plan
+        job.signals.ready.connect(self._waveform_ready, Qt.ConnectionType.QueuedConnection)
+        QThreadPool.globalInstance().start(job)
+
+    @Slot(int, object)
     def _waveform_ready(self, generation, peaks):
+        result = peaks if isinstance(peaks, ReadResult) else None
+        if result is not None:
+            playback = getattr(self, '_playback_resolution', None)
+            if (not result.resolution.is_verified or playback is None
+                    or not self.accepts_read_result(result.resolution)
+                    or result.resolution.kind != playback.kind
+                    or result.resolution.locator != playback.locator
+                    or result.resolution.material_identity != playback.material_identity):
+                return
+            peaks = result.value or []
         crash_debug.record('player.waveform.accept' if generation == self._waveform_generation
                            else 'player.waveform.discard.stale', player_id=self._debug_player_id,
                            generation=generation, current_generation=self._waveform_generation,
                            job_id=f'{self._debug_player_id}:{generation}', peaks=len(peaks))
-        if generation == self._waveform_generation:
+        plan = getattr(self, '_waveform_read_plan', None)
+        if (not self._closed and generation == self._waveform_generation
+                and (plan is None or self.accepts_read_result(plan))):
             self.seek.set_peaks(peaks)
             self.waveform_changed.emit(peaks)
 
@@ -475,6 +608,10 @@ class PlayerBar(QWidget):
         if self.current_path is None:
             self.meta.setText(ui_text(self, 'Najpierw wybierz utwór w Bibliotece lub Duplikatach.'))
             self.playback_status.setText(ui_text(self, 'Brak wybranego utworu'))
+            return
+        if self._read_pending:
+            self._read_autoplay = not self._read_autoplay
+            self._pending_autoplay = bool(self._read_autoplay and self._read_position_ms > 0)
             return
         if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.player.pause()
@@ -540,6 +677,8 @@ class PlayerBar(QWidget):
 
     def _media_status(self, status):
         self._debug('player.media.status', status=str(status))
+        if self._closed or self._read_pending or status != self.player.mediaStatus():
+            return
         if status in (QMediaPlayer.MediaStatus.LoadedMedia, QMediaPlayer.MediaStatus.BufferedMedia):
             if status != self.player.mediaStatus():
                 return
@@ -589,11 +728,17 @@ class PlayerBar(QWidget):
         if choice in {'auto', 'manual'} and track.manual_cover_path:
             pix = QPixmap(track.manual_cover_path)
         manual_ready = not pix.isNull()
-        if pix.isNull():
+        plan = self.read_plan(track, ReadPurpose.COVER_READ)
+        if pix.isNull() and plan is None:
             embedded = extract_embedded_cover(track.path)
             if embedded:
                 pix.loadFromData(embedded[0])
         self._set_cover_image(pix)
+        if pix.isNull() and plan is not None and plan.locator is not None:
+            self._embedded_cover_serial = serial
+            task = ReadTask(plan, extract_embedded_cover, self._read_cancel)
+            task.signals.ready.connect(self._embedded_cover_ready, Qt.ConnectionType.QueuedConnection)
+            QThreadPool.globalInstance().start(task)
         if choice == 'source' or (choice == 'auto' and manual_ready):
             return
         url = track.cover_art_url or (
@@ -602,19 +747,37 @@ class PlayerBar(QWidget):
         )
         if choice not in {'auto', 'external'} or not url:
             return
+        if plan is not None and plan.locator is None and choice != 'external':
+            return
         request = QNetworkRequest(QUrl(url))
         request.setHeader(QNetworkRequest.KnownHeaders.UserAgentHeader, f'ALO Music/{__version__}')
         reply = self._cover_network.get(request)
         self._cover_reply = reply
-        reply.finished.connect(lambda r=reply, s=serial, p=Path(track.path), u=url:
-                               self._remote_cover_finished(r, s, p, u))
+        guard = plan.guard_key if plan else None
+        reply.finished.connect(lambda r=reply, s=serial, p=Path(track.path), u=url, g=guard:
+                               self._remote_cover_finished(r, s, p, u, g))
 
-    def _remote_cover_finished(self, reply: QNetworkReply, serial: int, path: Path, url: str) -> None:
+    @Slot(int, object)
+    def _embedded_cover_ready(self, generation, result):
+        if (not self.accepts_read_result(result.resolution)
+                or not result.resolution.is_verified
+                or self._embedded_cover_serial != self._cover_request_serial
+                or self._cover_loaded_url is not None or not result.value):
+            return
+        pix = QPixmap(); pix.loadFromData(result.value[0])
+        if not pix.isNull():
+            self._set_cover_image(pix)
+
+    def _remote_cover_finished(self, reply: QNetworkReply, serial: int, path: Path, url: str, guard=None) -> None:
         try:
-            if serial != self._cover_request_serial or self.current_track is None:
+            if self._closed or serial != self._cover_request_serial or self.current_track is None:
                 return
-            if Path(self.current_track.path).resolve() != path.resolve():
+            if Path(self.current_track.path) != path:
                 return
+            if guard is not None:
+                current = self.read_plan(self.current_track, ReadPurpose.COVER_READ)
+                if current is None or current.guard_key != guard:
+                    return
             if reply.error() != QNetworkReply.NetworkError.NoError:
                 return
             pix = QPixmap()
@@ -668,7 +831,13 @@ class PlayerBar(QWidget):
             autoplay = self._pending_autoplay
             self._clear_pending_seek_state()
             if autoplay:
-                QTimer.singleShot(0, self.player.play)
+                generation = self._waveform_generation
+                source = self.player.source()
+                QTimer.singleShot(0, self, lambda: self._play_after_seek(generation, source))
+
+    def _play_after_seek(self, generation, source):
+        if not self._closed and generation == self._waveform_generation and self.player.source() == source:
+            self.player.play()
 
     def _error(self, _error, text: str):
         self._debug('player.error', error=str(_error), text=text)
@@ -710,6 +879,7 @@ class CompactPlayerBar(QFrame):
         super().__init__(parent)
         self.player_bar = player_bar
         self.track = track
+        self.library_id = player_bar._read_context.library_id if player_bar._read_context else ''
         self.setObjectName('CompactPlayerBar')
         self.setFixedHeight(74)
 
@@ -739,9 +909,9 @@ class CompactPlayerBar(QFrame):
         selected = QPixmap(track.manual_cover_path) if choice in {'auto', 'manual'} and track.manual_cover_path else QPixmap()
         if choice in {'external', 'auto'} and self.player_bar.current_track is not None:
             loaded_url = self.player_bar._cover_loaded_url
-            if loaded_url and loaded_url == track.cover_art_url and Path(self.player_bar.current_track.path).resolve() == Path(track.path).resolve():
+            if loaded_url and loaded_url == track.cover_art_url and self._is_edited_track_loaded():
                 selected = self.player_bar._cover_pixmap
-        if choice != 'placeholder' and selected.isNull():
+        if choice != 'placeholder' and selected.isNull() and self.player_bar._read_context is None:
             embedded = extract_embedded_cover(track.path)
             if embedded:
                 selected.loadFromData(embedded[0])
@@ -760,10 +930,13 @@ class CompactPlayerBar(QFrame):
         current = self.player_bar.current_path
         if current is None:
             return False
-        try:
-            return current.resolve() == Path(self.track.path).resolve()
-        except OSError:
-            return current == Path(self.track.path)
+        context = self.player_bar._read_context
+        if self.library_id != (context.library_id if context else ''):
+            return False
+        loaded = self.player_bar.current_track
+        if loaded is not None and (loaded.track_id or self.track.track_id):
+            return track_identity(loaded, self.library_id) == track_identity(self.track, self.library_id)
+        return current == Path(self.track.path)
 
     def _toggle(self):
         if not self._is_edited_track_loaded():

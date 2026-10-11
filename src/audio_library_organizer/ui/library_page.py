@@ -4,8 +4,9 @@ from html import escape
 from math import isfinite
 from pathlib import Path
 from weakref import ref
+from threading import Event
 
-from PySide6.QtCore import Qt, Signal, QUrl, QStringListModel, QItemSelectionModel, QSignalBlocker, QEvent, QTimer, QRect, QSize
+from PySide6.QtCore import Qt, Signal, Slot, QUrl, QStringListModel, QItemSelectionModel, QSignalBlocker, QEvent, QTimer, QRect, QSize, QThreadPool
 from PySide6.QtGui import QStandardItem, QStandardItemModel, QPixmap, QColor, QBrush, QPen, QPainter, QDesktopServices, QIcon
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from PySide6.QtWidgets import (
@@ -18,8 +19,10 @@ from PySide6.QtWidgets import (
 from audio_library_organizer import __version__
 from audio_library_organizer import crash_debug
 from audio_library_organizer.domain.models import TrackRecord
+from audio_library_organizer.jobs.managed_files import track_identity, lexical_locator, ReadPurpose, resolve_read_path, local_read_plan
 from audio_library_organizer.duplicates.families import group_version_families
-from audio_library_organizer.metadata.artwork import extract_embedded_cover
+from audio_library_organizer.metadata.artwork import extract_embedded_cover, read_artwork_bytes
+from audio_library_organizer.ui.workers import ReadTask
 from audio_library_organizer.metadata.online_lock import is_online_locked
 from audio_library_organizer.metadata.genre import genre_items, primary_genre
 from audio_library_organizer.ui.state import (
@@ -735,28 +738,49 @@ class LibraryPage(QWidget):
 
     def set_tracks(self, tracks: list[TrackRecord]):
         self._tracks = tracks
-        self._checked_paths.clear()
+        keep_identity = any(track.track_id for track in tracks)
+        if not keep_identity:
+            self._checked_paths.clear()
         self._sync_format_options()
         self._version_family_by_path = {}
         for family in group_version_families(tracks):
             for member in family:
-                try:
-                    key = str(Path(member.path).resolve()).casefold()
-                except OSError:
-                    key = str(member.path).casefold()
+                key = self._path_key(member)
                 self._version_family_by_path[key] = family
         self._update_genre_suggestions()
-        self.refresh(preserve_order=True, clear_checks=True)
-        self.table.selectionModel().clearSelection()
+        self.refresh(preserve_order=True, clear_checks=not keep_identity)
+        if not keep_identity:
+            self.table.selectionModel().clearSelection()
 
-    @staticmethod
-    def _path_key(track: TrackRecord | None) -> str | None:
-        if track is None:
-            return None
-        try:
-            return str(Path(track.path).resolve()).casefold()
-        except OSError:
-            return str(track.path).casefold()
+    def set_read_context(self, context):
+        previous = getattr(self, '_read_context', None)
+        if context == previous:
+            return
+        self._read_context = context
+        self._cover_request_serial += 1
+        if hasattr(self, '_cover_cancel'):
+            self._cover_cancel.set()
+        if previous is not None and (context is None or previous.library_id != context.library_id):
+            self._checked_paths.clear()
+            self._playing_path = None
+            self.table.selectionModel().clearSelection()
+
+    def closeEvent(self, event):
+        self._cover_request_serial += 1
+        if hasattr(self, '_cover_cancel'):
+            self._cover_cancel.set()
+        super().closeEvent(event)
+
+    def _cover_read_plan(self, track):
+        context = getattr(self, '_read_context', None)
+        if context is not None:
+            return resolve_read_path(track, context, ReadPurpose.COVER_READ,
+                                     generation=self._cover_request_serial)
+        return local_read_plan(track.path, ReadPurpose.COVER_READ, generation=self._cover_request_serial)
+
+    def _path_key(self, track: TrackRecord | None) -> str | None:
+        context = getattr(self, '_read_context', None)
+        return track_identity(track, context.library_id if context else '')
 
     def _capture_view_state(self) -> dict:
         header = self.table.horizontalHeader()
@@ -994,10 +1018,7 @@ class LibraryPage(QWidget):
     def _track_is_playing(self, track: TrackRecord) -> bool:
         if not self._playing_path:
             return False
-        try:
-            return str(Path(track.path).resolve()).casefold() == self._playing_path
-        except OSError:
-            return str(track.path).casefold() == self._playing_path
+        return self._path_key(track) == self._playing_path
 
     def set_playing_track(self, track: TrackRecord | None):
         new_path = self._path_key(track)
@@ -1062,14 +1083,14 @@ class LibraryPage(QWidget):
     def _play_selected(self, _index=None):
         track = self._current_track()
         if track:
-            crash_debug.record('library.play.request', **crash_debug.track_context(track.path))
+            crash_debug.record('library.play.request', path=str(track.path), track_id=track.track_id)
             self.play_requested.emit(track)
 
     def _show_detail(self, *_):
         t = self._current_track()
         if not t:
             return
-        crash_debug.record('library.selection.enter', **crash_debug.track_context(t.path))
+        crash_debug.record('library.selection.enter', path=str(t.path), track_id=t.track_id)
         self.track_selected.emit(t)
         self.detail_labels['artist'].setText(t.artist or '—')
         self.detail_labels['title'].setText(t.title or '—')
@@ -1084,10 +1105,7 @@ class LibraryPage(QWidget):
         self.detail_labels['duration'].setText('—' if t.duration_seconds is None else f'{int(t.duration_seconds)//60}:{int(t.duration_seconds)%60:02d}')
         self.detail_labels['size'].setText('—' if not t.size_bytes else f'{t.size_bytes / (1024 * 1024):.1f} MB')
 
-        try:
-            family_key = str(Path(t.path).resolve()).casefold()
-        except OSError:
-            family_key = str(t.path).casefold()
+        family_key = self._path_key(t)
         family = self._version_family_by_path.get(family_key, [])
         self.version_family_card.setVisible(len(family) > 1)
         if len(family) > 1:
@@ -1143,7 +1161,7 @@ class LibraryPage(QWidget):
             detail_field.setProperty('complete', complete[key])
             detail_field.style().unpolish(detail_field); detail_field.style().polish(detail_field)
         self._load_cover(t)
-        crash_debug.record('library.selection.done', **crash_debug.track_context(t.path))
+        crash_debug.record('library.selection.done', path=str(t.path), track_id=t.track_id)
 
     @staticmethod
     def _external_cover_url(track: TrackRecord) -> str | None:
@@ -1155,19 +1173,47 @@ class LibraryPage(QWidget):
 
     def _load_cover(self, track: TrackRecord):
         self._cover_request_serial += 1; serial = self._cover_request_serial
+        if hasattr(self, '_cover_cancel'):
+            self._cover_cancel.set()
+        self._cover_cancel = Event()
+        self.destroyed.connect(self._cover_cancel.set)
+        self._cover_track_key = self._path_key(track)
+        self._cover_plan = self._cover_read_plan(track)
         choice = (track.cover_choice or 'auto').casefold()
         if choice == 'placeholder':
             self._set_cover_pixmap(QPixmap(str(asset_path(localized_no_cover_name(self)))), 'Brak potwierdzonej okładki — grafika zastępcza ALO Music.')
             return
-        if track.manual_cover_path and Path(track.manual_cover_path).is_file() and choice in {'auto', 'manual'}:
-            self._set_cover_pixmap(QPixmap(track.manual_cover_path), 'Okładka wybrana ręcznie.')
+        if track.manual_cover_path and choice in {'auto', 'manual'}:
+            self._set_cover_pixmap(QPixmap(), 'Okładka wybrana ręcznie.')
+            plan = local_read_plan(Path(track.manual_cover_path), ReadPurpose.COVER_READ, generation=serial)
+            task = ReadTask(plan, read_artwork_bytes, self._cover_cancel)
+            task.signals.ready.connect(self._manual_cover_ready, Qt.ConnectionType.QueuedConnection)
+            QThreadPool.globalInstance().start(task)
             return
+        self._load_external_or_source_cover(track, serial)
+
+    def _load_external_or_source_cover(self, track, serial):
+        choice = (track.cover_choice or 'auto').casefold()
         if choice != 'source':
             external_url = self._external_cover_url(track)
-            if external_url:
+            if external_url and (self._cover_plan.locator is not None or choice == 'external'):
                 self._cover_pixmap = QPixmap(); self.cover.setPixmap(QPixmap()); self.cover.setText(ui_text(self, 'Ładowanie…'))
                 self._load_remote_cover(track, external_url, serial); return
         self._show_source_cover_fallback(track, 'Okładka źródłowa / zapasowa.')
+
+    @Slot(int, object)
+    def _manual_cover_ready(self, serial, result):
+        track = self._current_track()
+        if (serial != self._cover_request_serial or self._path_key(track) != self._cover_track_key
+                or track is None or result.resolution.locator != track.manual_cover_path):
+            return
+        pix = QPixmap()
+        if result.resolution.is_verified and result.value:
+            pix.loadFromData(result.value)
+        if not pix.isNull():
+            self._set_cover_pixmap(pix, 'Okładka wybrana ręcznie.')
+        else:
+            self._load_external_or_source_cover(track, serial)
 
     def _load_remote_cover(self, track: TrackRecord, url: str, serial: int):
         request = QNetworkRequest(QUrl(url)); request.setHeader(QNetworkRequest.KnownHeaders.UserAgentHeader, f'ALO Music/{__version__}')
@@ -1175,7 +1221,8 @@ class LibraryPage(QWidget):
 
     def _remote_cover_finished(self, reply: QNetworkReply, track: TrackRecord, serial: int):
         try:
-            if serial != self._cover_request_serial or self._current_track() is not track:
+            if (serial != self._cover_request_serial or self._path_key(self._current_track()) != self._path_key(track)
+                    or self._cover_read_plan(track).guard_key != self._cover_plan.guard_key):
                 return
             if reply.error() == QNetworkReply.NetworkError.NoError:
                 pix = QPixmap(); pix.loadFromData(bytes(reply.readAll()))
@@ -1186,10 +1233,26 @@ class LibraryPage(QWidget):
             reply.deleteLater()
 
     def _show_source_cover_fallback(self, track: TrackRecord, note: str):
-        pix = QPixmap(); embedded = extract_embedded_cover(track.path)
-        if embedded:
-            pix.loadFromData(embedded[0]); self._set_cover_pixmap(pix, note); return
         self._set_cover_pixmap(QPixmap(str(asset_path(localized_no_cover_name(self)))), 'Brak potwierdzonej okładki — grafika zastępcza ALO Music.')
+        plan = self._cover_read_plan(track)
+        if plan.locator is not None:
+            self._embedded_cover_note = note
+            task = ReadTask(plan, extract_embedded_cover, self._cover_cancel)
+            task.signals.ready.connect(self._source_cover_ready, Qt.ConnectionType.QueuedConnection)
+            QThreadPool.globalInstance().start(task)
+
+    @Slot(int, object)
+    def _source_cover_ready(self, serial, result):
+        track = self._current_track()
+        if serial != self._cover_request_serial or self._path_key(track) != self._cover_track_key or track is None:
+            return
+        plan = self._cover_read_plan(track)
+        if result.resolution.guard_key not in {plan.guard_key, plan.fallback.guard_key if plan.fallback else None}:
+            return
+        if result.resolution.is_verified and result.value:
+            pix = QPixmap(); pix.loadFromData(result.value[0])
+            if not pix.isNull():
+                self._set_cover_pixmap(pix, self._embedded_cover_note)
 
     def _set_cover_pixmap(self, pix: QPixmap, note: str):
         self._cover_pixmap = pix; self._cover_note = note
@@ -1222,10 +1285,10 @@ class LibraryPage(QWidget):
         self.family_arrow.setIcon(library_icon('collapse' if checked else 'expand', '#a8bdca', 15))
 
     def select_track_by_path(self, path: Path) -> bool:
-        target = str(Path(path).resolve()).casefold()
+        target = lexical_locator(path)
         for row in range(self.model.rowCount()):
             item = self.model.item(row, 0); candidate = item.data(Qt.ItemDataRole.UserRole) if item else None
-            if candidate is not None and str(Path(candidate.path).resolve()).casefold() == target:
+            if candidate is not None and lexical_locator(candidate.path) == target:
                 self.table.clearSelection(); index = self.model.index(row, 0)
                 self.table.setCurrentIndex(index); self.table.selectRow(row); self.table.scrollTo(index, QAbstractItemView.ScrollHint.PositionAtCenter)
                 if not self.details_btn.isChecked():
@@ -1235,10 +1298,10 @@ class LibraryPage(QWidget):
         return False
 
     def select_track(self, track: TrackRecord):
-        target = str(Path(track.path).resolve()).casefold()
+        target = self._path_key(track)
         for row in range(self.model.rowCount()):
             item = self.model.item(row, 0); candidate = item.data(Qt.ItemDataRole.UserRole) if item else None
-            if candidate is not None and str(Path(candidate.path).resolve()).casefold() == target:
+            if candidate is not None and self._path_key(candidate) == target:
                 self.table.clearSelection(); index = self.model.index(row, 0); self.table.setCurrentIndex(index); self.table.selectRow(row)
                 self.table.scrollTo(index, QAbstractItemView.ScrollHint.PositionAtCenter)
                 if not self.details_btn.isChecked():

@@ -45,7 +45,9 @@ from audio_library_organizer.storage.library_profiles import LibraryRegistry
 from audio_library_organizer.duplicates.grouper import apply_duplicate_decision, duplicate_group_count
 from audio_library_organizer.metadata.manual_edits import apply_manual_field, approve_as_ready
 from audio_library_organizer.metadata.online_lock import set_online_locked
-from audio_library_organizer.metadata.change_history import ChangeHistory
+from audio_library_organizer.metadata.change_history import ChangeHistory, metadata_changes, metadata_revision
+from audio_library_organizer.jobs.managed_files import ReadContext, ReadPurpose, SourceReadMaterial, track_identity, source_material_revision
+from shiboken6 import isValid
 from audio_library_organizer.metadata.naming import (
     DEFAULT_FILENAME_TEMPLATE, propose_filename, filename_fields_from_template, template_from_filename_fields,
 )
@@ -854,8 +856,11 @@ class MainWindow(QMainWindow):
         self.repository = LibraryRepository(self.app_settings.library.database); self.repository.initialize()
         self.availability = self.repository.sync_availability()
         self.service = LibraryService(self.app_settings, self.repository)
-        self.change_history = ChangeHistory()
+        self.change_history = ChangeHistory(library_id=self.repository.library_id)
+        self._identification_generation = 0
+        self._read_context = None
         self._thread = None; self._worker = None; self._pending_auto_identify = False; self._operation_kind = 'idle'; self._identification_was_cancelled = False; self._active_scan_source_dirs = None
+        self._identification_closing = False
         self._active_metadata_editor = None
         self._file_check_generation = 0
         self._file_check_context = None
@@ -1216,6 +1221,9 @@ class MainWindow(QMainWindow):
         self._show_operation(f'Biblioteka „{profile.name}” została wyzerowana. Możesz dodać nowe pliki do skanowania.')
 
     def _rebind_active_profile(self, profile, *, repository=None, availability=None):
+        self._identification_generation += 1
+        if isinstance(self._worker, (IdentificationWorker, AudioIdentificationWorker)):
+            self._worker.cancel()
         self._file_check_generation += 1
         if isinstance(self._worker, FileReconciliationWorker):
             self._worker.cancel()
@@ -1228,7 +1236,7 @@ class MainWindow(QMainWindow):
         self.repository = repository
         self.availability = self.repository.sync_availability() if availability is None else availability
         self.service = LibraryService(self.app_settings, self.repository)
-        self.change_history = ChangeHistory()
+        self.change_history = ChangeHistory(library_id=self.repository.library_id)
         self.library.set_history_provider(self.change_history.history_for)
         self.dashboard.set_library(self.app_settings, profile.name)
         self.collections.set_library(self._collections_library_for_active())
@@ -1554,6 +1562,12 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _stop_file_check_on_quit(self):
+        if isinstance(self._worker, (IdentificationWorker, AudioIdentificationWorker)):
+            self._identification_closing = True
+            self._identification_generation += 1
+            self._worker.cancel()
+            self._thread.quit()
+            self._thread.wait()
         if isinstance(self._worker, FileReconciliationWorker):
             self._file_check_closing = True
             self._file_check_generation += 1
@@ -1570,7 +1584,13 @@ class MainWindow(QMainWindow):
 
     def _activate_player_track(self, track):
         self._navigate(1)
-        self.library.select_track(track)
+        self._select_saved_track(track)
+
+    def _select_saved_track(self, track):
+        if track.track_id:
+            self.library.select_track(track)
+        else:
+            self.library.select_track_by_path(track.path)
 
     def _create_collection_from_tracks(self, tracks):
         available = [track for track in tracks if track.is_available and Path(track.path).is_file()]
@@ -1600,9 +1620,13 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, self._t('Folder utworzony'), self._t(f'Utworzono folder z {copied} plikami w MOJE_FOLDERY_MP3.'))
 
     def _apply_manual_field(self, tracks, field_name: str, value, lock: bool):
-        self.change_history.record(tracks, f'Zmiana pola {field_name}')
-        apply_manual_field(tracks, field_name, value, lock=lock)
-        for track in tracks: self.repository.upsert_track(track)
+        current = [self.repository.get_track(t.track_id) for t in tracks]
+        current = [t for t in current if t is not None]
+        self.change_history.record(current, f'Zmiana pola {field_name}')
+        for track in current:
+            before = deepcopy(track)
+            apply_manual_field([track], field_name, value, lock=lock)
+            self._commit_track_metadata(before, track)
         self.refresh_data(); self._show_operation(f'Zmieniono {field_name} dla {len(tracks)} utworów. Ręczna wartość jest chroniona przed automatycznym nadpisaniem.')
 
     def _open_metadata_editor(self, track, *, duplicate_context: bool = False):
@@ -1614,10 +1638,7 @@ class MainWindow(QMainWindow):
             navigation_tracks = [track]
 
         def path_key(item):
-            try:
-                return str(Path(item.path).resolve()).casefold()
-            except OSError:
-                return str(item.path).casefold()
+            return track_identity(item, self.repository.library_id)
 
         wanted = path_key(track)
         current_index = next(
@@ -1641,6 +1662,7 @@ class MainWindow(QMainWindow):
                     name_rules=self.preferences.name_rules,
                     navigation_index=current_index,
                     navigation_total=len(navigation_tracks),
+                    read_context=self._read_context,
                 )
                 if previous_geometry is not None:
                     dialog.setGeometry(previous_geometry)
@@ -1651,7 +1673,7 @@ class MainWindow(QMainWindow):
                 )
                 dialog.ready_requested.connect(
                     lambda editor, ready, target=current_track: self._set_ready_from_editor(
-                        target, ready, duplicate_context=duplicate_context
+                        target, ready, duplicate_context=duplicate_context, editor=editor
                     )
                 )
                 dialog.online_scan_requested.connect(
@@ -1675,7 +1697,7 @@ class MainWindow(QMainWindow):
                     break
                 current_index += delta
                 if not duplicate_context:
-                    self.library.select_track_by_path(navigation_tracks[current_index].path)
+                    self.library.select_track(navigation_tracks[current_index])
         finally:
             self._active_metadata_editor = None
 
@@ -1683,6 +1705,31 @@ class MainWindow(QMainWindow):
     def _copy_track_state(target: TrackRecord, source: TrackRecord) -> None:
         for field_name in TrackRecord.__dataclass_fields__:
             setattr(target, field_name, deepcopy(getattr(source, field_name)))
+
+    def _fresh_metadata_target(self, track):
+        if track.track_id is None:
+            # Existing standalone editor callers register their record on save.
+            self.repository.upsert_track(track)
+        current = self.repository.get_track(track.track_id)
+        if current is None:
+            raise ValueError('Metadata record no longer exists.')
+        self._copy_track_state(track, current)
+        return deepcopy(current)
+
+    def _commit_track_metadata(self, before, track):
+        saved = self.repository.save_metadata(track.track_id, metadata_changes(before, track),
+            expected_revision=metadata_revision(before), library_id=self.change_history.library_id)
+        self._copy_track_state(track, saved)
+
+    def _identification_context_current(self, repository, library_id, generation):
+        return (isValid(self) and not self._identification_closing and self.repository is repository
+                and self.repository.library_id == library_id
+                and generation == self._identification_generation)
+
+    def _editor_request_current(self, repository, library_id, editor, request, generation):
+        return (self._identification_context_current(repository, library_id, generation) and isValid(editor)
+                and self._active_metadata_editor in (None, editor)
+                and editor.accepts_async_result(request))
 
     def _start_single_track_identification(self, track: TrackRecord, editor: MetadataEditorDialog):
         if self._thread is not None:
@@ -1701,31 +1748,38 @@ class MainWindow(QMainWindow):
             )
             return
         editor.set_online_scan_busy(True)
+        self._identification_generation += 1
+        generation = self._identification_generation
+        repository, library_id = self.repository, self.repository.library_id
+        request = editor.begin_async_request(ReadPurpose.METADATA_EDITOR_READ)
         self._set_action_highlight(self.identify_btn)
         self._set_operation_state('online', 'ROZPOZNAWANIE JEDNEGO UTWORU', f'Online: {track.filename}')
         self._set_busy(True, f'Rozpoznawanie online tylko: {track.filename}', kind='online')
         job = IdentificationJob(self.repository, self._build_identifier(), tracks=[track], force=True)
         thread = QThread(self); worker = IdentificationWorker(job); worker.moveToThread(thread)
         thread.started.connect(worker.run)
-        worker.progress.connect(self._identify_progress)
-        worker.finished.connect(lambda result, t=track, e=editor: self._single_track_identification_finished(result, t, e))
-        worker.failed.connect(lambda message, e=editor: self._single_track_identification_failed(message, e))
+        worker.progress.connect(lambda current, total, name: self._identify_progress(current, total, name)
+                                if self._editor_request_current(repository, library_id, editor, request, generation) else None,
+                                Qt.ConnectionType.QueuedConnection)
+        worker.finished.connect(lambda result, t=track, e=editor: self._single_track_identification_finished(result, t, e)
+                                if self._editor_request_current(repository, library_id, e, request, generation) else None)
+        worker.failed.connect(lambda message, e=editor: self._single_track_identification_failed(message, e)
+                              if self._editor_request_current(repository, library_id, e, request, generation) else None)
+        editor.finished.connect(worker._cancelled.set)
+        editor.destroyed.connect(worker._cancelled.set)
         worker.finished.connect(thread.quit); worker.failed.connect(thread.quit)
         thread.finished.connect(worker.deleteLater); thread.finished.connect(thread.deleteLater); thread.finished.connect(self._thread_done)
+        thread.finished.connect(lambda: editor.set_online_scan_busy(False)
+                                if isValid(editor) and not editor._read_closed else None)
         self._thread = thread; self._worker = worker; thread.start()
 
     def _single_track_identification_finished(self, result, track: TrackRecord, editor: MetadataEditorDialog):
-        fresh = None
-        wanted = str(Path(track.path).resolve()).casefold()
-        for candidate in self.repository.list_tracks():
-            if str(Path(candidate.path).resolve()).casefold() == wanted:
-                fresh = candidate
-                break
+        fresh = self.repository.get_track(track.track_id)
         if fresh is not None:
             self._copy_track_state(track, fresh)
         editor.apply_online_result(track)
         self.refresh_data()
-        self.library.select_track_by_path(track.path)
+        self.library.select_track(track)
         if result.errors:
             detail = f'Rozpoznawanie {track.filename}: błąd providerów — sprawdź komunikat w danych utworu.'
             self._set_operation_state('error', 'ROZPOZNAWANIE WYMAGA UWAGI', detail)
@@ -1745,34 +1799,64 @@ class MainWindow(QMainWindow):
             editor.show_audio_error('Najpierw zakończ bieżącą operację.')
             return
         editor.start_audio_lookup(wait_for_thread=True)
+        self._identification_generation += 1
+        generation = self._identification_generation
+        repository, library_id = self.repository, self.repository.library_id
+        request = editor.begin_async_request(ReadPurpose.AUDIO_IDENTIFICATION)
         cfg = ProviderSettings.from_store(self.qt_settings)
         job = AudioIdentification(AcoustIDClient(cfg.acoustid_key),
-                                  musicbrainz_client=MusicBrainzClient(cfg.musicbrainz_contact))
+                                  musicbrainz_client=MusicBrainzClient(cfg.musicbrainz_contact),
+                                  read_context=self._read_context if track.track_id else None)
         thread = QThread(self)
         worker = AudioIdentificationWorker(job, track)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
-        worker.phase.connect(editor.set_audio_phase)
-        worker.finished.connect(editor.show_audio_candidates)
-        worker.failed.connect(editor.show_audio_error)
+        current = lambda: self._editor_request_current(repository, library_id, editor, request, generation)
+        worker.phase.connect(lambda phase: editor.set_audio_phase(phase) if current() else None)
+        def finished(hits):
+            if current():
+                editor._audio_candidates_request = request
+                editor.show_audio_candidates(hits)
+        worker.finished.connect(finished)
+        worker.failed.connect(lambda message: editor.show_audio_error(message) if current() else None)
         worker.finished.connect(thread.quit)
         worker.failed.connect(thread.quit)
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
         thread.finished.connect(self._thread_done)
-        thread.finished.connect(editor.finish_audio_lookup)
+        thread.finished.connect(lambda: editor.finish_audio_lookup() if isValid(editor) and not editor._read_closed else None)
+        editor.finished.connect(worker._cancelled.set)
+        editor.destroyed.connect(worker._cancelled.set)
         self._thread = thread
         self._worker = worker
         self._set_busy(True, self._t('Rozpoznawanie po audio…'), kind='audio')
         thread.start()
 
     def _save_audio_source(self, track: TrackRecord, previous: TrackRecord) -> None:
+        if previous.track_id is None:
+            self.repository.upsert_track(previous)
+            track.track_id = previous.track_id
+        current = self.repository.get_track(track.track_id)
+        if current is None:
+            return
+        changes = metadata_changes(previous, track)
+        try:
+            saved = self.repository.save_metadata(track.track_id, changes,
+                expected_revision=metadata_revision(previous), library_id=self.change_history.library_id,
+                expected_source=(str(previous.path), previous.source_id, previous.source_relative_path),
+                expected_material_revision=source_material_revision(previous))
+        except ValueError:
+            self._copy_track_state(track, current)
+            return
         self.change_history.record([previous], 'Zatwierdzenie źródła audio')
-        self.repository.upsert_track(track)
+        self._copy_track_state(track, saved)
         self.refresh_data()
-        self.library.select_track_by_path(track.path)
+        self.library.select_track(track)
 
     def _save_metadata_from_editor(self, track, dialog, *, duplicate_context: bool = False):
+        if dialog._read_closed or dialog.library_id not in ('', self.repository.library_id):
+            return
+        before = self._fresh_metadata_target(track)
         self.change_history.record([track], 'Edycja metadanych w Duplikatach' if duplicate_context else 'Edycja metadanych')
         sources = dialog.source_selections()
         for field_name, value in dialog.values().items():
@@ -1786,9 +1870,9 @@ class MainWindow(QMainWindow):
         set_online_locked(track, dialog.online_locked())
         if duplicate_context:
             self._keep_edited_duplicate(track)
-        self.repository.upsert_track(track)
+        self._commit_track_metadata(before, track)
         self.refresh_data()
-        self.library.select_track_by_path(track.path)
+        self.library.select_track(track)
         if duplicate_context:
             self._show_operation(f'Zapisano metadane i ustawiono ZACHOWAJ: {track.filename}')
         else:
@@ -1799,7 +1883,10 @@ class MainWindow(QMainWindow):
     def _keep_edited_duplicate(selected):
         apply_duplicate_decision(selected, 'keep')
 
-    def _set_ready_from_editor(self, track, ready: bool, *, duplicate_context: bool = False):
+    def _set_ready_from_editor(self, track, ready: bool, *, duplicate_context: bool = False, editor=None):
+        if editor is not None and (editor._read_closed or editor.library_id not in ('', self.repository.library_id)):
+            return
+        before = self._fresh_metadata_target(track)
         self.change_history.record([track], 'Oznaczenie jako GOTOWE' if ready else 'Odznaczenie jako GOTOWE')
         if ready:
             approve_as_ready(track)
@@ -1811,7 +1898,7 @@ class MainWindow(QMainWindow):
             if not ready:
                 track.status = 'review'
                 track.locked_fields.add('__status__')
-        self.repository.upsert_track(track)
+        self._commit_track_metadata(before, track)
         self.refresh_data()
         # refresh_data() already restores the selected row, visual order and scroll position.
         # Do not re-select and center the row after a status change from the metadata editor.
@@ -1822,17 +1909,19 @@ class MainWindow(QMainWindow):
         self._open_metadata_editor(track, duplicate_context=False)
 
     def _approve_track(self, track):
+        before = self._fresh_metadata_target(track)
         self.change_history.record([track], 'Zatwierdzenie jako GOTOWE')
-        approve_as_ready(track); self.repository.upsert_track(track); self.refresh_data()
+        approve_as_ready(track); self._commit_track_metadata(before, track); self.refresh_data()
         self._show_operation(f'Ręcznie zatwierdzono jako GOTOWE: {track.filename}')
 
     def _duplicate_decision(self, track, decision: str):
+        before = self._fresh_metadata_target(track)
         labels = {
             'keep': 'ZACHOWAJ', 'duplicate': 'DUPLIKAT', 'not_selected': 'NIE WYBIERAM', 'review': 'DO SPRAWDZENIA',
         }
         self.change_history.record([track], f"Decyzja w Duplikatach: {labels.get(decision, decision)}")
         apply_duplicate_decision(track, decision)
-        self.repository.upsert_track(track)
+        self._commit_track_metadata(before, track)
         self.refresh_data()
         result = library_status_text(track)
         self._show_operation(f"{track.filename}: wybrano {labels.get(decision, decision)} → Biblioteka: {result}.")
@@ -1842,14 +1931,15 @@ class MainWindow(QMainWindow):
 
     def _undo_last_change(self):
         tracks = self.repository.list_tracks()
-        action = self.change_history.undo_last(tracks)
+        before = {t.track_id: deepcopy(t) for t in tracks}
+        action = self.change_history.undo_last(tracks, library_id=self.repository.library_id)
         if action is None:
             self._show_operation('Brak ręcznych zmian do cofnięcia w tej sesji.')
             return
         for track in tracks:
-            key = str(Path(track.path).resolve()).casefold()
+            key = track_identity(track, self.repository.library_id)
             if key in action.path_keys:
-                self.repository.upsert_track(track)
+                self._commit_track_metadata(before[track.track_id], track)
         self.refresh_data()
         self._show_operation(f'Cofnięto: {action.description}')
 
@@ -1871,15 +1961,29 @@ class MainWindow(QMainWindow):
         return self.repository.list_tracks(available_only=True)
 
     def refresh_data(self):
-        all_tracks = self.repository.list_tracks()
+        snapshot = self.repository.file_check_snapshot()
+        self._read_context = ReadContext(snapshot.library_id, str(self.app_settings.library.root),
+            snapshot.sources, tuple(cached.facts for _track_id, cached in snapshot.cached),
+            source_materials=tuple(SourceReadMaterial.from_track(t) for t in snapshot.tracks))
+        self.player.set_read_context(self._read_context)
+        self.library.set_read_context(self._read_context)
+        self.duplicates.library_id = snapshot.library_id
+        all_tracks = list(snapshot.tracks)
         tracks = all_tracks
         cfg = ProviderSettings.from_store(self.qt_settings)
         template = cfg.filename_template
         for track in tracks:
             proposed = propose_filename(track, template=template)
             if track.proposed_filename != proposed:
+                before = deepcopy(track)
                 track.proposed_filename = proposed
-                self.repository.upsert_track(track)
+                try:
+                    self._commit_track_metadata(before, track)
+                except ValueError:
+                    fresh = self.repository.get_track(track.track_id)
+                    if fresh is not None:
+                        self._copy_track_state(track, fresh)
+        self.player.reconcile_tracks(tracks)
         summary = build_operation_summary(tracks)
         health = build_library_health(all_tracks)
         self._last_ui_summary, self._last_ui_health = summary, health
@@ -2003,6 +2107,10 @@ class MainWindow(QMainWindow):
 
     def _thread_done(self):
         self._thread = None; self._worker = None; self._set_busy(False)
+        if self._identification_closing:
+            self._pending_auto_identify = False
+            self.close()
+            return
         if self._pending_auto_identify:
             self._pending_auto_identify = False; self.start_identification()
             return
@@ -2027,8 +2135,16 @@ class MainWindow(QMainWindow):
         self._set_operation_state('online', 'ROZPOZNAWANIE ONLINE', 'MusicBrainz i Apple/iTunes działają bez klucza. AcoustID i Discogs są używane, jeśli je skonfigurowano.')
         self._set_busy(True, 'Rozpoznawanie online — może potrwać, ponieważ bazy mają limity zapytań…', kind='online')
         job = IdentificationJob(self.repository, self._build_identifier(), tracks=tracks)
+        self._identification_generation += 1
+        generation = self._identification_generation
+        repository, library_id = self.repository, self.repository.library_id
+        current = lambda: self._identification_context_current(repository, library_id, generation)
         thread = QThread(self); worker = IdentificationWorker(job); worker.moveToThread(thread)
-        thread.started.connect(worker.run); worker.progress.connect(self._identify_progress); worker.finished.connect(self._identify_finished); worker.failed.connect(self._job_failed)
+        thread.started.connect(worker.run)
+        worker.progress.connect(lambda done, total, name: self._identify_progress(done, total, name) if current() else None,
+                                Qt.ConnectionType.QueuedConnection)
+        worker.finished.connect(lambda result: self._identify_finished(result) if current() else None)
+        worker.failed.connect(lambda message: self._job_failed(message) if current() else None)
         worker.finished.connect(thread.quit); worker.failed.connect(thread.quit); thread.finished.connect(worker.deleteLater); thread.finished.connect(thread.deleteLater); thread.finished.connect(self._thread_done)
         self._thread = thread; self._worker = worker; thread.start()
 
@@ -2158,6 +2274,13 @@ class MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event):
+        if isinstance(self._worker, (IdentificationWorker, AudioIdentificationWorker)):
+            self._identification_closing = True
+            self._identification_generation += 1
+            self._pending_auto_identify = False
+            self._worker.cancel()
+            event.ignore()
+            return
         if isinstance(self._worker, FileReconciliationWorker):
             self._file_check_closing = True
             self._file_check_generation += 1

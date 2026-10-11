@@ -293,6 +293,10 @@ def test_historical_managed_cache_is_never_reconfirmed(tmp_path):
     facts = replace(attest(track, 10, managed=managed, managed_expected=True),
                     managed=FileObservation(track.track_id, str(managed), FileAvailability.PRESENT, 10))
     repo.save_file_facts(facts)
+    live_observation = facts.managed
+    facts = repo.get_file_state(track.track_id).facts
+    assert live_observation.is_current
+    assert facts.managed == replace(live_observation, is_current=False)
     result = api().check_library(repo, checked_at=20, managed_roots=(managed_root,))
     item = observations(result)[track.track_id]
     assert not item.evaluation.is_confirmed

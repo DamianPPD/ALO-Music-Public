@@ -12,16 +12,20 @@ from audio_library_organizer.domain.candidates import AcoustIDHit
 from audio_library_organizer.domain.models import TrackRecord
 from audio_library_organizer.providers.acoustid import AcoustIDClient
 from audio_library_organizer.providers.musicbrainz import MusicBrainzClient
+from audio_library_organizer.jobs.managed_files import ReadPurpose, resolve_read_path, read_material, recheck_read_path
 
 SOURCE = 'Rozpoznanie audio'
 
 
 class AudioIdentification:
     def __init__(self, client: AcoustIDClient, *, fingerprinter: Callable[[Path], FingerprintResult] | None = None,
-                 musicbrainz_client: MusicBrainzClient | None = None):
+                 musicbrainz_client: MusicBrainzClient | None = None, read_context=None):
         self.client = client
         self.fingerprinter = fingerprinter or fingerprint_audio
         self.musicbrainz_client = musicbrainz_client or MusicBrainzClient()
+        self.read_context = read_context
+        self.read_resolution = None
+        self.cancelled = None
 
     def lookup(self, track: TrackRecord, *, progress: Callable[[str], None] | None = None) -> list[AcoustIDHit]:
         if not self.client.client_key:
@@ -29,7 +33,15 @@ class AudioIdentification:
         if progress:
             progress('fingerprint')
         try:
-            fingerprint = self.fingerprinter(track.path)
+            if self.read_context is not None:
+                plan = resolve_read_path(track, self.read_context, ReadPurpose.AUDIO_IDENTIFICATION)
+                result = read_material(plan, self.fingerprinter, cancelled=self.cancelled)
+                self.read_resolution = result.resolution
+                if not result.resolution.is_verified:
+                    raise ValueError(result.resolution.reason_code)
+                fingerprint = result.value
+            else:
+                fingerprint = self.fingerprinter(track.path)
         except FileNotFoundError as exc:
             raise RuntimeError('Nie znaleziono fpcalc ani FFmpeg do wygenerowania fingerprintu.') from exc
         if not fingerprint.fingerprint or fingerprint.duration_seconds <= 0:
@@ -40,6 +52,8 @@ class AudioIdentification:
         # those IDs before offering results to the user; keep the AcoustID score.
         candidates = []
         for hit in self.client.lookup(fingerprint.fingerprint, fingerprint.duration_seconds):
+            if self.cancelled and self.cancelled():
+                raise InterruptedError('Audio lookup cancelled.')
             if not all((value or '').strip() for value in (hit.artist, hit.title, hit.album, hit.year)):
                 try:
                     recording = self.musicbrainz_client.get_recording(hit.recording_id)
@@ -54,6 +68,10 @@ class AudioIdentification:
             if len(candidates) == 5:
                 break
         # No final track fields or approved source change during a lookup.
+        if self.read_resolution is not None:
+            after = recheck_read_path(self.read_resolution, cancelled=self.cancelled)
+            if not after.is_verified or after.material_identity != self.read_resolution.material_identity:
+                raise ValueError('Audio material changed during lookup.')
         return candidates
 
 

@@ -130,12 +130,11 @@ def suspicious_data_reasons(track) -> list[str]:
         reasons.append('Sprzeczne dane online')
     # Technical health flags are meaningful only after an audio file has actually
     # been scanned. Synthetic/manual records may legitimately omit codec/size.
-    path = Path(getattr(track, 'path', ''))
-    has_scan_technical_data = path.is_file() and bool(
-        (getattr(track, 'size_bytes', 0) or 0) > 0
-        or getattr(track, 'duration_seconds', None) is not None
-        or getattr(track, 'codec', None)
-    )
+    # Use the record's cached scan evidence. Rendering/sorting must never probe
+    # music paths, and an offline source cannot change metadata by exists().
+    # Size alone is also present on synthetic/manual records. A cached scan
+    # timestamp distinguishes technical observations without probing the disk.
+    has_scan_technical_data = bool(getattr(track, 'is_available', True)) and (getattr(track, 'mtime_ns', 0) or 0) > 0
     if has_scan_technical_data:
         reasons.extend(file_health_reasons(track, check_filesystem=False))
     return list(dict.fromkeys(reasons))

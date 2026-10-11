@@ -17,6 +17,7 @@ from PySide6.QtWidgets import QSlider
 
 from audio_library_organizer.audio import waveform_worker
 from audio_library_organizer import crash_debug
+from audio_library_organizer.jobs.managed_files import read_material
 
 
 _DECODER_LOCK = Lock()
@@ -130,12 +131,14 @@ class WaveformSignals(QObject):
 
 
 class WaveformJob(QRunnable):
-    def __init__(self, path: Path, generation: int, cancel: Event, *, job_id: str | None = None):
+    def __init__(self, path: Path, generation: int, cancel: Event, *, job_id: str | None = None, read_plan=None):
         super().__init__()
         self.path, self.generation, self.cancel = path, generation, cancel
         self.signals = WaveformSignals()
         self.job_id = job_id or uuid4().hex
-        self._context = dict(crash_debug.track_context(path), generation=generation, job_id=self.job_id)
+        self.read_plan = read_plan
+        self._context = dict(path=str(path), track_id=read_plan.track_id if read_plan else None,
+                             generation=generation, job_id=self.job_id)
         crash_debug.record('job.created', **self._context)
 
     def run(self):
@@ -145,10 +148,18 @@ class WaveformJob(QRunnable):
             _ACTIVE_JOBS.add(self.job_id)
             crash_debug.record('job.start', **self._context, active_jobs=len(_ACTIVE_JOBS))
         try:
-            peaks = read_waveform(self.path, cancel=self.cancel, generation=self.generation, job_id=self.job_id)
+            if self.read_plan is not None:
+                result = read_material(self.read_plan, lambda path: read_waveform(
+                    path, cancel=self.cancel, generation=self.generation, job_id=self.job_id),
+                    cancelled=self.cancel.is_set)
+                peaks = result.value if result.resolution.is_verified else []
+                payload = result
+            else:
+                peaks = read_waveform(self.path, cancel=self.cancel, generation=self.generation, job_id=self.job_id)
+                payload = peaks
             if not self.cancel.is_set():
                 crash_debug.record('job.emit.enter', **self._context, peaks=len(peaks))
-                self.signals.ready.emit(self.generation, peaks)
+                self.signals.ready.emit(self.generation, payload)
                 crash_debug.record('job.emit.done', **self._context)
             else:
                 crash_debug.record('job.discard.cancelled', **self._context)

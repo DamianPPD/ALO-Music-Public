@@ -199,7 +199,9 @@ def read_file_state(conn: sqlite3.Connection, track_id: str) -> CachedFileState 
             _check_associations(facts, track)
         except ValueError:
             binding_changed = True
-    facts = replace(facts, is_current=False)
+    facts = replace(facts, is_current=False,
+                    source=replace(facts.source, is_current=False) if facts.source else None,
+                    managed=replace(facts.managed, is_current=False) if facts.managed else None)
     evaluation = evaluate_file_state(facts)
     evaluation = replace(evaluation, reason='TRACK_BINDING_CHANGED' if binding_changed else 'CACHE_REQUIRES_REVALIDATION')
     return CachedFileState(facts, evaluation, reason)

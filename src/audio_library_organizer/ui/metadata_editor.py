@@ -3,9 +3,11 @@ from __future__ import annotations
 from copy import copy, deepcopy
 from html import escape
 from pathlib import Path
+from threading import Event
+from shiboken6 import isValid
 import sys
 
-from PySide6.QtCore import Property, Qt, QTimer, QUrl, Signal, Slot, QRegularExpression, QSize, QRectF, QPoint, QPointF, QBuffer, QByteArray, QIODevice, QObject, QEvent
+from PySide6.QtCore import Property, Qt, QTimer, QUrl, Signal, Slot, QRegularExpression, QSize, QRectF, QPoint, QPointF, QBuffer, QByteArray, QIODevice, QObject, QEvent, QThreadPool
 from PySide6.QtGui import QAction, QPixmap, QIcon, QColor, QPalette, QPainter, QPen, QPolygonF, QRegularExpressionValidator, QDesktopServices, QImageReader
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
@@ -40,6 +42,9 @@ from PySide6.QtWidgets import (
 
 from audio_library_organizer import __version__, crash_debug
 from audio_library_organizer.domain.models import TrackRecord
+from audio_library_organizer.jobs.managed_files import ReadPurpose, resolve_read_path, track_identity
+from audio_library_organizer.metadata.change_history import metadata_revision
+from audio_library_organizer.ui.workers import ReadTask
 from audio_library_organizer.domain.candidates import AcoustIDHit
 from audio_library_organizer.jobs.audio_identification import SOURCE as AUDIO_SOURCE, approve_audio_source
 from audio_library_organizer.metadata.artwork import extract_embedded_cover
@@ -673,12 +678,20 @@ class MetadataEditorDialog(QDialog):
         ('placeholder', 'BRAK OKŁADKI'),
     )
 
-    def __init__(self, track: TrackRecord, parent=None, *, filename_template: str = DEFAULT_FILENAME_TEMPLATE, player_bar=None, genre_suggestions=(), normalize_names: bool = True, name_rules=None, navigation_index: int = 0, navigation_total: int = 1):
+    def __init__(self, track: TrackRecord, parent=None, *, filename_template: str = DEFAULT_FILENAME_TEMPLATE, player_bar=None, genre_suggestions=(), normalize_names: bool = True, name_rules=None, navigation_index: int = 0, navigation_total: int = 1, read_context=None):
         super().__init__(parent)
         self.setObjectName('MetadataEditorDialog')
         self._native_first_paint_pending = True
         _editor_surface_palette(self)
         self.track = track
+        self._standalone_record = track.track_id is None
+        self._read_context = None if self._standalone_record else (
+            read_context or (player_bar._read_context if player_bar is not None else None))
+        self.library_id = self._read_context.library_id if self._read_context else ''
+        self._read_cancel = Event()
+        self._read_closed = False
+        self._async_generation = 0
+        self.destroyed.connect(self._read_cancel.set)
         self.navigation_total = max(1, int(navigation_total))
         self.navigation_index = max(0, min(int(navigation_index), self.navigation_total - 1))
         self.navigation_delta = 0
@@ -1918,22 +1931,30 @@ class MetadataEditorDialog(QDialog):
             self.audio_detail.setText('  ·  '.join(details))
 
     def _approve_audio_candidate(self) -> None:
+        request = getattr(self, '_audio_candidates_request', None)
+        if request is not None and not self.accepts_async_result(request):
+            return
         index = self.audio_candidates.currentRow()
         if not 0 <= index < len(self._audio_hits):
             return
         previous = deepcopy(self.track)
         approve_audio_source(self.track, self._audio_hits[index])
+        self.audio_source_confirmed.emit(self, previous)
         self._source_values = deepcopy(self.track.field_source_values)
         for field_name in self._field_widgets:
             self._rebuild_source_menu(field_name)
         self._refresh_source_comparison()
         self._refresh_recognition_info()
+        if not self._audio_hit_is_approved(self._audio_hits[index]):
+            self.show_audio_error('Dane utworu zmieniły się. Uruchom ponownie rozpoznawanie audio.')
+            return
+        if request is not None:
+            self._audio_candidates_request = self.begin_async_request(ReadPurpose.AUDIO_IDENTIFICATION)
         self.audio_phase.setText(ui_text(self, 'Źródło audio zatwierdzone'))
         self._refresh_audio_summary()
         self.audio_summary.show()
         self.audio_candidate_content.hide()
         self.audio_phase_header.hide()
-        self.audio_source_confirmed.emit(self, previous)
 
     def refresh_audio_language(self) -> None:
         for field_name in self._field_widgets:
@@ -1951,7 +1972,14 @@ class MetadataEditorDialog(QDialog):
 
     def apply_online_result(self, track: TrackRecord) -> None:
         """Refresh the open editor from the just-saved single-track online result."""
+        if (self._read_closed or ((track.track_id or self.track.track_id)
+                and track_identity(track, self.library_id) != track_identity(self.track, self.library_id))
+                or self.has_unsaved_changes()):
+            self.set_online_scan_busy(False)
+            return
         self.track = track
+        if self.compact_player is not None:
+            self.compact_player.track = track
         self._suspend_tracking = True
         try:
             self.manual_cover_path = track.manual_cover_path
@@ -2587,14 +2615,64 @@ class MetadataEditorDialog(QDialog):
     def closeEvent(self, event):
         if self._force_closing:
             self._restore_live_cover_preview()
+            self._close_read_requests()
             event.accept()
             return
         if self._confirm_close():
             self._restore_live_cover_preview()
             self._force_closing = True
+            self._close_read_requests()
             event.accept()
         else:
             event.ignore()
+
+    def _close_read_requests(self):
+        self._read_closed = True
+        self._async_generation += 1
+        self._cover_request_serial += 1
+        self._read_cancel.set()
+        self._cancel_pending_cover_requests()
+
+    def done(self, result):
+        self._close_read_requests()
+        super().done(result)
+
+    def _read_plan(self, purpose, generation):
+        if self._standalone_record:
+            return None
+        context = self._read_context
+        if self.compact_player is not None and self.compact_player.player_bar._read_context is not None:
+            context = self.compact_player.player_bar._read_context
+        if context is None:
+            return None
+        return resolve_read_path(self.track, context, purpose, generation=generation)
+
+    def accepts_read_result(self, resolution):
+        if self._read_closed or resolution.library_id != self.library_id:
+            return False
+        current = self._read_plan(resolution.purpose, resolution.generation)
+        return (current is not None and current.library_id == self.library_id
+                and resolution.generation == self._cover_request_serial
+                and resolution.guard_key in {current.guard_key,
+                    current.fallback.guard_key if current.fallback else None})
+
+    def begin_async_request(self, purpose):
+        self._async_generation += 1
+        plan = self._read_plan(purpose, self._async_generation)
+        return (self.library_id, track_identity(self.track, self.library_id), self._async_generation,
+                plan.guard_key if plan else None, metadata_revision(self.track),
+                deepcopy(self._capture_editor_state()), purpose)
+
+    def accepts_async_result(self, request):
+        if not isValid(self) or self._read_closed:
+            return False
+        library, identity, generation, guard, revision, state, purpose = request
+        plan = self._read_plan(purpose, generation)
+        return (library == self.library_id and generation == self._async_generation
+                and identity == track_identity(self.track, self.library_id)
+                and (plan.guard_key if plan else None) == guard
+                and (plan is None or plan.library_id == self.library_id)
+                and revision == metadata_revision(self.track) and state == self._capture_editor_state())
 
     def nativeEvent(self, event_type, message):
         # Qt acknowledges native erases without filling them. The new HWND can
@@ -2636,6 +2714,10 @@ class MetadataEditorDialog(QDialog):
     def _load_cover_gallery(self):
         self._cover_request_serial += 1
         serial = self._cover_request_serial
+        self._read_cancel.set(); self._read_cancel = Event()
+        self.destroyed.connect(self._read_cancel.set)
+        self._gallery_read_plan = self._read_plan(ReadPurpose.COVER_READ, serial)
+        self._gallery_initial_cover_choice = self.cover_choice
         self._cancel_pending_cover_requests()
         self._cover_candidate_pixmaps = {}
         self._cover_candidate_urls = {}
@@ -2644,7 +2726,7 @@ class MetadataEditorDialog(QDialog):
         self._cover_details = {}
 
         source_pix = QPixmap()
-        embedded = extract_embedded_cover(self.track.path)
+        embedded = extract_embedded_cover(self.track.path) if self._read_context is None else None
         if embedded:
             source_pix.loadFromData(embedded[0])
             self._cover_details['source'] = {
@@ -2683,7 +2765,7 @@ class MetadataEditorDialog(QDialog):
         if self.compact_player is not None:
             bar = self.compact_player.player_bar
             if (bar.current_track is not None
-                    and Path(bar.current_track.path).resolve() == Path(self.track.path).resolve()):
+                    and self.compact_player._is_edited_track_loaded()):
                 playing_cover_url = bar._cover_loaded_url
                 playing_cover_pixmap = bar._cover_pixmap
 
@@ -2711,7 +2793,7 @@ class MetadataEditorDialog(QDialog):
         selected = 'placeholder'
         if explicit == 'manual' and not manual.isNull():
             selected = 'manual'
-        elif explicit == 'source' and not source_pix.isNull():
+        elif explicit == 'source' and (not source_pix.isNull() or self._gallery_read_plan is not None):
             selected = 'source'
         elif explicit == 'external':
             if self._selected_external_url:
@@ -2730,9 +2812,48 @@ class MetadataEditorDialog(QDialog):
             elif not source_pix.isNull():
                 selected = 'source'
         self._select_cover_choice(selected, allow_unavailable=True, record_undo=False)
+        if self._gallery_read_plan is not None and selected == 'placeholder' and explicit in {'auto', 'source'}:
+            self.cover_choice = explicit
+        if self._gallery_read_plan is not None and self._gallery_read_plan.locator is not None:
+            task = ReadTask(self._gallery_read_plan, extract_embedded_cover, self._read_cancel)
+            task.signals.ready.connect(self._source_cover_read_ready, Qt.ConnectionType.QueuedConnection)
+            QThreadPool.globalInstance().start(task)
+
+    @Slot(int, object)
+    def _source_cover_read_ready(self, serial, result):
+        if not self.accepts_read_result(result.resolution) or not result.resolution.is_verified or not result.value:
+            return
+        pix = QPixmap(); pix.loadFromData(result.value[0])
+        if pix.isNull():
+            return
+        clean = not self.has_unsaved_changes()
+        self._cover_candidate_pixmaps['source'] = pix
+        self._cover_candidate_states['source'] = 'ready'
+        self._cover_details['source'] = {'bytes': len(result.value[0]),
+            'format': self._cover_image_format(result.value[0]), 'type': 'Okładka główna (Front)'}
+        slots = 4 - int(not self._cover_candidate_pixmaps.get('manual', QPixmap()).isNull())
+        keys = list(self._cover_candidate_urls)
+        keep = keys[:slots]
+        selected = getattr(self, '_selected_cover_key', '')
+        if selected in keys and selected not in keep:
+            keep[-1:] = [selected]
+        for key in keys:
+            if key not in keep:
+                self._cover_candidate_urls.pop(key, None)
+                self._cover_candidate_pixmaps.pop(key, None)
+                self._cover_candidate_states.pop(key, None)
+        self._rebuild_cover_proposals()
+        if getattr(self, '_selected_cover_key', '') == 'source' or (
+                clean and self.cover_choice in {'source', 'auto'}
+                and getattr(self, '_selected_cover_key', '') == 'placeholder'):
+            self._select_cover_choice('source', record_undo=False)
+            if clean:
+                self._saved_state = deepcopy(self._capture_editor_state())
+                self._last_observed_state = deepcopy(self._saved_state)
+                self._refresh_dirty_state()
 
     def _playing_cover_ready(self, path: Path, url: str, pix: QPixmap) -> None:
-        if Path(path).resolve() != Path(self.track.path).resolve() or pix.isNull():
+        if self._read_closed or Path(path) != Path(self.track.path) or pix.isNull() or self._current_cover_player() is None:
             return
         key = getattr(self, '_selected_cover_key', '')
         if not key.startswith('external:') or self._cover_candidate_urls.get(key) != url:
@@ -2748,7 +2869,10 @@ class MetadataEditorDialog(QDialog):
         bar = self.compact_player.player_bar
         if bar.current_track is None:
             return None
-        return bar if Path(bar.current_track.path).resolve() == Path(self.track.path).resolve() else None
+        context = bar._read_context
+        current_library = context.library_id if context else ''
+        return bar if (current_library == self.library_id
+                       and track_identity(bar.current_track, current_library) == track_identity(self.track, self.library_id)) else None
 
     def _sync_live_cover_preview(self, pix: QPixmap) -> None:
         if not self._cover_live_ready or (self._suspend_tracking and not self._cover_preview_active):
@@ -2917,7 +3041,9 @@ class MetadataEditorDialog(QDialog):
             timer = self._cover_reply_timers.pop(reply, None)
             if timer is not None:
                 timer.stop()
-            if serial != self._cover_request_serial:
+            if self._read_closed or serial != self._cover_request_serial or key not in self._cover_candidate_urls:
+                return
+            if self._gallery_read_plan is not None and not self.accepts_read_result(self._gallery_read_plan):
                 return
             pix = QPixmap()
             if reply.error() == QNetworkReply.NetworkError.NoError:

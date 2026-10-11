@@ -1,11 +1,37 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QObject, Signal, Slot, Qt
+from PySide6.QtCore import QObject, Signal, Slot, Qt, QRunnable, QCoreApplication
 from threading import Event
+from copy import deepcopy
 import subprocess
 import requests
 
 from audio_library_organizer.jobs.file_reconciliation import check_library
+from audio_library_organizer.jobs.managed_files import read_material
+
+
+class ReadTaskSignals(QObject):
+    ready = Signal(int, object)
+
+
+class ReadTask(QRunnable):
+    """Cancellable physical read; the receiver applies its context/generation guard."""
+    def __init__(self, plan, reader, cancel):
+        super().__init__()
+        self.plan, self.reader, self.cancel = plan, reader, cancel
+        # Created on the GUI thread and owned there. A very short QRunnable may
+        # otherwise destroy its last Python-owned QObject from a pool thread.
+        self.signals = ReadTaskSignals(QCoreApplication.instance())
+
+    def run(self):
+        try:
+            if self.cancel.is_set():
+                return
+            result = read_material(self.plan, self.reader, cancelled=self.cancel.is_set)
+            if not self.cancel.is_set():
+                self.signals.ready.emit(self.plan.generation, result)
+        finally:
+            self.signals.deleteLater()
 
 
 def _audio_error_text(exc: Exception) -> str:
@@ -109,7 +135,9 @@ class AudioIdentificationWorker(QObject):
     def __init__(self, job, track):
         super().__init__()
         self.job = job
-        self.track = track
+        self.track = deepcopy(track)
+        self._cancelled = Event()
+        self.job.cancelled = self._cancelled.is_set
         self._gui_relay = _GuiThreadRelay()
         for signal, slot in (
             (self._raw_finished, self._gui_relay.forward_finished),
@@ -130,10 +158,16 @@ class AudioIdentificationWorker(QObject):
     def phase(self):
         return self._gui_relay.phase
 
+    def cancel(self):
+        self._cancelled.set()
+
     @Slot()
     def run(self):
         try:
-            self._raw_finished.emit(self.job.lookup(self.track, progress=self._raw_phase.emit))
+            result = self.job.lookup(self.track, progress=self._raw_phase.emit)
+            if self._cancelled.is_set():
+                raise InterruptedError('Audio lookup cancelled.')
+            self._raw_finished.emit(result)
         except Exception as exc:
             self._raw_failed.emit(_audio_error_text(exc))
 

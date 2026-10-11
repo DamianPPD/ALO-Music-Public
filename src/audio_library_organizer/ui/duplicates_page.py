@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 
 from audio_library_organizer.domain.models import TrackRecord
+from audio_library_organizer.jobs.managed_files import track_identity
 from audio_library_organizer.duplicates.grouper import group_potential_duplicates
 from audio_library_organizer.ui.state import display_bpm
 from audio_library_organizer.ui.i18n import ui_text
@@ -132,7 +133,12 @@ class DuplicatesPage(QWidget):
         group_scroll = self.group_list.verticalScrollBar().value()
         file_scroll = self.files.verticalScrollBar().value()
         previously_selected, _previous_group = self._selected()
-        selected_path = str(previously_selected.path).casefold() if previously_selected is not None else None
+        library_id = getattr(self, 'library_id', '')
+        previous_library_id = getattr(self, '_displayed_library_id', library_id)
+        selected_path = track_identity(previously_selected, previous_library_id)
+        if previous_library_id != library_id:
+            current_group, group_scroll, file_scroll = -1, 0, 0
+        self._displayed_library_id = library_id
 
         self.groups = group_potential_duplicates(tracks, include_resolved=True)
         self.group_list.clear()
@@ -147,13 +153,15 @@ class DuplicatesPage(QWidget):
             group_index = min(max(current_group, 0), len(self.groups) - 1)
             if selected_path is not None:
                 for index, group in enumerate(self.groups):
-                    if any(str(track.path).casefold() == selected_path for track in group):
+                    if any(track_identity(track, getattr(self, 'library_id', '')) == selected_path for track in group):
                         group_index = index
                         break
             self.group_list.setCurrentRow(group_index)
             if selected_path is not None:
                 for row, track in enumerate(self.groups[group_index]):
-                    if str(track.path).casefold() == selected_path:
+                    same_record = (track_identity(track, getattr(self, 'library_id', '')) == selected_path
+                                   if track.track_id else str(track.path).casefold() == selected_path)
+                    if same_record:
                         self.files.selectRow(row)
                         break
             self.group_list.verticalScrollBar().setValue(group_scroll)

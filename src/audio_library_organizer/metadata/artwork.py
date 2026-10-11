@@ -80,3 +80,10 @@ def extract_embedded_cover(path) -> tuple[bytes, str] | None:
     except (ID3NoHeaderError, Exception):
         return None
     return None
+
+
+def read_artwork_bytes(path) -> bytes | None:
+    """Worker-only read of an explicitly selected image, without writing it."""
+    with path.open('rb') as stream:
+        data = stream.read(32 * 1024 * 1024 + 1)
+    return data if len(data) <= 32 * 1024 * 1024 else None

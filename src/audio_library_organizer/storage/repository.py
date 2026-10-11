@@ -243,6 +243,52 @@ class LibraryRepository:
             row = conn.execute('SELECT * FROM tracks WHERE track_id=?', (track_id,)).fetchone()
         return self._row_to_track(row) if row is not None else None
 
+    def save_metadata(self, track_id: str, values: dict, *, expected_revision: str,
+                      library_id: str, expected_source: tuple | None = None,
+                      expected_material_revision: tuple | None = None) -> TrackRecord:
+        """Field-only compare-and-set, with no physical/binding/cache writes.
+
+        The revision is a token of the full current metadata snapshot, not a
+        monotonic schema counter. BEGIN IMMEDIATE makes comparison and update
+        atomic across writers. mode=rw cannot recreate a disconnected library.
+        """
+        from audio_library_organizer.metadata.change_history import METADATA_FIELDS, metadata_revision
+        from audio_library_organizer.jobs.managed_files import source_material_revision
+
+        if not isinstance(values, dict) or any(name not in METADATA_FIELDS for name in values):
+            raise ValueError('Only approved metadata fields may be written.')
+        json_fields = {'locked_fields': 'locked_fields_json', 'match_reasons': 'match_reasons_json',
+                       'pre_online_metadata': 'pre_online_metadata_json', 'field_sources': 'field_sources_json',
+                       'field_source_values': 'field_source_values_json', 'audio_recognition': 'audio_recognition_json'}
+        with closing(sqlite3.connect(self.database_path.resolve().as_uri() + '?mode=rw', uri=True)) as conn, conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute('BEGIN IMMEDIATE')
+            require_current_schema(conn)
+            current_library = conn.execute('SELECT library_id FROM library_metadata WHERE singleton=1').fetchone()[0]
+            if current_library != library_id:
+                raise ValueError('Metadata write belongs to another library.')
+            row = conn.execute('SELECT * FROM tracks WHERE track_id=?', (track_id,)).fetchone()
+            if row is None or metadata_revision(self._row_to_track(row)) != expected_revision:
+                raise ValueError('Metadata changed or the record was removed during the request.')
+            if expected_source is not None and (row['path'], row['source_id'], row['source_relative_path']) != expected_source:
+                raise ValueError('Source material changed during metadata lookup.')
+            if (expected_material_revision is not None
+                    and source_material_revision(self._row_to_track(row)) != expected_material_revision):
+                raise ValueError('Audio revision changed during metadata lookup.')
+            columns, args = [], []
+            for name, value in values.items():
+                column = json_fields.get(name, name)
+                if name in json_fields:
+                    value = json.dumps(sorted(value) if name == 'locked_fields' else value,
+                                       ensure_ascii=False, allow_nan=False)
+                elif name == 'has_cover':
+                    value = int(value)
+                columns.append(f'{column}=?')
+                args.append(value)
+            if columns:
+                conn.execute('UPDATE tracks SET ' + ','.join(columns) + ' WHERE track_id=?', (*args, track_id))
+            return self._row_to_track(conn.execute('SELECT * FROM tracks WHERE track_id=?', (track_id,)).fetchone())
+
     def scan_snapshot(self, path: Path) -> ScanSnapshot:
         """Capture identity and ownership before any slow scanner work."""
         locator = canonical_locator(path)[0]
