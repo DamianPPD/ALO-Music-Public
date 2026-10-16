@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QStackedWidget, QMessageBox, QProgressBar, QGridLayout, QGroupBox,
     QLineEdit, QCheckBox, QScrollArea, QRadioButton, QButtonGroup, QFileDialog, QInputDialog,
     QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QApplication,
-    QDialog, QFormLayout, QDialogButtonBox, QSizePolicy
+    QDialog, QFormLayout, QDialogButtonBox, QSizePolicy, QToolButton
 )
 
 from audio_library_organizer import __version__
@@ -46,7 +46,9 @@ from audio_library_organizer.duplicates.grouper import apply_duplicate_decision,
 from audio_library_organizer.metadata.manual_edits import apply_manual_field, approve_as_ready
 from audio_library_organizer.metadata.online_lock import set_online_locked
 from audio_library_organizer.metadata.change_history import ChangeHistory, metadata_changes, metadata_revision
-from audio_library_organizer.jobs.managed_files import ReadContext, ReadPurpose, SourceReadMaterial, track_identity, source_material_revision
+from audio_library_organizer.jobs.managed_files import ReadPurpose, track_identity, source_material_revision
+from audio_library_organizer.jobs.legacy_adoption import KnownLibrary
+from audio_library_organizer.ui.adoption_dialog import LegacyAdoptionDialog
 from shiboken6 import isValid
 from audio_library_organizer.metadata.naming import (
     DEFAULT_FILENAME_TEMPLATE, propose_filename, filename_fields_from_template, template_from_filename_fields,
@@ -64,7 +66,7 @@ from audio_library_organizer.jobs.backup import create_alo_backup, inspect_alo_b
 from audio_library_organizer.jobs.reset import reset_alo_state
 from audio_library_organizer.ui.metadata_editor import MetadataEditorDialog
 from audio_library_organizer.ui.player import PlayerBar
-from audio_library_organizer.ui.workers import ScanWorker, FileReconciliationWorker, IdentificationWorker, AudioIdentificationWorker, ExportWorker
+from audio_library_organizer.ui.workers import ScanWorker, FileReconciliationWorker, LegacyAdoptionWorker, IdentificationWorker, AudioIdentificationWorker, ExportWorker
 from audio_library_organizer.ui.assets import asset_path
 from audio_library_organizer.ui.icons import alo_icon, start_icon
 from audio_library_organizer.ui.theme import style_for_theme, GENRE_ACCENT
@@ -867,6 +869,8 @@ class MainWindow(QMainWindow):
         self._file_check_repository = None
         self._file_check_closing = False
         self.last_reconciliation_result = None
+        self._adoption_dialog = None
+        self._adoption_view_context = None
         QApplication.instance().aboutToQuit.connect(self._stop_file_check_on_quit)
 
         central = QWidget(); self.setCentralWidget(central)
@@ -952,7 +956,10 @@ class MainWindow(QMainWindow):
         op_title = QLabel('BIEŻĄCA OPERACJA'); op_title.setObjectName('OperationHeading'); op_head.addWidget(op_title)
         self.operation_state_icon = QLabel(); self.operation_state_icon.setObjectName('OperationStateIcon'); self.operation_state_icon.setFixedSize(19, 19); self.operation_state_icon.setAlignment(Qt.AlignmentFlag.AlignCenter); self.operation_state_icon.setPixmap(start_icon('check_circle', '#67e495', 17).pixmap(17, 17)); op_head.addWidget(self.operation_state_icon)
         self.operation_title = QLabel('GOTOWY'); self.operation_title.setObjectName('OperationKindTitle'); op_head.addWidget(self.operation_title)
-        op_head.addStretch(1); op.addLayout(op_head)
+        self.adoption_btn = QToolButton(self.operation_frame)
+        self.adoption_btn.setText('Przypisz wynik…'); self.adoption_btn.hide()
+        self.adoption_btn.clicked.connect(self._open_legacy_adoption)
+        op_head.addStretch(1); op_head.addWidget(self.adoption_btn); op.addLayout(op_head)
         self.operation_status = QLabel('Wybierz etap pracy'); self.operation_status.setObjectName('OperationStatus')
         self.operation_status.setWordWrap(False); self.operation_status.setToolTip(self.operation_status.text()); op.addWidget(self.operation_status)
         self.progress = QProgressBar(); self.progress.setObjectName('StartOperationProgress'); self.progress.setRange(0, 1); self.progress.setValue(1); self.progress.setVisible(False); op.addWidget(self.progress)
@@ -1229,6 +1236,11 @@ class MainWindow(QMainWindow):
             self._worker.cancel()
         self._file_check_context = None
         self.last_reconciliation_result = None
+        self.adoption_btn.hide()
+        self._adoption_view_context = None
+        if self._adoption_dialog is not None:
+            self._adoption_dialog.close()
+            self._adoption_dialog = None
         self.app_settings = self.library_registry.settings_for(profile)
         if repository is None:
             repository = LibraryRepository(self.app_settings.library.database)
@@ -1491,11 +1503,16 @@ class MainWindow(QMainWindow):
         self._file_check_context = (library_id, operation_id, self._file_check_generation)
         self._file_check_repository = self.repository
         self.last_reconciliation_result = None
+        self.adoption_btn.hide()
+        if self._adoption_dialog is not None:
+            self._adoption_dialog.close()
+            self._adoption_dialog = None
         self._pending_auto_identify = False
         paths = self.app_settings.library
         thread = QThread(self)
         worker = FileReconciliationWorker(self.repository, library_id=library_id,
-            operation_id=operation_id, managed_roots=(paths.ready, paths.review, paths.not_selected))
+            operation_id=operation_id, managed_roots=(paths.ready, paths.review, paths.not_selected),
+            library_root=paths.root, known_libraries=self._known_adoption_libraries())
         worker.moveToThread(thread)
         self._thread, self._worker = thread, worker
         self._set_operation_state('review', 'WERYFIKACJA W BIBLIOTECE', 'Sprawdzanie plików…')
@@ -1544,20 +1561,101 @@ class MainWindow(QMainWindow):
                     f'nowi kandydaci {summary.new_sources}, możliwe przeniesienia {summary.possible_moves}. '
                     'Metadane możesz przeglądać w Bibliotece.')
         self._show_operation(text)
+        inventory = result.adoption_inventory
+        if inventory is not None and not result.cancelled and any(p.locator for p in inventory.proposals):
+            self.adoption_btn.setText('Assign output…' if self.preferences.language == 'en' else 'Przypisz wynik…')
+            self.adoption_btn.show()
+
+    def _known_adoption_libraries(self):
+        """Describe every configured profile without disk probes on the GUI thread."""
+        return tuple(KnownLibrary(str(profile.library_root),
+            str(profile.library_root / '.alo' / 'library.sqlite3'), profile.library_id)
+            for profile in self.library_registry.profiles)
+
+    def _open_legacy_adoption(self):
+        if self._thread is not None or self.last_reconciliation_result is None:
+            return
+        inventory = self.last_reconciliation_result.adoption_inventory
+        if inventory is None or inventory.cancelled or inventory.library_id != self.library_registry.active.library_id:
+            return
+        if self._adoption_dialog is not None:
+            self._adoption_dialog.close()
+        self._adoption_view_context = (inventory.library_id, self._file_check_generation, self.repository,
+                                      str(self.app_settings.library.root), self._known_adoption_libraries())
+        dialog = LegacyAdoptionDialog(inventory, self, language=self.preferences.language)
+        self._adoption_dialog = dialog
+        dialog.approve_requested.connect(self._start_legacy_adoption)
+        dialog.open()
+
+    @Slot(str)
+    def _start_legacy_adoption(self, proposal_id):
+        context = self._adoption_view_context
+        dialog = self._adoption_dialog
+        if (self._thread is not None or context is None or dialog is None or self._file_check_closing
+                or context[:4] != (self.library_registry.active.library_id, self._file_check_generation,
+                                  self.repository, str(self.app_settings.library.root))
+                or context[4] != self._known_adoption_libraries()
+                or self.last_reconciliation_result is None
+                or dialog.inventory is not self.last_reconciliation_result.adoption_inventory):
+            return
+        proposal = next((p for p in dialog.inventory.proposals if p.proposal_id == proposal_id), None)
+        if proposal is None or not proposal.can_adopt:
+            return
+        operation_id = str(uuid4())
+        self._file_check_generation += 1
+        self._file_check_context = (context[0], operation_id, self._file_check_generation)
+        self._file_check_repository = self.repository
+        thread = QThread(self)
+        worker = LegacyAdoptionWorker(self.repository, proposal_id=proposal_id, library_id=context[0],
+            operation_id=operation_id, library_root=context[3], known_libraries=context[4])
+        worker.moveToThread(thread)
+        self._thread, self._worker = thread, worker
+        self._set_busy(True, kind='check')
+        self.adoption_btn.setEnabled(False)
+        thread.started.connect(worker.adopt)
+        worker.finished.connect(self._legacy_adoption_finished, Qt.ConnectionType.QueuedConnection)
+        worker.failed.connect(self._file_check_failed, Qt.ConnectionType.QueuedConnection)
+        worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        worker.failed.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(self._file_check_thread_done)
+        thread.finished.connect(thread.deleteLater)
+        thread.start()
+
+    @Slot(object)
+    def _legacy_adoption_finished(self, result):
+        if not self._file_check_matches(result.library_id, result.operation_id):
+            return
+        self.last_reconciliation_result = None
+        self._adoption_view_context = None
+        self.adoption_btn.hide()
+        if self._adoption_dialog is not None:
+            self._adoption_dialog.close()
+            self._adoption_dialog = None
+        self.refresh_data()
+        self._show_operation('Output assignment saved. Music unchanged.' if self.preferences.language == 'en'
+                             else 'Zapisano przypisanie pliku wynikowego. Muzyka pozostała nietknięta.')
 
     @Slot(str, str, str)
     def _file_check_failed(self, library_id, operation_id, message):
         if self._file_check_matches(library_id, operation_id):
             self._show_operation(message)
+            if self._adoption_dialog is not None:
+                self._adoption_dialog.operation_failed(message)
 
     @Slot()
     def _file_check_thread_done(self):
+        # finished precedes the thread's deferred-delete cleanup. Releasing a
+        # Python-owned worker before that cleanup can delete it from the GUI.
+        if self._thread is not None:
+            self._thread.wait()
         self._thread = None; self._worker = None
         self._file_check_context = None; self._file_check_repository = None
         if self._file_check_closing:
             self.close()
             return
         self._set_busy(False)
+        self.adoption_btn.setEnabled(True)
         self._set_action_highlight(self.review_btn if self.stack.currentIndex() == 1 else None)
 
     @Slot()
@@ -1962,9 +2060,7 @@ class MainWindow(QMainWindow):
 
     def refresh_data(self):
         snapshot = self.repository.file_check_snapshot()
-        self._read_context = ReadContext(snapshot.library_id, str(self.app_settings.library.root),
-            snapshot.sources, tuple(cached.facts for _track_id, cached in snapshot.cached),
-            source_materials=tuple(SourceReadMaterial.from_track(t) for t in snapshot.tracks))
+        self._read_context = snapshot.read_context(self.app_settings.library.root)
         self.player.set_read_context(self._read_context)
         self.library.set_read_context(self._read_context)
         self.duplicates.library_id = snapshot.library_id
@@ -2199,7 +2295,8 @@ class MainWindow(QMainWindow):
         self._set_action_highlight(self.export_btn)
         self._set_operation_state('export', 'TWORZENIE PLIKÓW', 'Kopiowanie, zapis metadanych i techniczna kontrola kopii…')
         self._set_busy(True, 'Tworzenie plików i techniczna kontrola kopii…', kind='export')
-        thread = QThread(self); worker = ExportWorker(plan); worker.moveToThread(thread)
+        thread = QThread(self); worker = ExportWorker(plan, adoption_repository=self.repository,
+            library_root=self.app_settings.library.root, known_libraries=self._known_adoption_libraries()); worker.moveToThread(thread)
         thread.started.connect(worker.run); worker.progress.connect(self._export_progress); worker.finished.connect(self._export_finished); worker.failed.connect(self._job_failed)
         worker.finished.connect(thread.quit); worker.failed.connect(thread.quit); thread.finished.connect(worker.deleteLater); thread.finished.connect(thread.deleteLater); thread.finished.connect(self._thread_done)
         self._thread = thread; self._worker = worker; thread.start()

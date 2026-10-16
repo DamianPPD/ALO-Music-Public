@@ -11,7 +11,7 @@ from threading import Event, Lock, get_native_id
 from time import monotonic
 from uuid import uuid4
 
-from PySide6.QtCore import QObject, QRunnable, Qt, Signal
+from PySide6.QtCore import QCoreApplication, QObject, QRunnable, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QSlider
 
@@ -131,17 +131,43 @@ class WaveformSignals(QObject):
 
 
 class WaveformJob(QRunnable):
+    """Construct in the GUI with a live app; production uses its global pool.
+
+    A caller using a private pool must drain it before destroying the app.
+    """
+
     def __init__(self, path: Path, generation: int, cancel: Event, *, job_id: str | None = None, read_plan=None):
         super().__init__()
+        self._start_gate = None
         self.path, self.generation, self.cancel = path, generation, cancel
-        self.signals = WaveformSignals()
+        # The GUI owns the notifier, independently of QRunnable autoDelete.
+        # Application teardown drains the production global pool before
+        # deleting this child, including jobs finishing after exec() returns.
+        self.signals = WaveformSignals(QCoreApplication.instance())
         self.job_id = job_id or uuid4().hex
         self.read_plan = read_plan
         self._context = dict(path=str(path), track_id=read_plan.track_id if read_plan else None,
                              generation=generation, job_id=self.job_id)
         crash_debug.record('job.created', **self._context)
 
+    def start(self, pool):
+        """Submit once; finish binding ownership handoff before run proceeds."""
+        if self._start_gate is not None:
+            raise RuntimeError('WaveformJob can only be submitted once')
+        gate = Event()
+        self._start_gate = gate
+        try:
+            pool.start(self)
+        finally:
+            # Keep a local gate: after release the pool may autoDelete self.
+            # Also release a possibly queued worker if submission raises.
+            gate.set()
+
     def run(self):
+        # PySide registers the pool's wrapper reference after native start.
+        # Do not let autoDelete race that registration, even on cancel/error.
+        if self._start_gate is not None:
+            self._start_gate.wait()
         _LOG.debug('WaveformJob path=%s generation=%s thread=%s',
                    self.path, self.generation, get_native_id())
         with _JOBS_LOCK:
@@ -164,10 +190,13 @@ class WaveformJob(QRunnable):
             else:
                 crash_debug.record('job.discard.cancelled', **self._context)
         finally:
-            with _JOBS_LOCK:
-                _ACTIVE_JOBS.discard(self.job_id)
-                crash_debug.record('job.finished', **self._context, cancelled=self.cancel.is_set(),
-                                   active_jobs=len(_ACTIVE_JOBS))
+            try:
+                with _JOBS_LOCK:
+                    _ACTIVE_JOBS.discard(self.job_id)
+                    crash_debug.record('job.finished', **self._context, cancelled=self.cancel.is_set(),
+                                       active_jobs=len(_ACTIVE_JOBS))
+            finally:
+                self.signals.deleteLater()
 
 
 class WaveformSlider(QSlider):

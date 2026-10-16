@@ -81,12 +81,15 @@ class FileReconciliationWorker(QObject):
     failed = Signal(str, str, str)
     progress = Signal(str, str, int, int, str)
 
-    def __init__(self, repository, *, library_id, operation_id, managed_roots=()):
+    def __init__(self, repository, *, library_id, operation_id, managed_roots=(),
+                 library_root=None, known_libraries=()):
         super().__init__()
         self.repository = repository
         self.library_id = library_id
         self.operation_id = operation_id
         self.managed_roots = tuple(managed_roots)
+        self.library_root = library_root
+        self.known_libraries = tuple(known_libraries)
         self._cancelled = Event()
 
     def cancel(self):
@@ -97,10 +100,42 @@ class FileReconciliationWorker(QObject):
         try:
             result = check_library(self.repository, library_id=self.library_id,
                 operation_id=self.operation_id, managed_roots=self.managed_roots,
+                library_root=self.library_root, known_libraries=self.known_libraries,
+                include_adoption=self.library_root is not None,
                 cancelled=self._cancelled.is_set,
                 progress=lambda current, total, name: self.progress.emit(
                     self.library_id, self.operation_id, current, total, name))
             self.finished.emit(result)
+        except Exception as exc:
+            self.failed.emit(self.library_id, self.operation_id, str(exc))
+
+
+class LegacyAdoptionWorker(FileReconciliationWorker):
+    """One explicit approval, with the existing pinned operation/cancel guard."""
+    def __init__(self, repository, *, proposal_id, library_id, operation_id,
+                 library_root, known_libraries=()):
+        super().__init__(repository, library_id=library_id, operation_id=operation_id,
+                         library_root=library_root, known_libraries=known_libraries)
+        self.proposal_id = proposal_id
+
+    @Slot()
+    def adopt(self):
+        # A distinct slot is registered on this subclass. PySide's inherited
+        # run() signature otherwise routes the override through a GUI proxy.
+        self.run()
+
+    @Slot()
+    def run(self):
+        from audio_library_organizer.jobs.legacy_adoption import adopt_legacy_output
+        from types import SimpleNamespace
+        try:
+            if self.repository.library_id != self.library_id:
+                raise ValueError('Library context changed before approval.')
+            binding = adopt_legacy_output(self.repository, self.proposal_id, confirmed=True,
+                library_root=self.library_root, known_libraries=self.known_libraries,
+                cancelled=self._cancelled.is_set)
+            self.finished.emit(SimpleNamespace(library_id=self.library_id,
+                operation_id=self.operation_id, binding=binding))
         except Exception as exc:
             self.failed.emit(self.library_id, self.operation_id, str(exc))
 
@@ -222,14 +257,22 @@ class ExportWorker(QObject):
     failed = Signal(str)
     progress = Signal(int, int, str)
 
-    def __init__(self, plan):
+    def __init__(self, plan, *, adoption_repository=None, library_root=None, known_libraries=()):
         super().__init__()
         self.plan = plan
+        self.adoption_repository = adoption_repository
+        self.library_root = library_root
+        self.known_libraries = tuple(known_libraries)
 
     @Slot()
     def run(self):
         from audio_library_organizer.jobs.exporter import execute_copy_plan
         try:
+            if self.adoption_repository is not None:
+                from audio_library_organizer.jobs.legacy_adoption import inventory_legacy_outputs, assert_legacy_export_allowed
+                inventory = inventory_legacy_outputs(self.adoption_repository, library_root=self.library_root,
+                    known_libraries=self.known_libraries)
+                assert_legacy_export_allowed(inventory, [item.track for item in self.plan.items])
             result = execute_copy_plan(
                 self.plan,
                 progress=lambda current, total, name: self.progress.emit(current, total, name),

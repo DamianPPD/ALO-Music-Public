@@ -12,6 +12,7 @@ from audio_library_organizer.domain.file_state import FileFacts, FileStateEvalua
 from .database import connect, require_current_schema
 from .file_state_cache import CachedFileState, FileStateCacheError, read_file_state, write_file_facts
 from .migrations import migrate_library
+from .managed_bindings import ManagedBinding, read_managed_bindings
 from .scan_merge import SCAN_AUDIO_KEY, SCAN_CONFLICT, SCAN_STAT_KEY, audio_continuity_confirmed, merge_scan_metadata, stat_observation
 from .source_registry import SourceRoot, canonical_locator, list_sources, match_source, write_sources
 
@@ -41,6 +42,19 @@ class FileCheckSnapshot:
     locators: tuple[tuple[str, str], ...]
     cached: tuple[tuple[str, CachedFileState], ...]
     cache_errors: tuple[tuple[str, str], ...]
+    managed_bindings: tuple[ManagedBinding, ...] = ()
+
+    def read_context(self, library_root):
+        """Build pure read inputs from one coherent SQLite snapshot."""
+        from audio_library_organizer.jobs.legacy_adoption import binding_facts
+        from audio_library_organizer.jobs.managed_files import ReadContext, SourceReadMaterial
+        facts = {track_id: state.facts for track_id, state in self.cached}
+        tracks = {track.track_id: track for track in self.tracks}
+        for binding in self.managed_bindings:
+            facts[binding.track_id] = binding_facts(binding, tracks[binding.track_id], library_root)
+        return ReadContext(self.library_id, str(library_root), self.sources,
+            tuple(facts.values()), tuple(binding.read_proof(library_root) for binding in self.managed_bindings),
+            tuple(SourceReadMaterial.from_track(track) for track in self.tracks))
 
 
 class LibraryRepository:
@@ -50,6 +64,16 @@ class LibraryRepository:
     def initialize(self) -> None:
         with closing(connect(self.database_path)) as conn:
             migrate_library(conn, self.database_path)
+
+    def list_managed_bindings(self):
+        """Read actual approved ownership, never synthesize it from cache."""
+        with closing(sqlite3.connect(self.database_path.resolve().as_uri() + '?mode=ro', uri=True)) as conn:
+            conn.row_factory = sqlite3.Row
+            require_current_schema(conn)
+            return read_managed_bindings(conn)
+
+    def read_context(self, library_root):
+        return self.file_check_snapshot().read_context(library_root)
 
     def save_file_facts(self, facts: FileFacts) -> FileStateEvaluation:
         """Atomically save prepared observations, never metadata or audio files."""
@@ -88,7 +112,7 @@ class LibraryRepository:
                                      tuple(self._row_to_track(row) for row in rows),
                                      tuple((row['track_id'], row['path_key']) for row in rows),
                                      tuple((row['track_id'], row['path']) for row in rows),
-                                     tuple(cached), tuple(errors))
+                                     tuple(cached), tuple(errors), read_managed_bindings(conn))
 
     def save_file_facts_batch(self, facts, *, snapshot: FileCheckSnapshot, cancelled=None):
         """All-or-nothing cache writes with pinned identity and existing watermarks.
@@ -104,6 +128,8 @@ class LibraryRepository:
             library_id = conn.execute('SELECT library_id FROM library_metadata WHERE singleton=1').fetchone()[0]
             if library_id != snapshot.library_id or tuple(list_sources(conn)) != snapshot.sources:
                 raise ValueError('Library/source context changed during file check.')
+            if read_managed_bindings(conn) != snapshot.managed_bindings:
+                raise ValueError('Managed binding changed during file check.')
             bindings = tuple((row['track_id'], row['path'], row['source_id'], row['size_bytes'], row['mtime_ns'], row['sha256'])
                              for row in conn.execute('SELECT track_id,path,source_id,size_bytes,mtime_ns,sha256 FROM tracks ORDER BY track_id'))
             locators = dict(snapshot.locators)

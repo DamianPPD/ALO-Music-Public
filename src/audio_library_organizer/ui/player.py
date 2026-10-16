@@ -580,7 +580,7 @@ class PlayerBar(QWidget):
                           job_id=f'{self._debug_player_id}:{self._waveform_generation}', read_plan=plan)
         self._waveform_read_plan = plan
         job.signals.ready.connect(self._waveform_ready, Qt.ConnectionType.QueuedConnection)
-        QThreadPool.globalInstance().start(job)
+        job.start(QThreadPool.globalInstance())
 
     @Slot(int, object)
     def _waveform_ready(self, generation, peaks):

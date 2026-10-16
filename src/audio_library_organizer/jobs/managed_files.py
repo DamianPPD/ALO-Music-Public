@@ -13,6 +13,7 @@ import ntpath
 import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
 import stat
+import sys
 from typing import Callable
 
 from audio_library_organizer.domain.file_state import FileAvailability, FileFacts, Ownership
@@ -268,6 +269,24 @@ def _stamp(value):
     return (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
 
 
+def _opened_stat_matches(before, opened):
+    if os.name != 'nt':
+        return _stamp(opened) == _stamp(before)
+    # CPython 3.11 exposes CreationTime as integer ctime in both APIs.
+    # Other Windows runtimes require explicit birthtime because fstat ctime
+    # can mean metadata change time. Persisted and same-API tokens stay intact.
+    creation_field = ('st_ctime_ns' if sys.implementation.name == 'cpython'
+                      and sys.version_info[:2] == (3, 11) else 'st_birthtime_ns')
+    fields = ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_nlink', creation_field)
+    tokens = [tuple(getattr(value, name, None) for name in fields)
+              for value in (before, opened)]
+    for token in tokens:
+        if (any(type(value) is not int for value in token) or token[0] < 0
+                or token[1] <= 0 or token[2] < 0 or token[4] <= 0):
+            raise ValueError('Insufficient Windows file identity evidence.')
+    return tokens[0] == tokens[1]
+
+
 def recheck_read_path(plan: ReadResolution, *, cancelled: Callable[[], bool] | None = None) -> ReadResolution:
     """Worker-only read preflight, including root aliases and output bytes.
 
@@ -308,13 +327,13 @@ def recheck_read_path(plan: ReadResolution, *, cancelled: Callable[[], bool] | N
             h = hashlib.sha256()
             with path.open('rb') as stream:
                 opened = os.fstat(stream.fileno())
-                if _stamp(opened) != _stamp(before):
+                if not _opened_stat_matches(before, opened):
                     return _failed(plan, 'MATERIAL_CHANGED_DURING_READ')
                 while chunk := stream.read(1024 * 1024):
                     if cancelled and cancelled():
                         return _failed(plan, 'CANCELLED')
                     h.update(chunk)
-                if _stamp(os.fstat(stream.fileno())) != _stamp(before):
+                if _stamp(os.fstat(stream.fileno())) != _stamp(opened):
                     return _failed(plan, 'MATERIAL_CHANGED_DURING_READ')
             digest = h.hexdigest()
             if digest != plan.expected_sha256:

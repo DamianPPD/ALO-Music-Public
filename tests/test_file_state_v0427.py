@@ -377,14 +377,15 @@ def test_v2_migration_adds_cache_without_changing_any_existing_data(tmp_path):
     repo = LibraryRepository(db)
     repo.initialize()
     with sqlite3.connect(db) as conn:
-        assert conn.execute('PRAGMA user_version').fetchone()[0] == 3, 'No durable v2→v3 file-state migration'
+        from audio_library_organizer.storage.database import SCHEMA_VERSION
+        assert conn.execute('PRAGMA user_version').fetchone()[0] == SCHEMA_VERSION, 'No durable file-state migration'
         assert conn.execute('SELECT COUNT(*) FROM file_state_cache').fetchone()[0] == 0
         assert conn.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
         assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
         current = conn.execute('SELECT type,name,sql FROM sqlite_master ORDER BY name').fetchall()
         assert all(item in current for item in schema)
     assert {table: raw_table(db, table) for table in tables} == before
-    backup = list((tmp_path / 'migration-backups').glob('pre-v3-*.sqlite3'))
+    backup = list((tmp_path / 'migration-backups').glob('pre-v4-*.sqlite3'))
     assert len(backup) == 1
     assert {table: raw_table(backup[0], table) for table in tables} == before
     with sqlite3.connect(backup[0]) as conn:
@@ -421,7 +422,7 @@ def test_v2_migration_failure_after_ddl_rolls_back_and_retry_preserves_ids(tmp_p
         assert conn.execute('PRAGMA user_version').fetchone()[0] == 2
         assert conn.execute('SELECT type,name,sql FROM sqlite_master ORDER BY name').fetchall() == schema
         assert conn.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
-    backup = next((tmp_path / 'migration-backups').glob('pre-v3-*.sqlite3'))
+    backup = next((tmp_path / 'migration-backups').glob('pre-v4-*.sqlite3'))
     assert raw_rows(backup) == before
     monkeypatch.setattr(module, 'connect', real_connect)
     LibraryRepository(db).initialize()
@@ -438,8 +439,8 @@ def test_v2_backup_includes_committed_wal_data(tmp_path):
         before = raw_rows(db)
         assert Path(str(db) + '-wal').is_file()
         LibraryRepository(db).initialize()
-        backup = list((tmp_path / 'migration-backups').glob('pre-v3-*.sqlite3'))
-        assert len(backup) == 1, 'No pre-v3 SQLite backup'
+        backup = list((tmp_path / 'migration-backups').glob('pre-v4-*.sqlite3'))
+        assert len(backup) == 1, 'No pre-v4 SQLite backup'
         assert raw_rows(backup[0]) == before == raw_rows(db)
     finally:
         writer.close()
@@ -704,7 +705,8 @@ def test_newer_schema_blocks_cache_writer_without_changes(tmp_path):
     repo, track = cache_repo(tmp_path)
     save(repo, repo_facts(m, track))
     with sqlite3.connect(repo.database_path) as conn:
-        conn.execute('PRAGMA user_version=4')
+        from audio_library_organizer.storage.database import SCHEMA_VERSION
+        conn.execute(f'PRAGMA user_version={SCHEMA_VERSION + 1}')
     before = repo.database_path.read_bytes()
     with pytest.raises(ValueError, match='(?i)schema|version|unsupported'):
         save(repo, repo_facts(m, track, checked_at=20))

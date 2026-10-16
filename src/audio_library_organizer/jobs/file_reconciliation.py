@@ -1,9 +1,9 @@
 """Read-only music reconciliation; only disposable observation cache is written.
 
 Inventory is not import. SHA equality is content evidence, never ownership.
-Historical managed facts cannot supply a current physical binding. A caller may
-provide explicit, current attestations (synthetic in Stage 2.2 tests); production
-has no binding producer yet. All undecided candidates stay in this report.
+Historical managed facts cannot supply a current physical binding. Approved
+Stage 3 bindings are loaded independently from SQLite and physically rechecked.
+All undecided candidates stay in this report.
 """
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import sqlite3
 import stat
+import sys
 import time
 from uuid import uuid4
 
@@ -116,6 +117,7 @@ class ReconciliationResult:
     completed: int
     skipped: int
     cache_saved: int
+    adoption_inventory: object = None
 
 
 def _technical(info, digest=None):
@@ -174,6 +176,24 @@ def _stat_changed(cached, info, track, locator):
     return False
 
 
+def _opened_stat_matches(before, opened):
+    if os.name != 'nt':
+        return _stat_token(opened) == _stat_token(before)
+    # CPython 3.11 exposes CreationTime as integer ctime in both APIs.
+    # Other Windows runtimes require explicit birthtime because fstat ctime
+    # can mean metadata change time. Persisted and same-API tokens stay intact.
+    creation_field = ('st_ctime_ns' if sys.implementation.name == 'cpython'
+                      and sys.version_info[:2] == (3, 11) else 'st_birthtime_ns')
+    fields = ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_nlink', creation_field)
+    tokens = [tuple(getattr(value, name, None) for name in fields)
+              for value in (before, opened)]
+    for token in tokens:
+        if (any(type(value) is not int for value in token) or token[0] < 0
+                or token[1] <= 0 or token[2] < 0 or token[4] <= 0):
+            raise ValueError('Insufficient Windows file identity evidence.')
+    return tokens[0] == tokens[1]
+
+
 def _hash_file(path, *, root, root_stat, expected_stat, cancelled):
     """Cancellable, read-only content evidence; a racing locator is unresolved."""
     scoped_stat(path, root, root_stat)
@@ -181,7 +201,7 @@ def _hash_file(path, *, root, root_stat, expected_stat, cancelled):
     descriptor = os.open(path, flags)
     with os.fdopen(descriptor, 'rb') as stream:
         before = os.fstat(stream.fileno())
-        if not stat.S_ISREG(before.st_mode) or _stat_token(before) != _stat_token(expected_stat):
+        if not stat.S_ISREG(before.st_mode) or not _opened_stat_matches(expected_stat, before):
             raise UnsafeSourcePath('FILE_CHANGED_DURING_CHECK')
         digest = hashlib.sha256()
         while True:
@@ -193,7 +213,9 @@ def _hash_file(path, *, root, root_stat, expected_stat, cancelled):
             digest.update(block)
         after = os.fstat(stream.fileno())
         current = scoped_stat(path, root, root_stat)
-        if _stat_token(before) != _stat_token(after) or _stat_token(before) != _stat_token(current):
+        if (_stat_token(before) != _stat_token(after)
+                or _stat_token(expected_stat) != _stat_token(current)
+                or not _opened_stat_matches(current, after)):
             raise UnsafeSourcePath('FILE_CHANGED_DURING_CHECK')
         return digest.hexdigest()
 
@@ -277,12 +299,13 @@ def _facts(track, source, at, cached, prepared, managed_context, *, cancelled=Fa
 
 def check_library(repository, *, library_id=None, operation_id=None, checked_at=None,
                   cancelled=None, progress=None, managed_roots=(), prepared_facts=(),
-                  prepared_library_id=None) -> ReconciliationResult:
+                  prepared_library_id=None, library_root=None, known_libraries=(),
+                  include_adoption=False) -> ReconciliationResult:
     """Check active registry scope and return candidates without accepting them.
 
     ``prepared_facts`` is an explicit current evidence boundary, never a cache
     revalidation shortcut. It requires library identity and this check's time.
-    Production UI does not provide attestations before managed binding exists.
+    Production ownership comes only from approved persistent bindings.
     Cancellation returns a partial report and rolls back the entire cache batch.
     """
     is_cancelled = cancelled or (lambda: False)
@@ -304,6 +327,32 @@ def check_library(repository, *, library_id=None, operation_id=None, checked_at=
                 or (facts.managed is not None and facts.managed.source_id is not None)):
             raise ValueError('Prepared facts identity/freshness is not valid for this check.')
         prepared[facts.track_id] = facts
+    persistent = {}
+    if snapshot.managed_bindings:
+        from .legacy_adoption import binding_facts
+        from .managed_files import ReadPurpose, recheck_read_path, resolve_read_path
+        if library_root is None:
+            library_root = repository.database_path.parent.parent
+        context = snapshot.read_context(library_root)
+        records = {track.track_id: track for track in snapshot.tracks}
+        for binding in snapshot.managed_bindings:
+            if binding.track_id in prepared:
+                raise ValueError('Prepared facts cannot replace persistent ownership.')
+            track = records[binding.track_id]
+            facts = binding_facts(binding, track, library_root, at=at, current=True)
+            proof = recheck_read_path(resolve_read_path(track, context, ReadPurpose.AUDIO_PROPERTIES), cancelled=is_cancelled)
+            if proof.is_verified:
+                managed = replace(facts.managed, reason='APPROVED_MANAGED_SHA_VERIFIED')
+            else:
+                managed = replace(facts.managed, availability=FileAvailability.UNKNOWN, reason=proof.reason_code)
+                if proof.reason_code in ('MANAGED_IDENTITY_CHANGED', 'MANAGED_OWNER_ALIAS_CONFLICT'):
+                    facts = replace(facts, conflict=ConflictReason.CONTRADICTORY_FACTS)
+            persistent[track.track_id] = replace(facts, managed=managed)
+            prepared[track.track_id] = facts
+        if not managed_roots:
+            from audio_library_organizer.domain.settings import LibraryPaths
+            paths=LibraryPaths(Path(library_root))
+            managed_roots=(paths.ready, paths.review, paths.not_selected)
     explicit_managed = tuple(_declared_root(root) for root in managed_roots)
     managed_owners = defaultdict(list)
     for facts in supplied:
@@ -401,6 +450,14 @@ def check_library(repository, *, library_id=None, operation_id=None, checked_at=
                 completed += 1
         facts = _facts(track, source, at, cached.get(track.track_id), prepared.get(track.track_id), managed_context,
                        cancelled=is_cancelled())
+        if track.track_id in persistent and not is_cancelled():
+            verified = persistent[track.track_id]
+            # A complete scoped inventory may prove absence; a hash/probe error
+            # cannot. Preserve OFFLINE/ERROR observations instead of MISSING.
+            if verified.managed.availability == FileAvailability.PRESENT or verified.conflict is not None:
+                facts = replace(verified, source=source)
+            elif facts.managed.availability == FileAvailability.PRESENT:
+                facts = replace(facts, managed=verified.managed)
         evaluation = evaluate_file_state(facts)
         files.append(FileCheckResult(track.track_id, source, facts, evaluation,
                                      _technical(info) if info is not None else None, (code,)))
@@ -489,6 +546,14 @@ def check_library(repository, *, library_id=None, operation_id=None, checked_at=
     summary = ReconciliationSummary(availability.count(FileAvailability.PRESENT), availability.count(FileAvailability.MISSING),
         availability.count(FileAvailability.OFFLINE), availability.count(FileAvailability.UNKNOWN) + availability.count(FileAvailability.ERROR),
         len(new_candidates), len(moves), len(orphan_candidates), sum(c.certainty == 'CONFIRMED' for c in conflicts))
+    adoption = None
+    if include_adoption and not was_cancelled:
+        from .legacy_adoption import inventory_legacy_outputs
+        if library_root is None:
+            raise ValueError('Adoption inventory requires an explicit library root.')
+        adoption = inventory_legacy_outputs(repository, library_root=library_root, known_libraries=known_libraries,
+            cancelled=is_cancelled, progress=progress)
+        was_cancelled = was_cancelled or adoption.cancelled
     return ReconciliationResult(snapshot.library_id, operation_id, at, summary, sources, tuple(files), tuple(new_candidates),
                                 tuple(moves), tuple(orphan_candidates), tuple(conflicts), tuple(unresolved),
-                                tuple(sorted(reason_codes)), was_cancelled, completed, len(files) - completed, saved)
+                                tuple(sorted(reason_codes)), was_cancelled, completed, len(files) - completed, saved, adoption)
