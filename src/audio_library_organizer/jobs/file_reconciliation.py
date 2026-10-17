@@ -381,7 +381,7 @@ def check_library(repository, *, library_id=None, operation_id=None, checked_at=
     unresolved, conflicts, reason_codes = [], [], set()
     for track_id in damaged:
         unresolved.append(DecisionCase('INVALID_OPTIONAL_CACHE', (track_id,)))
-    if not supplied:
+    if not supplied and not persistent:
         reason_codes.add('MANAGED_BINDING_UNAVAILABLE')
     for outcome in (*inventory.outcomes, *managed_inventory.outcomes):
         if 'FOREIGN_PLATFORM_LOCATOR' in outcome.reason:
@@ -515,7 +515,7 @@ def check_library(repository, *, library_id=None, operation_id=None, checked_at=
         if len(ids) > 1:
             unresolved.append(DecisionCase('CANDIDATE_SHARED_BY_RECORDS', tuple(ids), (locator,)))
     orphan_candidates = []
-    attested_locators = {f.managed.locator for f in supplied if f.managed is not None
+    attested_locators = {f.managed.locator for f in (*supplied, *persistent.values()) if f.managed is not None
                          and f.managed_expected is True and f.ownership == Ownership.CONFIRMED
                          and f.owner_track_id == f.track_id}
     managed_stats = dict(managed_inventory.file_stats)

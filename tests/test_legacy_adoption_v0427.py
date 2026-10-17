@@ -1,8 +1,12 @@
 import csv
+from contextlib import closing
 import hashlib
 import importlib
 import importlib.util
+import json
 from pathlib import Path
+import sqlite3
+import time
 
 import pytest
 
@@ -277,3 +281,177 @@ def test_cancelled_inventory_does_not_persist_observations(library):
     with sqlite3.connect(repo.database_path) as conn:
         assert conn.execute('SELECT COUNT(*) FROM legacy_adoption_runs').fetchone()[0]==0
         assert conn.execute('SELECT COUNT(*) FROM source_audio_references').fetchone()[0]==0
+
+
+def _adopt_and_reopen(library):
+    repo, root, track, _ = library
+    proposal = inventory(library).proposals[0]
+    binding = adoption_api().adopt_legacy_output(
+        repo, proposal.proposal_id, confirmed=True, library_root=root)
+    reopened = LibraryRepository(repo.database_path)
+    reopened.initialize()
+    assert reopened.list_managed_bindings() == (binding,)
+    assert binding.track_id == track.track_id
+    return reopened, binding
+
+
+def _database_state(repo, *, include_cache=False):
+    with closing(sqlite3.connect(repo.database_path)) as conn:
+        assert conn.execute('PRAGMA integrity_check').fetchall() == [('ok',)]
+        assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
+        schema = conn.execute('SELECT * FROM sqlite_schema ORDER BY name').fetchall()
+        tables = [row[0] for row in conn.execute(
+            "SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name")]
+        rows = {name: conn.execute(f'SELECT * FROM "{name}" ORDER BY 1').fetchall()
+                for name in tables if include_cache or name != 'file_state_cache'}
+        return schema, rows
+
+
+def _music_state(directory):
+    return {str(path): (path.read_bytes(), hashlib.sha256(path.read_bytes()).hexdigest(),
+                        path.stat().st_mtime_ns)
+            for path in directory.rglob('*.mp3')}
+
+
+def test_check_library_reports_persistent_adoption_after_restart(library, mp3_samples):
+    from audio_library_organizer.domain.file_state import Ownership
+    from audio_library_organizer.jobs.file_reconciliation import check_library
+    from audio_library_organizer.jobs.managed_files import (
+        MaterialKind, ReadPurpose, read_material, resolve_read_path,
+    )
+
+    _, root, track, output = library
+    repo, binding = _adopt_and_reopen(library)
+    unbound = copy_audio(mp3_samples['different_tail'], output.parent / 'unbound.mp3')
+    before_db, before_audio = _database_state(repo), _music_state(root.parent)
+    before_track = repo.get_track(track.track_id)
+
+    result = check_library(repo, library_root=root)  # No prepared_facts.
+    item = next(item for item in result.files if item.track_id == track.track_id)
+    assert item.facts.ownership == Ownership.CONFIRMED
+    assert item.facts.owner_track_id == track.track_id
+    assert item.facts.managed.reason == 'APPROVED_MANAGED_SHA_VERIFIED'
+    assert not result.cancelled and result.cache_saved == 1
+    assert 'CACHE_WRITE_REJECTED' not in result.reason_codes
+    material = read_material(resolve_read_path(
+        repo.get_track(track.track_id), repo.read_context(root), ReadPurpose.PLAYBACK),
+        lambda path: path.read_bytes())
+    assert material.resolution.kind == MaterialKind.MANAGED
+    assert material.resolution.is_verified and material.value == output.read_bytes()
+    assert repo.list_managed_bindings() == (binding,)
+    assert repo.get_track(track.track_id) == before_track
+    assert _database_state(repo) == before_db
+    assert _music_state(root.parent) == before_audio
+    assert hashlib.sha256(output.read_bytes()).hexdigest() == binding.expected_sha256
+    orphan_locators = {candidate.locator for candidate in result.orphan_managed_candidates}
+    assert all(candidate.reason == 'POTENTIAL_ORPHAN_MANAGED'
+               for candidate in result.orphan_managed_candidates)
+    print(json.dumps({'case': 'adopted-and-unbound', 'binding_id': binding.binding_id,
+                      'binding_sha256': binding.expected_sha256,
+                      'orphan_locators': sorted(orphan_locators),
+                      'reason_codes': result.reason_codes,
+                      'protected_database_and_audio_unchanged': True}))
+    assert (orphan_locators, result.summary.orphan_managed,
+            'MANAGED_BINDING_UNAVAILABLE' in result.reason_codes) == ({str(unbound)}, 1, False)
+
+
+def test_check_library_keeps_changed_managed_owned_but_unreadable(library, mp3_samples):
+    from audio_library_organizer.domain.file_state import ConflictReason, FileState, Ownership
+    from audio_library_organizer.jobs.file_reconciliation import check_library
+    from audio_library_organizer.jobs.managed_files import (
+        MaterialKind, ReadPurpose, read_material, recheck_read_path, resolve_read_path,
+    )
+
+    _, root, track, output = library
+    repo, binding = _adopt_and_reopen(library)
+    output.write_bytes(mp3_samples['different_tail'].read_bytes())
+    track.path.parent.rename(root.parent / 'offline-source')
+    before_db, before_audio = _database_state(repo), _music_state(root.parent)
+    before_track = repo.get_track(track.track_id)
+
+    result = check_library(repo, library_root=root)  # No prepared_facts.
+    item = next(item for item in result.files if item.track_id == track.track_id)
+    assert item.facts.ownership == Ownership.CONFIRMED
+    assert item.facts.owner_track_id == track.track_id
+    assert item.facts.conflict == ConflictReason.CONTRADICTORY_FACTS
+    assert item.evaluation.state == FileState.CONFLICT and item.evaluation.is_confirmed
+    assert item.facts.managed.reason == 'MANAGED_IDENTITY_CHANGED'
+    assert any(track.track_id in conflict.track_ids and conflict.certainty == 'CONFIRMED'
+               for conflict in result.conflicts)
+    plan = resolve_read_path(repo.get_track(track.track_id), repo.read_context(root), ReadPurpose.PLAYBACK)
+    assert plan.kind == MaterialKind.MANAGED
+    proof = recheck_read_path(plan)
+    assert not proof.is_verified and proof.reason_code == 'MANAGED_IDENTITY_CHANGED'
+    opened = []
+
+    def read_bytes(path):
+        opened.append(path)
+        return path.read_bytes()
+
+    material = read_material(plan, read_bytes)
+    assert not material.resolution.is_verified and material.value is None and opened == []
+    assert not result.cancelled and result.cache_saved == 1
+    assert 'CACHE_WRITE_REJECTED' not in result.reason_codes
+    assert repo.list_managed_bindings() == (binding,)
+    assert repo.get_track(track.track_id) == before_track
+    assert _database_state(repo) == before_db
+    assert _music_state(root.parent) == before_audio
+    assert hashlib.sha256(output.read_bytes()).hexdigest() != binding.expected_sha256
+    orphan_locators = {candidate.locator for candidate in result.orphan_managed_candidates}
+    print(json.dumps({'case': 'changed-owned-managed', 'binding_id': binding.binding_id,
+                      'binding_sha256': binding.expected_sha256,
+                      'actual_sha256': hashlib.sha256(output.read_bytes()).hexdigest(),
+                      'orphan_locators': sorted(orphan_locators),
+                      'reason_codes': result.reason_codes, 'managed_read': proof.reason_code,
+                      'protected_database_and_audio_unchanged': True}))
+    assert (orphan_locators, result.summary.orphan_managed,
+            'MANAGED_BINDING_UNAVAILABLE' in result.reason_codes) == (set(), 0, False)
+
+
+def test_check_library_keeps_unbound_output_orphan_and_binding_unavailable(library):
+    from audio_library_organizer.domain.file_state import Ownership
+    from audio_library_organizer.jobs.file_reconciliation import check_library
+    from audio_library_organizer.jobs.managed_files import MaterialKind, ReadPurpose, resolve_read_path
+
+    repo, root, track, output = library
+    before_db, before_audio = _database_state(repo), _music_state(root.parent)
+    result = check_library(repo, library_root=root, managed_roots=(output.parent,))
+    assert {candidate.locator for candidate in result.orphan_managed_candidates} == {str(output)}
+    assert result.summary.orphan_managed == 1
+    assert 'MANAGED_BINDING_UNAVAILABLE' in result.reason_codes
+    assert all(candidate.reason == 'POTENTIAL_ORPHAN_MANAGED'
+               for candidate in result.orphan_managed_candidates)
+    assert result.files[0].facts.ownership == Ownership.UNKNOWN
+    assert resolve_read_path(repo.get_track(track.track_id), repo.read_context(root),
+                             ReadPurpose.PLAYBACK).kind != MaterialKind.MANAGED
+    assert repo.list_managed_bindings() == ()
+    assert _database_state(repo) == before_db
+    assert _music_state(root.parent) == before_audio
+
+
+@pytest.mark.parametrize('problem', ['invalid-digest', 'wrong-root', 'prepared-replacement'])
+def test_check_library_rejects_invalid_persistent_context_without_writes(library, problem):
+    from audio_library_organizer.jobs.file_reconciliation import check_library
+
+    _, root, track, _ = library
+    repo, binding = _adopt_and_reopen(library)
+    kwargs = {'library_root': root}
+    if problem == 'invalid-digest':
+        with closing(sqlite3.connect(repo.database_path)) as conn, conn:
+            conn.execute('UPDATE managed_bindings SET expected_sha256=? WHERE track_id=?',
+                         ('g' * 64, track.track_id))
+        message = 'Invalid adopted binding identity/digest'
+    elif problem == 'wrong-root':
+        kwargs['library_root'] = root.parent / 'another-library-root'
+        message = 'another library root'
+    else:
+        at = time.time_ns()
+        kwargs.update(checked_at=at, prepared_library_id=repo.library_id,
+                      prepared_facts=(adoption_api().binding_facts(
+                          binding, repo.get_track(track.track_id), root, at=at, current=True),))
+        message = 'Prepared facts cannot replace persistent ownership'
+    before_db, before_audio = _database_state(repo, include_cache=True), _music_state(root.parent)
+    with pytest.raises(ValueError, match=message):
+        check_library(repo, **kwargs)
+    assert _database_state(repo, include_cache=True) == before_db
+    assert _music_state(root.parent) == before_audio
