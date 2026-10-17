@@ -10,6 +10,7 @@ def main():
     out=ROOT/'results'/token;out.mkdir(parents=True);bootstrap=Path(os.environ['I7_311_BOOTSTRAP_DIR'])
     receipt=dict(status='STOP',scope='TECHNICAL_WINDOWS_CI_NOT_INTERACTIVE_GUI',stage='runtime',cases=0,phases=0,XML=0);code=2
     try:
+        os.environ['I7_311_PACKAGE_ROOT']=str(ROOT)
         from private_runtime import verify_private_runtime
         receipt['private_runtime']=verify_private_runtime()
         env=isolated_environment(out/'sandbox');env.update(I7_311_PACKAGE_ROOT=str(ROOT),I7_311_RUNTIME_DIR=os.environ['I7_311_RUNTIME_DIR'])

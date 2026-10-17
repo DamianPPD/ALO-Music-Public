@@ -70,6 +70,22 @@ def _windows_directories():
     return [system,windows/'System',windows]
 
 
+def _verified_windows_path(trusted):
+    """Accept only the canonical PATH, or the exact initialized/pinned private Qt prefix."""
+    raw=os.environ.get('PATH','').split(os.pathsep)
+    if any(not part or not Path(part).is_absolute()for part in raw):raise ValueError('Unverified subprocess PATH')
+    paths=[Path(part).resolve()for part in raw]
+    if paths==trusted:return paths
+    python=Path(sys.executable).resolve().parent
+    qt=python/'Lib/site-packages/PySide6';module=sys.modules.get('PySide6')
+    init=qt/'__init__.py'
+    if (paths!=[qt,*trusted]or module is None or getattr(module,'__version__',None)!='6.10.3'
+            or Path(getattr(module,'__file__','')).absolute()!=init
+            or qt.resolve()!=qt or init.is_symlink()or not init.is_file()
+            or sha256(init)!='dd003a2fb0fa4f45a2158458f3c9a2bf4ed4c4eecc0bacbd895de120a21dff71'):
+        raise ValueError('Unverified subprocess PATH')
+    return paths
+
 def _select_executable(executable,argv):
     raw=_text(os.environ['I7_FFMPEG_EXE']);expected=Path(raw)
     digest=os.environ['I7_FFMPEG_SHA256']
@@ -83,9 +99,7 @@ def _select_executable(executable,argv):
         if expected.name.lower()!='ffmpeg.exe':raise ValueError('Invalid pinned Windows FFmpeg name')
         systems=_windows_directories();python=Path(sys.executable).resolve().parent
         trusted=[expected.parent,python,systems[0],systems[-1]]
-        path=os.environ.get('PATH','').split(os.pathsep)
-        if any(not part or not Path(part).is_absolute() for part in path) or [Path(p).resolve() for p in path]!=trusted:
-            raise ValueError('Unverified subprocess PATH')
+        path=_verified_windows_path(trusted)
         # Explicit lpApplicationName never uses PATH or an implicit .exe suffix.
         if executable is not None or Path(program).is_absolute() or '/' in program or '\\' in program:
             selected=Path(program).absolute()
@@ -93,7 +107,7 @@ def _select_executable(executable,argv):
             if program.lower() not in ('ffmpeg','ffmpeg.exe'):raise ValueError('Unapproved program')
             # CreateProcessW searches parent application/cwd/system slots before PATH.
             selected=None
-            for directory in [python,Path.cwd(),*systems,*trusted]:
+            for directory in [python,Path.cwd(),*systems,*path]:
                 candidate=directory/'ffmpeg.exe'
                 if candidate.exists():selected=candidate;break
     else:
