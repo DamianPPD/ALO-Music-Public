@@ -52,6 +52,8 @@ try:
         assert receipt['log_closed']and len(qt)==2 and all(x['destroyed']for x in qt)
         assert len(observer.record['violations'])==1 and observer.record['violations'][0]['event']=='subprocess.Popen'
         assert len(guard.attempts)==3 and not observer.record['errors']
+        # QApplication has now loaded its real platform plugin: attest actual late-loaded DLLs too.
+        receipt['native_after_QApplication']=check_native(os.environ['L41_RUNTIME_CATALOG'],os.environ['L41_RUNTIME_CATALOG_SHA256'])
         receipt['status']='PASS'
     receipt['stage']='complete'
 except BaseException as error:
