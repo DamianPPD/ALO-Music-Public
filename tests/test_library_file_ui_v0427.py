@@ -133,11 +133,11 @@ def test_file_filter_dots_and_pl_en_labels(tmp_path):
         assert icon.pixelColor(7, 7).name() == color.accent
     page.file_filter.setCurrentIndex(2)
     apply_static_language(page, 'en')
-    assert page.file_filter.currentText() == 'File: Source only'
+    assert page.file_filter.currentText() == 'Source only'
     page.refresh()
-    assert page.file_filter.currentText() == 'File: Source only'
+    assert page.file_filter.currentText() == 'Source only'
     apply_static_language(page, 'pl')
-    assert page.file_filter.currentText() == 'Plik: Tylko źródło'
+    assert page.file_filter.currentText() == 'Tylko źródło'
 
 
 def menu_for(page, track):
@@ -170,10 +170,9 @@ def test_menu_all_states_uses_read_resolver_and_only_existing_safe_operations(tm
     page, tracks, context = library_page(tmp_path, (state,))
     menu = menu_for(page, tracks[0])
     actions = menu_actions(menu)
-    assert {'edit', 'ready', 'review', 'details'} <= actions.keys()
+    assert {'edit', 'ready', 'review', 'reveal'} == actions.keys()
     assert not {'delete', 'move', 'relink', 'adopt', 'overwrite'} & actions.keys()
-    assert not actions['play'].isEnabled()  # No registered source or approved read binding.
-    assert not actions['open'].isEnabled()
+    assert not actions['reveal'].isEnabled()  # No registered source or approved read binding.
     emitted = []
     page.edit_requested.connect(emitted.append)
     actions['edit'].trigger()
@@ -277,7 +276,22 @@ def adopted_page(library):
     return page, repo.get_track(track.track_id)
 
 
-def test_real_adopted_managed_read_with_source_offline_is_read_only(library):
+@pytest.fixture
+def revealed(monkeypatch):
+    """Exercise real worker validation; replace only the external Shell boundary."""
+    from types import SimpleNamespace
+    from audio_library_organizer.ui import library_page as module
+    from audio_library_organizer.jobs import shell_reveal
+    monkeypatch.setattr(module, 'sys', SimpleNamespace(platform='win32'))
+    selected = []
+    def select(path, *, guard):
+        guard()
+        selected.append(path)
+    monkeypatch.setattr(shell_reveal, 'reveal_file', select)
+    return selected
+
+
+def test_real_adopted_managed_read_with_source_offline_is_read_only(library, revealed):
     import hashlib
     page, track = adopted_page(library)
     repo, root, _, output = library
@@ -287,55 +301,39 @@ def test_real_adopted_managed_read_with_source_offline_is_read_only(library):
     database_before = repo.database_path.read_bytes()
     binding_before = repo.list_managed_bindings()
     audio_before = {p:hashlib.sha256(p.read_bytes()).hexdigest() for p in (offline, output)}
-    emitted = []
-    page.play_requested.connect(emitted.append)
-    action = menu_actions(menu_for(page, track))['play']
+    action = menu_actions(menu_for(page, track))['reveal']
     assert action.isEnabled()
     action.trigger()
     settle_context_read(page)
-    assert [t.track_id for t in emitted] == [track.track_id]
+    assert revealed == [output]
     assert repo.database_path.read_bytes() == database_before
     assert repo.list_managed_bindings() == binding_before
     assert audio_before == {p:hashlib.sha256(p.read_bytes()).hexdigest() for p in (offline, output)}
 
 
-def test_managed_specific_folder_never_falls_back_after_wrong_sha(library, monkeypatch):
-    from audio_library_organizer.ui import library_page as module
+def test_reveal_falls_back_only_to_verified_source_after_wrong_managed_sha(library, revealed):
     page, track = adopted_page(library)
     repo, root, _, output = library
     output.write_bytes(output.read_bytes()+b'controlled synthetic change')
-    opened = []
-    monkeypatch.setattr(module.QDesktopServices, 'openUrl', lambda url: opened.append(url.toLocalFile()) or True)
-    action = menu_actions(menu_for(page, track))['reveal_managed']
+    action = menu_actions(menu_for(page, track))['reveal']
     assert action.isEnabled()
     action.trigger()
     settle_context_read(page)
-    assert opened == []
-    # Generic playback may still safely fall back to the registered SOURCE.
-    played = []
-    page.play_requested.connect(played.append)
-    menu_actions(menu_for(page, track))['play'].trigger()
-    settle_context_read(page)
-    assert len(played) == 1
+    assert revealed == [track.path]
 
 
-def test_wrong_sha_and_missing_source_cannot_emit_play_or_open(library, monkeypatch):
-    from audio_library_organizer.ui import library_page as module
+def test_wrong_sha_and_missing_source_cannot_reveal(library, revealed):
     page, track = adopted_page(library)
     repo, root, _, output = library
     track.path.rename(track.path.with_suffix('.offline'))
     output.write_bytes(output.read_bytes()+b'changed after adoption')
-    played, opened = [], []
-    page.play_requested.connect(played.append)
-    monkeypatch.setattr(module.QDesktopServices, 'openUrl', lambda url: opened.append(url) or True)
-    for name in ('play', 'open'):
-        menu_actions(menu_for(page, track))[name].trigger()
-        settle_context_read(page)
-    assert played == opened == []
+    menu_actions(menu_for(page, track))['reveal'].trigger()
+    settle_context_read(page)
+    assert revealed == []
 
 
 @pytest.mark.parametrize('change', ['source', 'binding', 'record', 'cancel', 'close'])
-def test_active_real_read_task_drops_results_after_change_or_close(library, monkeypatch, change):
+def test_active_real_read_task_drops_results_after_change_or_close(library, monkeypatch, change, revealed):
     from threading import Event
     from audio_library_organizer.ui import library_page as module
     from audio_library_organizer.jobs import context_menu as context_jobs
@@ -350,9 +348,7 @@ def test_active_real_read_task_drops_results_after_change_or_close(library, monk
             return reader(path)
         return real_read_material(plan, gated_reader, cancelled=cancelled)
     monkeypatch.setattr(context_jobs, 'read_material', barrier_task)
-    played = []
-    page.play_requested.connect(played.append)
-    menu_actions(menu_for(page, track))['play'].trigger()
+    menu_actions(menu_for(page, track))['reveal'].trigger()
     try:
         assert entered.wait(3)
         if change == 'source':
@@ -375,7 +371,7 @@ def test_active_real_read_task_drops_results_after_change_or_close(library, monk
     finally:
         release.set()
         settle_context_read(page)
-    assert played == []
+    assert revealed == []
 
 
 @pytest.mark.parametrize('state', tuple(FileState))
@@ -451,27 +447,29 @@ def test_source_multiselection_after_sort_dispatches_exact_captured_uuids(tmp_pa
     page.table.selectionModel().select(page.model.index(2,0),
         QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows)
     selected = page._selected_tracks()
-    menu = menu_for(page, selected[0])
     emitted = []
-    signal = page.context_playlist_requested if action_name == 'playlist' else page.context_collection_requested
+    # These commands are intentionally retained on the toolbar, removed only
+    # from the context menu. Check the same selected records via checkboxes.
+    for row in page.table.selectionModel().selectedRows():
+        page.model.item(row.row(), 0).setCheckState(Qt.CheckState.Checked)
+    signal = page.playlist_requested if action_name == 'playlist' else page.create_collection_requested
     signal.connect(emitted.append)
-    action = menu_actions(menu)[action_name]
-    assert action.isEnabled()
-    action.trigger()
-    settle_context_read(page)
+    button = page.playlist_btn if action_name == 'playlist' else page.collection_btn
+    assert button.isEnabled()
+    button.click()
     assert len(emitted) == 1
     if action_name == 'playlist':
-        assert set(emitted[0][1]) == {t.path for t in selected}
+        assert set(emitted[0]) == {t.path for t in selected}
     else:
-        assert {t.track_id for t in emitted[0][1]} == {t.track_id for t in selected}
+        assert {t.track_id for t in emitted[0]} == {t.track_id for t in selected}
 
 
-def test_offline_managed_does_not_enable_source_only_copy_actions(library):
+def test_offline_managed_reveal_is_available_without_copy_actions(library):
     page, track = adopted_page(library)
     track.path.rename(track.path.with_suffix('.offline'))
     actions = menu_actions(menu_for(page, track))
-    assert actions['play'].isEnabled()
-    assert not actions['collection'].isEnabled() and not actions['playlist'].isEnabled()
+    assert actions['reveal'].isEnabled()
+    assert not {'play', 'next', 'collection', 'playlist'} & actions.keys()
 
 
 def test_fresh_cache_change_or_quit_rejects_open_menu_actions(tmp_path):

@@ -102,11 +102,11 @@ def test_detail_field_accents_follow_completeness(page, missing, state, count):
 
 def sort_tracks(tmp_path):
     return [
-        TrackRecord(path=tmp_path / 'a.mp3', artist='Zulu', title='Zulu', year='9', bpm=87,
+        TrackRecord(path=tmp_path / 'a.mp3', artist='Zulu', title='Zulu', year='1999', bpm=87,
                     genre='Euro House / Zulu', duration_seconds=200, bitrate_kbps=320, codec='FLAC', status='ready'),
-        TrackRecord(path=tmp_path / 'b.wav', artist='alpha', title='alpha', year='100', bpm=130,
+        TrackRecord(path=tmp_path / 'b.wav', artist='alpha', title='alpha', year='2021-08-06', bpm=130,
                     genre='Euro House / Alpha', duration_seconds=660, bitrate_kbps=99, codec='MP3', status='ready'),
-        TrackRecord(path=tmp_path / 'c.flac', artist='Beta', title='Beta', year='20', bpm=99,
+        TrackRecord(path=tmp_path / 'c.flac', artist='Beta', title='Beta', year='2009-01', bpm=99,
                     genre='Disco / Trance', duration_seconds=242, bitrate_kbps=128, codec='WAV', status='ready'),
         TrackRecord(path=tmp_path / 'd.aiff', status='ready'),
     ]
@@ -135,7 +135,8 @@ def test_sorting_uses_raw_model_values(page, tmp_path, column, ascending, descen
 def test_missing_invalid_and_nonfinite_numeric_values_sort_deterministically(page, tmp_path, column, field):
     page, _, _ = page
     tracks = [TrackRecord(path=tmp_path / f'{i}.mp3', status='ready') for i in range(5)]
-    for track, value in zip(tracks, [None, 'invalid' if field == 'year' else float('nan'), 0, 99, 130]):
+    values = [None, 'invalid', '0000', '0099', '0130'] if field == 'year' else [None, float('nan'), 0, 99, 130]
+    for track, value in zip(tracks, values):
         setattr(track, field, value)
     # Invalid numeric display strings remain outside the model's sort key.
     if field == 'duration_seconds':
@@ -144,7 +145,8 @@ def test_missing_invalid_and_nonfinite_numeric_values_sort_deterministically(pag
     page.table.sortByColumn(column, Qt.SortOrder.AscendingOrder)
     assert [t.path.name for t in page.visible_tracks()] == ['0.mp3', '1.mp3', '2.mp3', '3.mp3', '4.mp3']
     page.table.sortByColumn(column, Qt.SortOrder.DescendingOrder)
-    assert [t.path.name for t in page.visible_tracks()] == ['4.mp3', '3.mp3', '2.mp3', '0.mp3', '1.mp3']
+    expected = ['4.mp3', '3.mp3', '0.mp3', '1.mp3', '2.mp3'] if field == 'year' else ['4.mp3', '3.mp3', '2.mp3', '0.mp3', '1.mp3']
+    assert [t.path.name for t in page.visible_tracks()] == expected
 
 
 # Catches fixed data columns, zero-width columns, and resizing one column squeezing another.

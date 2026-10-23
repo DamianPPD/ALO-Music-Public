@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from audio_library_organizer.domain.candidates import MetadataCandidate
+from audio_library_organizer.metadata.normalization import normalize_year
 from .common import RateLimiter
 
 
@@ -18,7 +19,7 @@ def parse_itunes_result(data: dict) -> MetadataCandidate:
         artist=data.get('artistName'),
         title=data.get('trackName'),
         album=data.get('collectionName'),
-        year=release_date[:4] if len(release_date) >= 4 else None,
+        year=normalize_year(release_date),
         genre=data.get('primaryGenreName'),
         duration_seconds=float(duration_ms) / 1000.0 if duration_ms else None,
         source_url=data.get('trackViewUrl') or data.get('collectionViewUrl'),

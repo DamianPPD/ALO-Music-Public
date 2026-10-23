@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from audio_library_organizer.domain.candidates import MusicBrainzRecording
+from audio_library_organizer.metadata.normalization import normalize_year
 
 
 def _artist_credit(data: dict) -> str | None:
@@ -21,7 +22,7 @@ def parse_recording(data: dict) -> MusicBrainzRecording:
     releases = data.get('releases') or []
     release_ids = tuple(str(r['id']) for r in releases if r.get('id'))
     release_titles = tuple(str(r['title']) for r in releases if r.get('title'))
-    years = tuple(str(r['date'])[:4] for r in releases if r.get('date'))
+    years = tuple(year for r in releases if (year := normalize_year(r.get('date'))))
     length = data.get('length')
     return MusicBrainzRecording(
         recording_id=str(data.get('id') or ''),

@@ -119,10 +119,12 @@ def test_header_checkbox_toggles_only_visible_tracks_and_partial_state(tmp_path)
 
 
 def test_format_is_dynamic_sortable_and_combines_with_search_and_status(tmp_path):
+    from audio_library_organizer.jobs.scanner import SUPPORTED_EXTENSIONS
     page, tracks = _page(tmp_path)
     try:
         column = page.HEADERS.index('Format')
-        assert [page.format_filter.itemData(i) for i in range(page.format_filter.count())] == ['', 'FLAC', 'M4A', 'MP3', 'WAV', 'WEIRD']
+        supported = {ext[1:].upper() for ext in SUPPORTED_EXTENSIONS}
+        assert [page.format_filter.itemData(i) for i in range(page.format_filter.count())] == [''] + sorted(supported | {'WEIRD'})
         assert {page.model.item(i, column).text() for i in range(5)} == {'MP3', 'FLAC', 'WAV', 'M4A', 'WEIRD'}
         page.table.sortByColumn(column, Qt.SortOrder.AscendingOrder)
         assert [page.model.item(i, column).text() for i in range(5)] == ['FLAC', 'M4A', 'MP3', 'WAV', 'WEIRD']
@@ -138,7 +140,7 @@ def test_format_is_dynamic_sortable_and_combines_with_search_and_status(tmp_path
         page._reset_view()
         assert page.format_filter.currentData() == ''
         page.set_tracks([tracks[0], TrackRecord(path=tmp_path / 'no-extension')])
-        assert [page.format_filter.itemData(i) for i in range(page.format_filter.count())] == ['', 'MP3']
+        assert [page.format_filter.itemData(i) for i in range(page.format_filter.count())] == [''] + sorted(supported)
         assert {page.model.item(i, column).text() for i in range(2)} == {'MP3', '—'}
     finally:
         page.close()
@@ -154,7 +156,8 @@ def test_library_new_controls_switch_pl_en_without_losing_filter_or_checks(tmp_p
         assert page.format_filter.currentData() == 'MP3'
         assert 'Selected:' in page.selected_count.text()
         assert page.model.headerData(page.HEADERS.index('Format'), Qt.Orientation.Horizontal) == 'Format'
-        assert page.format_filter.currentText() == 'Format: MP3'
+        assert page.format_filter.currentText() == 'MP3'
+        assert page.format_filter.prefix == 'Format'
         assert page.detail_edit.text() == 'Edit metadata'
         assert page.collection_btn.text() == 'Create folder from selected'
         assert page.playlist_btn.text() == 'Create playlist'

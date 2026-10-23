@@ -8,6 +8,7 @@ from threading import Event
 from copy import deepcopy
 from dataclasses import replace
 import sqlite3
+import sys
 import shiboken6
 
 from PySide6.QtCore import Qt, Signal, Slot, QUrl, QStringListModel, QItemSelectionModel, QSignalBlocker, QEvent, QTimer, QRect, QSize, QThreadPool
@@ -30,6 +31,9 @@ from audio_library_organizer.metadata.artwork import extract_embedded_cover, rea
 from audio_library_organizer.ui.workers import ReadTask
 from audio_library_organizer.jobs.context_menu import MenuContext, MenuWork, frozen_value
 from audio_library_organizer.ui.context_tasks import MenuTasks
+from audio_library_organizer.ui.library_controls import AccentMenu, LibraryFilterCombo
+from audio_library_organizer.metadata.normalization import normalize_year
+from audio_library_organizer.jobs.scanner import SUPPORTED_EXTENSIONS
 from audio_library_organizer.metadata.online_lock import is_online_locked
 from audio_library_organizer.metadata.genre import genre_items, primary_genre
 from audio_library_organizer.ui.state import (
@@ -315,13 +319,13 @@ class LibraryPage(QWidget):
         self.status.view().installEventFilter(self)
         self._paint_category_icons()
 
-        self.format_filter = QComboBox()
+        self.format_filter = LibraryFilterCombo('Format', self)
         self.format_filter.setObjectName('LibraryFormatFilter')
         self.format_filter.setFixedWidth(160)
         self.format_filter.setToolTip(ui_text(self, 'Filtruj według formatu pliku'))
         self._sync_format_options()
 
-        self.file_filter = QComboBox()
+        self.file_filter = LibraryFilterCombo('Plik', self)
         self.file_filter.setObjectName('LibraryFileFilter')
         self.file_filter.setFixedWidth(220)
         self.file_filter.setAccessibleName(ui_text(self, 'Plik'))
@@ -673,16 +677,17 @@ class LibraryPage(QWidget):
 
     def _sync_format_options(self):
         chosen = self.format_filter.currentData() or ''
-        formats = sorted({self._format_of(track) for track in self._tracks} - {'—'})
+        formats = sorted({suffix.lstrip('.').upper() for suffix in SUPPORTED_EXTENSIONS}
+                         | ({self._format_of(track) for track in self._tracks} - {'—'}))
         with QSignalBlocker(self.format_filter):
             self.format_filter.clear()
-            caption = ui_text(self, 'Format') + ': '
-            self.format_filter.addItem(caption + ui_text(self, 'Wszystkie'), '')
+            self.format_filter.addItem(ui_text(self, 'Wszystkie formaty'), '')
             for value in formats:
-                self.format_filter.addItem(caption + value, value)
+                self.format_filter.addItem(value, value)
             index = self.format_filter.findData(chosen)
             self.format_filter.setCurrentIndex(max(0, index))
         self._update_format_accent()
+        self.format_filter.fit_labels(160)
 
     def _update_format_accent(self):
         active = bool(self.format_filter.currentData())
@@ -694,7 +699,7 @@ class LibraryPage(QWidget):
         chosen = self.file_filter.currentData() or ''
         with QSignalBlocker(self.file_filter):
             self.file_filter.clear()
-            self.file_filter.addItem(ui_text(self, 'Plik: Wszystkie'), '')
+            self.file_filter.addItem(ui_text(self, 'Wszystkie stany'), '')
             for state, color in FILE_STATE_COLORS.items():
                 # A native dot, not a new status icon or an asset.
                 pixmap = QPixmap(14, 14)
@@ -705,8 +710,10 @@ class LibraryPage(QWidget):
                 painter.setBrush(QColor(color.accent))
                 painter.drawEllipse(3, 3, 8, 8)
                 painter.end()
-                self.file_filter.addItem(QIcon(pixmap), ui_text(self, 'Plik: '+color.label), state.value)
+                self.file_filter.addItem(QIcon(pixmap), ui_text(self, color.label), state.value)
+                self.file_filter.setItemData(self.file_filter.count()-1, QBrush(QColor(color.accent)), Qt.ItemDataRole.ForegroundRole)
             self.file_filter.setCurrentIndex(max(0, self.file_filter.findData(chosen)))
+        self.file_filter.fit_labels(220)
 
     def _on_check_item_changed(self, item):
         if self._syncing_checks or item.column() != 0:
@@ -804,6 +811,12 @@ class LibraryPage(QWidget):
     def set_tracks(self, tracks: list[TrackRecord]):
         self.cancel_context_actions()
         self._tracks = tracks
+        # Keep the existing reload/library-switch behavior: a selected format
+        # that disappeared from this dataset must not hide the new library.
+        chosen_format = self.format_filter.currentData()
+        if chosen_format and chosen_format not in {self._format_of(t) for t in tracks}:
+            with QSignalBlocker(self.format_filter):
+                self.format_filter.setCurrentIndex(0)
         keep_identity = any(track.track_id for track in tracks)
         if not keep_identity:
             self._checked_paths.clear()
@@ -1045,14 +1058,14 @@ class LibraryPage(QWidget):
             is_playing = self._track_is_playing(track)
             status_text = ui_text(self, library_status_text(track))
             values = [
-                '', status_text, track.artist or '', track.title or '', track.year or '', track.genre or '',
+                '', status_text, track.artist or '', track.title or '', normalize_year(track.year) or '—', track.genre or '',
                 display_bpm(track.bpm), duration, quality, self._format_of(track),
             ]
             items = [QStandardItem(str(value)) for value in values]
             # Cache raw values once. Header clicks use native Qt sorting without
             # opening files, parsing display strings or rebuilding the model.
             sort_values = ['', status_text, (track.artist or '').casefold(), (track.title or '').casefold(),
-                           self._numeric_sort_value(track.year), (primary_genre(track.genre) or '').casefold(),
+                           self._numeric_sort_value(normalize_year(track.year)), (primary_genre(track.genre) or '').casefold(),
                            self._numeric_sort_value(track.bpm), self._numeric_sort_value(track.duration_seconds),
                            self._numeric_sort_value(track.bitrate_kbps), self._format_of(track).casefold()]
             for item, value in zip(items, sort_values):
@@ -1201,7 +1214,7 @@ class LibraryPage(QWidget):
         self.detail_labels['artist'].setText(t.artist or '—')
         self.detail_labels['title'].setText(t.title or '—')
         self.detail_labels['album'].setText(t.album or '—')
-        self.detail_labels['year'].setText(t.year or '—')
+        self.detail_labels['year'].setText(normalize_year(t.year) or '—')
         self.detail_labels['bpm'].setText(display_bpm(t.bpm) or '—')
         self.detail_labels['genre'].setText(' / '.join(genre_items(t.genre, limit=len(t.genre or '') + 1)) or '—')
         self.detail_labels['format'].setText(self._format_of(t))
@@ -1540,13 +1553,6 @@ class LibraryPage(QWidget):
                             frozen_value(self._file_evaluations), self._context_view(), self._menu_epoch)
         menu = QMenu(self)
         menu.setObjectName('LibraryContextMenu')
-        presentation = self._file_presentation(track)
-        menu.addSection(ui_text(self, presentation.label))
-        if not presentation.confirmed:
-            menu.addSection(ui_text(self, 'Wymaga ponownej kontroli'))
-        if len(tracks) > 1:
-            menu.addSection(ui_text(self, 'Akcje wskazanego utworu'))
-
         actions, probes = {}, []
         def add(parent, key, label, enabled=True):
             action = parent.addAction(ui_text(self, label))
@@ -1562,25 +1568,19 @@ class LibraryPage(QWidget):
             add(parent, key, label, False)
             probes.append((key, tuple(self._context_plan(t, context, key, 0) for t in targets)))
 
-        opening = menu.addMenu(ui_text(self, 'Otwórz'))
-        opening.setObjectName('LibraryContextMenu')
-        for key, label in [('open', 'Otwórz plik'), ('reveal', 'Pokaż w Eksploratorze'),
-                           ('reveal_source', 'Pokaż folder źródłowy'),
-                           ('reveal_managed', 'Pokaż folder biblioteki')]:
-            file_action(opening, key, label, (track,))
         add(menu, 'edit', 'Edytuj metadane')
-        add(menu, 'details', 'Pokaż szczegóły')
         if len(tracks) == 1:
-            decisions = menu.addMenu(ui_text(self, 'Zmień stan metadanych'))
+            decisions = AccentMenu(ui_text(self, 'Zmień stan metadanych'), menu)
+            menu.addMenu(decisions)
             decisions.setObjectName('LibraryContextMenu')
-            add(decisions, 'ready', 'GOTOWE')
-            add(decisions, 'review', 'DO SPRAWDZENIA')
+            for key, label, color, icon in (
+                    ('ready', 'GOTOWE', '#35d893', 'status_ready'),
+                    ('review', 'DO SPRAWDZENIA', '#d8a23a', 'status_review')):
+                action = add(decisions, key, label)
+                action.setIcon(library_icon(icon, color, 16))
+                action.setProperty('accent', color)
         menu.addSeparator()
-        file_action(menu, 'play', 'Odtwórz', (track,))
-        file_action(menu, 'next', 'Odtwórz jako następny', (track,))
-        menu.addSeparator()
-        file_action(menu, 'collection', 'Dodaj do folderów z zaznaczonych utworów', tracks)
-        file_action(menu, 'playlist', 'Utwórz playlistę z zaznaczonych', tracks)
+        file_action(menu, 'reveal', 'Pokaż plik w Eksploratorze', (track,))
         self._context_menu_state = dict(menu=ref(menu), token=token, actions=actions,
                                         hidden=False, retired=False, dispatched=False)
         menu.setProperty('availabilityComplete', False)
@@ -1658,7 +1658,8 @@ class LibraryPage(QWidget):
             serial = self._context_serial
             plans = tuple(self._context_plan(t, context, action, serial) for t in targets) if physical else ()
             self._context_pending = (serial, action, token)
-            self._menu_tasks.submit(MenuWork(token, 'action', plans, reader),
+            operation = 'reveal' if action == 'reveal' and sys.platform == 'win32' else 'action'
+            self._menu_tasks.submit(MenuWork(token, operation, plans, reader),
                                     self._context_action_ready, token, serial, action)
         except (OSError, RuntimeError, ValueError, sqlite3.Error):
             self._context_pending = None
@@ -1699,6 +1700,8 @@ class LibraryPage(QWidget):
             self.context_collection_requested.emit((token, tuple(tracks.values())))
         elif action == 'playlist':
             self.context_playlist_requested.emit((token, paths))
+        elif action == 'reveal' and sys.platform == 'win32':
+            pass  # The worker selected the verified file through the Shell API.
         else:
             path = paths[0] if action == 'open' else paths[0].parent
             if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):

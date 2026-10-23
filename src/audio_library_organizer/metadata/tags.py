@@ -6,6 +6,7 @@ from typing import Any
 
 from mutagen import File as MutagenFile
 from mutagen.id3 import ID3, ID3NoHeaderError
+from audio_library_organizer.metadata.normalization import normalize_year
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +55,7 @@ def _read_id3(path: Path) -> TagInfo:
     raw = {key: str(frame) for key, frame in tags.items() if not key.startswith('APIC')}
     return TagInfo(
         artist=text('TPE1'), title=text('TIT2'), album=text('TALB'),
-        year=text('TDRC') or text('TYER'), genre=text('TCON'), bpm=_float(text('TBPM')),
+        year=normalize_year(text('TDRC') or text('TYER')), genre=text('TCON'), bpm=_float(text('TBPM')),
         comment=comment, has_cover=bool(tags.getall('APIC')), raw=raw,
     )
 
@@ -63,7 +64,7 @@ def read_tags(path: Path) -> TagInfo:
     path = Path(path)
     if path.suffix.lower() == '.mp3':
         base = _read_id3(path)
-        if any((base.artist, base.title, base.album, base.genre, base.bpm, base.comment, base.has_cover)):
+        if any((base.artist, base.title, base.album, base.year, base.genre, base.bpm, base.comment, base.has_cover)):
             return base
     try:
         audio = MutagenFile(path, easy=True)
@@ -72,7 +73,7 @@ def read_tags(path: Path) -> TagInfo:
         artist = _first(tags.get('artist'))
         title = _first(tags.get('title'))
         album = _first(tags.get('album'))
-        year = _first(tags.get('date') or tags.get('year'))
+        year = normalize_year(_first(tags.get('date') or tags.get('year')))
         genre = _first(tags.get('genre'))
         bpm = _float(tags.get('bpm'))
         comment = _first(tags.get('comment') or tags.get('description'))

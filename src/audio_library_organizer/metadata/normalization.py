@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date, datetime
 from collections.abc import Iterable
 
 from audio_library_organizer.domain.preferences import NameNormalizationRule, default_name_rules
@@ -33,4 +34,28 @@ def normalize_music_text(value: str | None, rules: Iterable[NameNormalizationRul
 
 def is_valid_year_text(value: str | None) -> bool:
     text = '' if value is None else str(value).strip()
-    return text == '' or (len(text) == 4 and text.isdigit())
+    return text == '' or (len(text) == 4 and normalize_year(text) is not None)
+
+
+def normalize_year(value) -> str | None:
+    """Year from YYYY, ISO YYYY-MM/ YYYY-MM-DD or an ISO date-time.
+
+    Validate the whole calendar value, never truncate arbitrary tag/provider
+    text. Callers retain raw tags/provenance; existing database rows need no
+    migration to display and sort by this value.
+    """
+    text = '' if value is None else str(value).strip()
+    if not re.fullmatch(r'[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2}(?:[T ][0-9]{2}:[0-9]{2}(?::[0-9]{2}(?:\.[0-9]+)?)?(?:Z|[+-][0-9]{2}:[0-5][0-9])?)?)?)?', text):
+        return None
+    try:
+        if len(text) == 4:
+            date(int(text), 1, 1)
+        elif len(text) == 7:
+            date.fromisoformat(text + '-01')
+        elif len(text) == 10:
+            date.fromisoformat(text)
+        else:
+            datetime.fromisoformat(text.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    return text[:4]

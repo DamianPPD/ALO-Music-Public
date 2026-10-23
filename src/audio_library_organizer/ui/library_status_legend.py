@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QMenu, QToolButton
 from audio_library_organizer.ui.state import status_presentation
 from audio_library_organizer.ui.icons import alo_icon, library_icon
 from audio_library_organizer.ui.i18n import ui_text
+from audio_library_organizer.ui.library_controls import AccentMenu
 
 
 LEGEND_ITEMS = (
@@ -39,15 +40,16 @@ def install_library_status_legend(library_page) -> QToolButton:
     button.setToolTip(ui_text(library_page, 'Legenda'))
     button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
 
-    menu = QMenu(button)
+    menu = AccentMenu(button)
     for status, label, description, accent_override in LEGEND_ITEMS:
         presentation = status_presentation(status)
         icons = {'ready': 'status_ready', 'duplicate': 'duplicates', 'review': 'status_review', 'not_selected': 'cancel'}
         accent = accent_override or {'ready': '#35d893', 'review': '#d8a23a'}.get(status, presentation.accent)
         icon_factory = library_icon if status in {'ready', 'review'} else alo_icon
         icon = icon_factory('status_problem' if accent_override else icons[status], accent, 16)
-        action = menu.addAction(icon, f'{label} — {description}')
-        action.setToolTip(description)
+        action = menu.addAction(icon, ui_text(library_page, f'{label} — {description}'))
+        action.setProperty('accent', accent)
+        action.setToolTip(ui_text(library_page, description))
     button.setMenu(menu)
 
     button.setFixedSize(34, 34)

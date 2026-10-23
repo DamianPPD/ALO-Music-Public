@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from audio_library_organizer.domain.candidates import AcoustIDHit
+from audio_library_organizer.metadata.normalization import normalize_year
 
 
 def _artist_text(recording: dict) -> str | None:
@@ -31,7 +32,7 @@ def parse_acoustid_results(data: dict) -> list[AcoustIDHit]:
                 groups = recording.get('releasegroups') or recording.get('release-groups') or recording.get('releases') or []
                 release = next((r for r in groups if isinstance(r, dict)), {}) if isinstance(groups, list) else {}
                 date = release.get('first-release-date') or release.get('date') or ''
-                year = date[:4] if isinstance(date, str) and len(date) >= 4 and date[:4].isdigit() else None
+                year = normalize_year(date)
                 hits.append(AcoustIDHit(rid, score, recording.get('title'), _artist_text(recording),
                                           release.get('title'), year, result.get('id')))
     hits.sort(key=lambda h: h.score, reverse=True)

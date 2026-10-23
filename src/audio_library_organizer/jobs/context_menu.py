@@ -111,16 +111,22 @@ def execute_menu_work(work, cancel):
     snapshot = fresh()
     if cancel.is_set():
         raise InterruptedError('Menu work cancelled')
+    def before_use():
+        for plan, expected, identity in zip(work.plans, paths, identities):
+            checked = read_material(plan, str, cancelled=cancel.is_set)
+            if (not checked.resolution.is_verified or checked.value != str(expected)
+                    or checked.resolution.material_identity != identity):
+                raise ValueError('Menu material changed during preparation')
+        fresh()
+    if work.operation == 'reveal':
+        from audio_library_organizer.jobs.shell_reveal import reveal_file
+        if len(paths) != 1:
+            raise ValueError('Explorer selection requires exactly one verified file')
+        reveal_file(paths[0], guard=before_use)
+        return tuple(paths)
     if work.operation == 'playlist':
         from audio_library_organizer.jobs.playlists import write_m3u8
-        def before_write():
-            for plan, expected, identity in zip(work.plans, paths, identities):
-                checked = read_material(plan, str, cancelled=cancel.is_set)
-                if (not checked.resolution.is_verified or checked.value != str(expected)
-                        or checked.resolution.material_identity != identity):
-                    raise ValueError('Playlist material changed during preparation')
-            fresh()
-        return write_m3u8(Path(work.data[0]), paths, relative=True, guard=fresh, before_write=before_write), len(paths)
+        return write_m3u8(Path(work.data[0]), paths, relative=True, guard=fresh, before_write=before_use), len(paths)
     if work.operation == 'collection':
         from audio_library_organizer.jobs.collections import build_collection_plan
         if snapshot is None:

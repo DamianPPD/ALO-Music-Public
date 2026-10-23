@@ -49,7 +49,7 @@ from audio_library_organizer.domain.candidates import AcoustIDHit
 from audio_library_organizer.jobs.audio_identification import SOURCE as AUDIO_SOURCE, approve_audio_source
 from audio_library_organizer.metadata.artwork import extract_embedded_cover
 from audio_library_organizer.metadata.naming import DEFAULT_FILENAME_TEMPLATE, normalize_title_case, propose_filename
-from audio_library_organizer.metadata.normalization import normalize_music_text, is_valid_year_text
+from audio_library_organizer.metadata.normalization import normalize_music_text, is_valid_year_text, normalize_year
 from audio_library_organizer.domain.preferences import default_name_rules
 from audio_library_organizer.metadata.online_lock import is_online_locked
 from audio_library_organizer.ui.assets import asset_path
@@ -1082,7 +1082,7 @@ class MetadataEditorDialog(QDialog):
 
         self.artist = QLineEdit(track.artist or '')
         self.title = QLineEdit(track.title or '')
-        self.year = QLineEdit(track.year or '')
+        self.year = QLineEdit(normalize_year(track.year) or '')
         self.year.setPlaceholderText('np. 2009')
         self.year.setMaxLength(4)
         self.year.setValidator(QRegularExpressionValidator(QRegularExpression(r'\d{0,4}'), self.year))
@@ -1663,6 +1663,8 @@ class MetadataEditorDialog(QDialog):
         button.setMenu(menu)
 
     def _display_source_value(self, field_name: str, value) -> str:
+        if field_name == 'year':
+            return normalize_year(value) or '—'
         if field_name == 'bpm':
             return display_bpm(value) or '—'
         return str(value or '—')
@@ -2358,7 +2360,10 @@ class MetadataEditorDialog(QDialog):
 
     def _refresh_change_highlights(self, *_):
         for name, widget in self._field_widgets.items():
-            changed = self._widget_text(widget).strip() != str(self._initial_values.get(name, '')).strip()
+            initial = self._initial_values.get(name, '')
+            if name == 'year':
+                initial = normalize_year(initial) or ''
+            changed = self._widget_text(widget).strip() != str(initial).strip()
             widget.setProperty('changed', changed)
             widget.style().unpolish(widget)
             widget.style().polish(widget)

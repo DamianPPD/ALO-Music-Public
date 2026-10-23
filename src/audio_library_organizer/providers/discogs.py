@@ -1,4 +1,5 @@
 from __future__ import annotations
+from audio_library_organizer.metadata.normalization import normalize_year
 
 from difflib import SequenceMatcher
 
@@ -90,7 +91,7 @@ def parse_release_candidate(release: dict, wanted_title: str | None = None) -> M
     uri = release.get('uri') or (f'https://www.discogs.com/release/{release_id}' if release_id else None)
     return MetadataCandidate(
         source='discogs', artist=artist, title=track.get('title') or wanted_title or release_title,
-        album=album, year=str(release.get('year')) if release.get('year') else None,
+        album=album, year=normalize_year(release.get('year')),
         genre=genre, comment=_format_comment(release), duration_seconds=_duration_seconds(track.get('duration')),
         release_id=release_id, source_url=uri, cover_art_url=_cover_url(release),
     )
