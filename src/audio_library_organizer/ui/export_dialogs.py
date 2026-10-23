@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 
 from audio_library_organizer.ui.i18n import language_for
 from audio_library_organizer.ui.icons import alo_icon
+from audio_library_organizer.ui.dialog_style import configure_dialog_button
 
 GREEN, AMBER, VIOLET, BLUE, RED = '#35d893', '#d8a23a', '#db8fd4', '#66aaf0', '#f34d64'
 
@@ -53,10 +54,16 @@ class ExportReviewWarning(QMessageBox):
             QPushButton:focus { border:2px solid #9bc6dc; }
             QPushButton[primary="true"] { background:#146dff; border-color:#3886ff; }
         ''')
+        configure_dialog_button(self.review_button, accent='blue')
+        configure_dialog_button(self.continue_button, stripe=True, icon_size=16)
+        self.continue_button.setIcon(alo_icon('forward', '#e9a83b', 16))
+        configure_dialog_button(self.cancel_button)
         for label in self.findChildren(QLabel):
             if label.objectName() != 'qt_msgboxex_icon_label':
                 label.setWordWrap(True)
                 label.setMaximumWidth(510)
+                label.ensurePolished()
+                label.setMinimumHeight(label.heightForWidth(510))
         width = min(620, max(280, self.screen().availableGeometry().width() - 80))
         grid = self.layout()
         grid.addItem(QSpacerItem(width, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum),
@@ -256,7 +263,19 @@ class ExportPreviewDialog(_ExportDialog):
             'artist': self.tr('Według wykonawcy', 'By artist'),
             'genre': self.tr('Według gatunku', 'By genre'),
         }.get(folder_organization, self.tr('Bez podfolderów', 'No subfolders'))
-        self.body_layout.addWidget(self.label(self.tr('Organizacja GOTOWE: ', 'READY organization: ') + organization))
+        self.organization_bar = QFrame()
+        self.organization_bar.setObjectName('ExportOrganization')
+        self.organization_bar.setStyleSheet('QFrame#ExportOrganization { background:#202c35; border:0; border-radius:7px; }')
+        organization_row = QHBoxLayout(self.organization_bar)
+        organization_row.setContentsMargins(12, 8, 12, 8)
+        glyph = QLabel()
+        glyph.setPixmap(alo_icon('folder', BLUE, 18).pixmap(18, 18))
+        organization_row.addWidget(glyph)
+        organization_row.addWidget(self.label(self.tr('Organizacja GOTOWE', 'READY organization'), bold=True), 1)
+        self.organization_value = self.label(organization, color='#7ce0bc', bold=True)
+        self.organization_value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        organization_row.addWidget(self.organization_value)
+        self.body_layout.addWidget(self.organization_bar)
         rows = []
         if plan is not None:
             for item in plan.items[:6]:
@@ -288,6 +307,8 @@ class ExportPreviewDialog(_ExportDialog):
         self.create_button.setProperty('primary', True)
         self.create_button.setIcon(alo_icon('copy', '#e2f8ed'))
         self.create_button.setDefault(True)
+        configure_dialog_button(self.cancel_button)
+        configure_dialog_button(self.create_button, accent='green')
         self.cancel_button.clicked.connect(self.reject)
         self.create_button.clicked.connect(self.accept)
         self.footer_layout.addWidget(self.cancel_button)
@@ -493,6 +514,8 @@ class ExportSummaryDialog(_ExportDialog):
         self.folder_button.setIcon(alo_icon('folder_open', BLUE))
         self.report_button = QPushButton(self.tr('Przejrzyj raport', 'View report'))
         self.report_button.setIcon(alo_icon('report', BLUE))
+        configure_dialog_button(self.folder_button)
+        configure_dialog_button(self.report_button)
         self.root, self.report = Path(library_root), Path(report) if report else None
         self.folder_button.clicked.connect(self.open_folder)
         self.report_button.clicked.connect(self.open_report)
@@ -500,6 +523,8 @@ class ExportSummaryDialog(_ExportDialog):
         actions_layout.addWidget(self.report_button, 1)
         self.body_layout.addWidget(self.actions)
         self.close_button = QPushButton(self.tr('Zamknij', 'Close'))
+        configure_dialog_button(self.close_button)
+        self.close_button.setMinimumWidth(112)
         self.close_button.setDefault(True)
         self.close_button.clicked.connect(self.accept)
         self.footer_layout.addWidget(self.close_button)

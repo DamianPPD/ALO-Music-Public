@@ -57,6 +57,7 @@ from audio_library_organizer.metadata.naming import (
 )
 from audio_library_organizer.ui.confirmations import confirm_bulk_copy
 from audio_library_organizer.ui.export_dialogs import ExportProgressDialog, ExportSummaryDialog, ExportReviewWarning
+from audio_library_organizer.ui.creation_dialogs import CreationNameDialog, CreationResultDialog
 from audio_library_organizer.ui.state import should_refresh_live_scan, export_needs_library_review, library_status_text, save_app_settings
 from audio_library_organizer.ui.duplicates_page import DuplicatesPage
 from audio_library_organizer.ui.help_center import HelpCenter
@@ -1273,16 +1274,17 @@ class MainWindow(QMainWindow):
         self._show_operation(f'Aktywna biblioteka: {profile.name}')
 
     def _export_playlist(self, paths):
+        selected_count = len(paths or [])
         paths = [Path(p) for p in (paths or []) if Path(p).is_file()]
         if not paths:
             QMessageBox.information(self, self._t('Brak plików'), self._t('Nie ma plików do zapisania w playliście.'))
             return
         base = self._collections_library_for_active().custom_folders
         default = base / 'playlista.m3u8'
-        filename, _ = QFileDialog.getSaveFileName(self, self._t('Zapisz playlistę M3U8'), str(default), self._t('Playlista M3U8 (*.m3u8)'))
-        if not filename:
+        dialog = CreationNameDialog('playlist', selected_count, self, initial_target=default, available_count=len(paths))
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-        target = Path(filename)
+        target = dialog.target_path()
         if target.suffix.lower() != '.m3u8':
             target = target.with_suffix('.m3u8')
         try:
@@ -1290,18 +1292,17 @@ class MainWindow(QMainWindow):
         except OSError as exc:
             QMessageBox.critical(self, self._t('Nie można zapisać playlisty'), self._t(str(exc))); return
         self._show_operation(f'Utworzono playlistę: {result.name}')
-        QMessageBox.information(self, self._t('Playlista gotowa'), self._t(f'Zapisano {len(paths)} utworów:\n{result}'))
+        CreationResultDialog('playlist', result.stem, len(paths), result, self).exec()
 
     def _export_context_playlist(self, request):
         token, paths = request
         if self.library._context_tracks(token) is None or not paths:
             return
         default = self.app_settings.library.custom_folders / 'playlista.m3u8'
-        filename, _ = QFileDialog.getSaveFileName(self, self._t('Zapisz playlistę M3U8'),
-                                                 str(default), self._t('Playlista M3U8 (*.m3u8)'))
-        if not filename:
+        dialog = CreationNameDialog('playlist', len(paths), self, initial_target=default)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-        target = Path(filename)
+        target = dialog.target_path()
         if target.suffix.lower() != '.m3u8':
             target = target.with_suffix('.m3u8')
         # The dialog is not an authorization cache: recheck on the worker again.
@@ -1313,15 +1314,17 @@ class MainWindow(QMainWindow):
             return
         path, count = result
         self._show_operation(f'Utworzono playlistę: {path.name}')
-        QMessageBox.information(self, self._t('Playlista gotowa'), self._t(f'Zapisano {count} utworów:\n{path}'))
+        CreationResultDialog('playlist', path.stem, count, path, self).exec()
 
     def _create_context_collection(self, request):
         token, tracks = request
         if self.library._context_tracks(token) is None or not tracks:
             return
-        name, ok = QInputDialog.getText(self, self._t('Utwórz folder z zaznaczonych'),
-                                       self._t(f'Nazwa nowego folderu ({len(tracks)} utworów):'))
-        if not ok or not name.strip():
+        dialog = CreationNameDialog('folder', len(tracks), self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        name = dialog.name_edit.text()
+        if not name.strip():
             return
         self.library.run_context_command(token, 'collection', (self.app_settings.library, name.strip()),
                                          self._context_collection_planned)
@@ -1753,8 +1756,11 @@ class MainWindow(QMainWindow):
         if not available:
             QMessageBox.warning(self, self._t('Brak dostępnych plików'), self._t('Żaden z zaznaczonych plików nie jest obecnie dostępny.'))
             return
-        name, ok = QInputDialog.getText(self, self._t('Utwórz folder z zaznaczonych'), self._t(f'Nazwa nowego folderu ({len(available)} utworów):'))
-        if not ok or not name.strip():
+        dialog = CreationNameDialog('folder', len(tracks), self, available_count=len(available))
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        name = dialog.name_edit.text()
+        if not name.strip():
             return
         try:
             plan = build_collection_plan(self._collections_library_for_active(), name.strip(), available)
@@ -1768,6 +1774,7 @@ class MainWindow(QMainWindow):
         if not plan.items:
             QMessageBox.warning(self, self._t('Brak dostępnych plików'), self._t('Żaden z zaznaczonych plików nie jest obecnie dostępny.'))
             return
+        self._collection_dialog_target = (plan.items[0].destination_dir, len(plan.items))
         self._set_operation_state('export', 'TWORZENIE FOLDERU Z ZAZNACZONYCH UTWORÓW', f'Kopiowanie {len(plan.items)} zaznaczonych utworów…')
         self._set_busy(True, f'Tworzenie folderu „{plan.items[0].destination_dir.name}”…', kind='collection')
         thread = QThread(self); worker = ExportWorker(plan); worker.moveToThread(thread)
@@ -1778,8 +1785,14 @@ class MainWindow(QMainWindow):
     def _collection_finished(self, result):
         self.collections.refresh()
         copied = len(result.copied)
-        self._set_operation_state('done', 'FOLDER MP3 GOTOWY', f'Skopiowano {copied} plików do MOJE_FOLDERY_MP3.')
-        QMessageBox.information(self, self._t('Folder utworzony'), self._t(f'Utworzono folder z {copied} plikami w MOJE_FOLDERY_MP3.'))
+        destination, planned = getattr(self, '_collection_dialog_target', None) or (result.copied[0].parent if result.copied else None, result.planned)
+        self._collection_dialog_target = None
+        success = result.status == 'success'
+        dialog = CreationResultDialog('folder', destination.name if destination is not None else '—', copied, destination, self,
+            outcome=result.status, expected_count=planned,
+            errors=(*result.errors, *result.verification_errors, result.fatal_error, *result.cleanup_warnings))
+        self._set_operation_state('done' if success else 'error', dialog.windowTitle(), dialog.count_label.text())
+        dialog.exec()
 
     def _apply_manual_field(self, tracks, field_name: str, value, lock: bool):
         current = [self.repository.get_track(t.track_id) for t in tracks]
