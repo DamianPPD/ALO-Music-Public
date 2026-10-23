@@ -258,12 +258,17 @@ def _context(repository, known_states, conn=None):
             conn.close()
 
 
-def _report_evidence(root, files):
+def _report_evidence(root, files, *, cancelled=None):
+    cancelled = cancelled or (lambda: False)
     evidence=defaultdict(list)
     directory=root/'raporty'
+    if cancelled():
+        return evidence
     if not directory.is_dir() or directory.is_symlink():
         return evidence
     for report in sorted(directory.glob('*.csv')):
+        if cancelled():
+            return evidence
         try:
             if report.is_symlink() or report.stat().st_size > 16*1024*1024:
                 continue
@@ -272,6 +277,8 @@ def _report_evidence(root, files):
                 if not {'source_path','destination_path'} <= set(reader.fieldnames or ()):
                     continue
                 for i,row in enumerate(reader):
+                    if cancelled():
+                        return evidence
                     if i>100000:
                         break
                     try:
@@ -300,8 +307,12 @@ def _physical_inventory(root, cancelled):
             failures=[]
             def onerror(error): failures.append(str(error))
             for parent,dirs,names in os.walk(directory,followlinks=False,onerror=onerror):
+                if cancelled():
+                    return files,outcomes
                 safe_dirs=[]
                 for name in sorted(dirs):
+                    if cancelled():
+                        return files,outcomes
                     child=Path(parent)/name
                     if child.is_symlink() or (hasattr(child,'is_junction') and child.is_junction()):
                         failures.append('Directory alias: '+str(child))
@@ -321,10 +332,20 @@ def _physical_inventory(root, cancelled):
 
 
 def inventory_legacy_outputs(repository, *, library_root, known_libraries=(), cancelled=None,
-                             progress=None, persist=True) -> AdoptionInventory:
+                             progress=None, persist=True, phase=None) -> AdoptionInventory:
     cancelled=cancelled or (lambda:False)
     root=_active_root(repository,library_root)
     run_id=str(uuid4()); at=time.time_ns()
+    library_id, descriptors, context = '', (), ''
+
+    def stopped():
+        # Partial evidence must never reach the creation/adoption guard as a
+        # complete inventory. No observations are persisted on this path.
+        return AdoptionInventory(run_id,library_id,str(root),at,(),(),(),descriptors,context,(),True)
+
+    if cancelled():
+        return stopped()
+    if phase: phase('context')
     known_error=''
     try:
         descriptors=_descriptors(repository,root,known_libraries)
@@ -332,18 +353,26 @@ def inventory_legacy_outputs(repository, *, library_root, known_libraries=(), ca
     except (OSError,ValueError,sqlite3.Error,TypeError,RuntimeError) as exc:
         known_error='KNOWN_LIBRARY_UNAVAILABLE: '+str(exc)
         descriptors=(); states=[]; owners=()
+    if cancelled():
+        return stopped()
     library_id,sources,tracks,context=_context(repository,states)
+    if cancelled():
+        return stopped()
     bindings={b.track_id:b for b in repository.list_managed_bindings()}
     with closing(sqlite3.connect(repository.database_path.absolute().as_uri()+'?mode=ro',uri=True)) as conn:
         references={row[0]:(row[1],row[2]) for row in conn.execute('SELECT track_id,context_digest,evidence_json FROM source_audio_references')}
     trusted={}; fresh_references=[]
+    if phase: phase('sources')
     for i,track in enumerate(tracks):
+        if cancelled(): break
+        if progress: progress(i,len(tracks),str(track.path))
         if cancelled(): break
         source=next((s for s in sources if s.source_id==track.source_id and s.library_id==library_id),None)
         key=_source_context(track,sources,library_id)
         previous=references.get(track.track_id)
         try:
             if source is None or not valid_digest(track.sha256):
+                if progress: progress(i+1,len(tracks),str(track.path))
                 continue
             if Path(track.path).exists():
                 stamp=_guard_file(track.path,source.root_path)
@@ -366,10 +395,21 @@ def inventory_legacy_outputs(repository, *, library_root, known_libraries=(), ca
         except (OSError,ValueError,RuntimeError,TypeError):
             pass
         if progress: progress(i+1,len(tracks),str(track.path))
+    if cancelled():
+        return stopped()
+    if phase: phase('inventory')
     files,outcomes=_physical_inventory(root,cancelled)
-    reports=_report_evidence(root,{lexical_locator(p) for p in files})
+    if cancelled():
+        return stopped()
+    if phase: phase('reports')
+    reports=_report_evidence(root,{lexical_locator(p) for p in files},cancelled=cancelled)
+    if cancelled():
+        return stopped()
+    if phase: phase('outputs')
     proposals=[]
-    for path in files:
+    for index,path in enumerate(files):
+        if cancelled(): break
+        if progress: progress(index,len(files),str(path))
         if cancelled(): break
         locator=str(path); key=lexical_locator(path)
         evidence=tuple(reports.get(key,()))+('OUTPUT_INVENTORY',)
@@ -388,6 +428,7 @@ def inventory_legacy_outputs(repository, *, library_root, known_libraries=(), ca
                 (reason or (proof.reason if proof and proof.status!='VALID' else 'NO_TRUSTED_SOURCE_MATCH'),),
                 evidence,at,full_sha256=proof.full_sha256 or '' if proof else '',
                 audio_digest=proof.audio_digest or '' if proof else '',stat_identity=proof.stat_identity if proof else ()))
+            if progress: progress(index+1,len(files),str(path))
             continue
         for track in matching:
             reasons=[]
@@ -419,6 +460,9 @@ def inventory_legacy_outputs(repository, *, library_root, known_libraries=(), ca
                 evidence+('VERIFIED_SOURCE_AUDIO',),at,metadata_revision(track),
                 _source_context(track,sources,library_id),proof.full_sha256,proof.audio_digest,proof.algorithm,
                 proof.stat_identity,proof.tag_snapshot))
+        if progress: progress(index+1,len(files),str(path))
+    if cancelled():
+        return stopped()
     if any(p.track_id is None and p.status=='CONFLICT' for p in proposals):
         proposals=[replace(p,status='CONFLICT',reason_codes=('UNRESOLVED_OUTPUT_ALIAS',))
                    if p.can_adopt else p for p in proposals]
@@ -432,6 +476,8 @@ def inventory_legacy_outputs(repository, *, library_root, known_libraries=(), ca
                     proposals[i]=replace(proposals[i],status='CONFLICT',reason_codes=('MULTIPLE_LEGACY_OUTPUTS',))
     assigned={p.track_id for p in proposals if p.track_id}
     for track in tracks:
+        if cancelled():
+            return stopped()
         if track.track_id not in assigned:
             bound=bindings.get(track.track_id)
             status='ALREADY_BOUND' if bound else 'UNRESOLVED'
@@ -443,19 +489,26 @@ def inventory_legacy_outputs(repository, *, library_root, known_libraries=(), ca
         tuple(sorted({p.track_id for p in proposals if p.track_id and p.status in ('CONFLICT','UNRESOLVED','UNSUPPORTED')})),
         tuple(outcomes),descriptors,context,tuple(fresh_references),cancelled())
     if persist and not result.cancelled:
+        if phase: phase('saving')
+        if cancelled():
+            return stopped()
         with closing(_rw(repository)) as conn,conn:
             conn.execute('BEGIN IMMEDIATE')
+            if cancelled(): raise InterruptedError('Inventory cancelled before database commit.')
             fresh_states,_=_known_state(descriptors) if descriptors else ([],())
             if _context(repository,fresh_states,conn)[3]!=context:
                 raise ValueError('Library/record context changed during inventory.')
+            if cancelled(): raise InterruptedError('Inventory cancelled before database commit.')
             conn.execute('INSERT INTO legacy_adoption_runs VALUES (?,?,?,?,?)',
                 (run_id,library_id,context,canonical_json({'known_libraries':[asdict(k) for k in descriptors],
                     'root_observations':outcomes,'library_root':str(root)}),at))
             for track_id,reference in fresh_references:
+                if cancelled(): raise InterruptedError('Inventory cancelled before database commit.')
                 conn.execute('INSERT INTO source_audio_references VALUES (?,?,?,?,?) ON CONFLICT(track_id) DO UPDATE SET '
                     'library_id=excluded.library_id,context_digest=excluded.context_digest,evidence_json=excluded.evidence_json,observed_at=excluded.observed_at',
                     (track_id,library_id,reference['source_context'],canonical_json(reference),at))
             for proposal in proposals:
+                if cancelled(): raise InterruptedError('Inventory cancelled before database commit.')
                 conn.execute('INSERT INTO legacy_adoption_proposals VALUES (?,?,?,?,?,?)',
                     (proposal.proposal_id,run_id,proposal.track_id,lexical_locator(proposal.locator) if proposal.locator else '',
                      proposal.status,canonical_json(asdict(proposal))))

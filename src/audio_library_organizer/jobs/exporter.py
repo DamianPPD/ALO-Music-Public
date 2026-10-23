@@ -123,6 +123,8 @@ class ExportEvent:
     destination: Path | None = None
     message: str = ''
     skipped: int = 0
+    check_current: int = 0
+    check_total: int = 0
 
     @property
     def remaining(self) -> int:
@@ -141,6 +143,7 @@ class ExportResult:
     elapsed_seconds: float = 0.0
     fatal_error: str = ''
     cleanup_warnings: tuple[str, ...] = ()
+    stop_phase: str = ''
 
     @property
     def created(self) -> int:

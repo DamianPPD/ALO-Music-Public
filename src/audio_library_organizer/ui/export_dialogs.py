@@ -241,10 +241,14 @@ class ExportProgressDialog(_ExportDialog):
     def __init__(self, total, parent=None, *, language=None):
         super().__init__(parent, language=language)
         self.running, self.stopping = True, False
+        self._current_phase = 'operation_started'
         self.heading(self.tr('Tworzenie plików wynikowych', 'Creating output files'))
         self.total_label = self.hero(total, self.tr('plików do utworzenia', 'files to create'))
         self.counter = self.label(f'0 / {total} — 0%', bold=True)
         self.body_layout.addWidget(self.counter)
+        self.check_progress = self.label('', muted=True)
+        self.check_progress.hide()
+        self.body_layout.addWidget(self.check_progress)
         self.progress = QProgressBar()
         self.progress.setRange(0, max(1, total))
         self.progress.setValue(0)
@@ -280,9 +284,19 @@ class ExportProgressDialog(_ExportDialog):
 
     @Slot(object)
     def update_event(self, event):
+        self._current_phase = event.phase
         self.progress.setValue(event.processed)
         percent = round(100 * event.processed / event.total) if event.total else 0
         self.counter.setText(f'{event.processed} / {event.total} — {percent}%')
+        checking = event.phase.startswith('preflight_')
+        self.check_progress.setVisible(checking)
+        if checking:
+            text = self.tr('Kontrola plików', 'File checks')
+            self.check_progress.setText(f'{text}: {event.check_current} / {event.check_total}' if event.check_total else
+                                       self.tr('Ustalanie zakresu kontroli…', 'Determining check scope…'))
+            if event.source is None:
+                self.current_file.set_full_text('—')
+            self.current_target.set_full_text('')
         for key, value in (('created', event.created), ('remaining', event.remaining), ('failed', event.failed)):
             self.count_labels[key].setText(str(value))
         if event.source is not None:
@@ -292,7 +306,13 @@ class ExportProgressDialog(_ExportDialog):
         if event.destination is not None:
             self.current_target.set_full_text(f'→ {event.destination}', str(event.destination))
         stages = {
-            'operation_started': ('Rozpoczęto tworzenie', 'Creation started'),
+            'preflight_context': ('FAZA 1 — Sprawdzanie bezpieczeństwa: biblioteki i SQLite', 'PHASE 1 — Library safety checks: libraries and SQLite'),
+            'preflight_sources': ('FAZA 1 — Sprawdzanie bezpieczeństwa: analiza źródeł i audio', 'PHASE 1 — Library safety checks: sources and audio'),
+            'preflight_inventory': ('FAZA 1 — Sprawdzanie bezpieczeństwa: wyszukiwanie istniejących wyników', 'PHASE 1 — Library safety checks: finding existing outputs'),
+            'preflight_reports': ('FAZA 1 — Sprawdzanie bezpieczeństwa: odczyt wcześniejszych raportów', 'PHASE 1 — Library safety checks: reading previous reports'),
+            'preflight_outputs': ('FAZA 1 — Sprawdzanie bezpieczeństwa: weryfikacja istniejących wyników', 'PHASE 1 — Library safety checks: verifying existing outputs'),
+            'preflight_saving': ('FAZA 1 — Sprawdzanie bezpieczeństwa: kończenie transakcji SQLite', 'PHASE 1 — Library safety checks: completing the SQLite transaction'),
+            'operation_started': ('FAZA 2 — Tworzenie plików', 'PHASE 2 — Creating files'),
             'item_started': ('Kopiowanie', 'Copying'),
             'copied': ('Skopiowano plik — kontrola SHA-256', 'File copied — checking SHA-256'),
             'raw_verified': ('Zweryfikowano kopię', 'Raw copy verified'),
@@ -303,11 +323,26 @@ class ExportProgressDialog(_ExportDialog):
             'item_finished': ('Zakończono przetwarzanie pliku', 'File completed'),
             'item_failed': ('Błąd przetwarzania pliku', 'File failed'),
             'operation_finished': ('Oczekiwanie na zakończenie workera…', 'Waiting for worker shutdown…'),
+            'operation_finishing': ('FAZA 3 — Kończenie zadania i przygotowanie raportu…', 'PHASE 3 — Finishing the task and preparing the report…'),
         }
         text = self.tr(*stages.get(event.phase, (event.phase, event.phase)))
         self.stage.setText(text)
         detail = event.message or (event.source.name if event.source else '')
         self.log.appendPlainText(text + (f': {detail}' if detail else ''))
+        if self.stopping:
+            self._stop_notice()
+
+    def _stop_notice(self):
+        if self._current_phase.startswith('preflight_'):
+            text = self.tr('Kończenie kontroli w najbliższym bezpiecznym punkcie. Kopiowanie nie zostało rozpoczęte. Bieżąca operacja dyskowa lub SQLite musi wrócić.',
+                           'Finishing the safety check at the next safe point. Copying has not started. A current disk or SQLite operation must return.')
+        elif self._current_phase == 'operation_finishing':
+            text = self.tr('Kończenie zadania i przygotowanie raportu. Oczekiwanie na bezpieczny koniec wątku.',
+                           'Finishing the task and preparing the report. Waiting for safe thread shutdown.')
+        else:
+            text = self.tr('Bieżący plik zostanie bezpiecznie dokończony. Następny nie zostanie rozpoczęty.',
+                           'The current file will finish safely. The next file will not start.')
+        self.notice.setText(text)
 
     @Slot()
     def request_stop(self):
@@ -316,9 +351,8 @@ class ExportProgressDialog(_ExportDialog):
         self.stopping = True
         self.stop_button.setText(self.tr('Zatrzymywanie…', 'Stopping…'))
         self.stop_button.setEnabled(False)
-        self.notice.setText(self.tr('Bieżący plik zostanie bezpiecznie dokończony. Następny nie zostanie rozpoczęty.',
-                                    'The current file will finish safely. The next file will not start.'))
-        self.log.appendPlainText(self.tr('Żądanie zatrzymania.', 'Stop requested.'))
+        self._stop_notice()
+        self.log.appendPlainText(self.tr('Odebrano żądanie zatrzymania.', 'Stop request received.'))
         self.stop_requested.emit()
 
     def reject(self):
@@ -372,6 +406,10 @@ class ExportSummaryDialog(_ExportDialog):
                 'Poprawne kopie pozostały w bibliotece. Ponowne uruchomienie może utworzyć kolejne kopie z unikalnymi nazwami.',
                 'Completed copies remain in the library. Running again may create additional copies with unique names.'), color=AMBER))
         self.notice = self.label('\n'.join(filter(None, [result.fatal_error, *result.cleanup_warnings, *report_errors])), color=AMBER)
+        if result.cancelled and result.stop_phase == 'preflight' and not result.fatal_error:
+            prefix = self.tr('Zatrzymano przed rozpoczęciem kopiowania. Wszystkie pozycje pozostały nieprzetworzone.',
+                             'Stopped before copying began. All items remain unprocessed.')
+            self.notice.setText(prefix + ('\n' + self.notice.text() if self.notice.text() else ''))
         self.body_layout.addWidget(self.notice)
         self.body_layout.addWidget(self.label(self.tr('Co dalej?', 'What next?'), size=18, bold=True))
         self.actions = QWidget()

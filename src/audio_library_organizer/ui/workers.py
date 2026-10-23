@@ -278,30 +278,72 @@ class ExportWorker(QObject):
         self.library_root = library_root
         self.known_libraries = tuple(known_libraries)
         self._cancelled = Event()
+        self._preflight_stage = 'context'
 
     def cancel(self):
         # Called directly by GUI: only the thread-safe Event is touched.
         self._cancelled.set()
 
+    def _preflight_phase(self, stage):
+        from audio_library_organizer.jobs.exporter import ExportEvent
+        self._preflight_stage = stage
+        self.phase.emit(ExportEvent('preflight_' + stage, len(self.plan.items), 0, 0, 0))
+
+    def _preflight_progress(self, current, total, name):
+        from pathlib import Path
+        from audio_library_organizer.jobs.exporter import ExportEvent
+        self.phase.emit(ExportEvent('preflight_' + self._preflight_stage, len(self.plan.items), 0, 0, 0,
+                                   Path(name) if name else None, check_current=current, check_total=total))
+
     @Slot()
     def run(self):
         from dataclasses import replace
         from time import perf_counter
-        from audio_library_organizer.jobs.exporter import execute_copy_plan
+        from audio_library_organizer.jobs.exporter import execute_copy_plan, ExportEvent, ExportResult
         started = perf_counter()
+        checking_preflight = True
+
+        def finish(result):
+            result = replace(result, elapsed_seconds=perf_counter() - started,
+                             cancelled=result.cancelled or self._cancelled.is_set())
+            if result.cancelled and not result.stop_phase:
+                result = replace(result, stop_phase='copying')
+            self.phase.emit(ExportEvent('operation_finishing', len(self.plan.items), result.processed,
+                                       result.created, result.failed, skipped=result.skipped))
+            self.finished.emit(result)
+
+        def stop_preflight():
+            finish(ExportResult((), (), planned=len(self.plan.items), cancelled=True, stop_phase='preflight'))
+
         try:
-            if self.adoption_repository is not None and not self._cancelled.is_set():
+            if self._cancelled.is_set():
+                stop_preflight()
+                return
+            if self.adoption_repository is not None:
                 from audio_library_organizer.jobs.legacy_adoption import inventory_legacy_outputs, assert_legacy_export_allowed
+                self._preflight_phase('context')
                 inventory = inventory_legacy_outputs(self.adoption_repository, library_root=self.library_root,
-                    known_libraries=self.known_libraries)
+                    known_libraries=self.known_libraries, cancelled=self._cancelled.is_set,
+                    progress=self._preflight_progress, phase=self._preflight_phase)
+                if inventory.cancelled or self._cancelled.is_set():
+                    stop_preflight()
+                    return
                 assert_legacy_export_allowed(inventory, [item.track for item in self.plan.items])
+            if self._cancelled.is_set():
+                stop_preflight()
+                return
+            checking_preflight = False
             result = execute_copy_plan(
                 self.plan,
                 progress=lambda current, total, name: self.progress.emit(current, total, name),
                 cancelled=self._cancelled.is_set,
                 event=self.phase.emit,
             )
-            self.finished.emit(replace(result, elapsed_seconds=perf_counter() - started,
-                                       cancelled=result.cancelled or self._cancelled.is_set()))
+            finish(result)
+        except InterruptedError as exc:
+            if checking_preflight and self._cancelled.is_set():
+                stop_preflight()
+            else:
+                self.failed.emit(str(exc))
         except Exception as exc:
             self.failed.emit(str(exc))

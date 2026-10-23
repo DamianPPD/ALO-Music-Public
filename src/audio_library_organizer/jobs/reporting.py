@@ -165,7 +165,7 @@ def export_verification_csv(result, path: Path, *, plan=None) -> Path:
     fields = ['source_path', 'destination_path', 'raw_copy_sha256_match', 'final_file_exists',
               'final_size_bytes', 'verified', 'plan_index', 'planned_destination', 'category',
               'status', 'error', 'final_sha256', 'planned', 'processed', 'created', 'failed',
-              'remaining', 'cancelled', 'elapsed_seconds', 'operation_error', 'cleanup_warnings']
+              'remaining', 'cancelled', 'elapsed_seconds', 'operation_error', 'cleanup_warnings', 'stop_phase']
     rows = []
     outcomes = {item.index: item for item in getattr(result, 'outcomes', ())}
     if plan is not None or outcomes:
@@ -204,5 +204,6 @@ def export_verification_csv(result, path: Path, *, plan=None) -> Path:
                 row[key] = getattr(result, key, '')
             row['operation_error'] = getattr(result, 'fatal_error', '')
             row['cleanup_warnings'] = ' | '.join(getattr(result, 'cleanup_warnings', ()))
+            row['stop_phase'] = getattr(result, 'stop_phase', '')
             writer.writerow(row)
     return path
