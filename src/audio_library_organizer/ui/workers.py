@@ -269,6 +269,7 @@ class ExportWorker(QObject):
     finished = Signal(object)
     failed = Signal(str)
     progress = Signal(int, int, str)
+    phase = Signal(object)
 
     def __init__(self, plan, *, adoption_repository=None, library_root=None, known_libraries=()):
         super().__init__()
@@ -276,12 +277,20 @@ class ExportWorker(QObject):
         self.adoption_repository = adoption_repository
         self.library_root = library_root
         self.known_libraries = tuple(known_libraries)
+        self._cancelled = Event()
+
+    def cancel(self):
+        # Called directly by GUI: only the thread-safe Event is touched.
+        self._cancelled.set()
 
     @Slot()
     def run(self):
+        from dataclasses import replace
+        from time import perf_counter
         from audio_library_organizer.jobs.exporter import execute_copy_plan
+        started = perf_counter()
         try:
-            if self.adoption_repository is not None:
+            if self.adoption_repository is not None and not self._cancelled.is_set():
                 from audio_library_organizer.jobs.legacy_adoption import inventory_legacy_outputs, assert_legacy_export_allowed
                 inventory = inventory_legacy_outputs(self.adoption_repository, library_root=self.library_root,
                     known_libraries=self.known_libraries)
@@ -289,7 +298,10 @@ class ExportWorker(QObject):
             result = execute_copy_plan(
                 self.plan,
                 progress=lambda current, total, name: self.progress.emit(current, total, name),
+                cancelled=self._cancelled.is_set,
+                event=self.phase.emit,
             )
-            self.finished.emit(result)
+            self.finished.emit(replace(result, elapsed_seconds=perf_counter() - started,
+                                       cancelled=result.cancelled or self._cancelled.is_set()))
         except Exception as exc:
             self.failed.emit(str(exc))

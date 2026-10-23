@@ -158,21 +158,51 @@ def export_csv(tracks: Iterable[TrackRecord], path: Path) -> Path:
     return path
 
 
-def export_verification_csv(result, path: Path) -> Path:
-    """Write an explicit post-copy audit so users can prove where each file landed."""
+def export_verification_csv(result, path: Path, *, plan=None) -> Path:
+    """Audit successful, failed and unprocessed items without conflating them."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    fields = ['source_path', 'destination_path', 'raw_copy_sha256_match', 'final_file_exists', 'final_size_bytes', 'verified']
+    fields = ['source_path', 'destination_path', 'raw_copy_sha256_match', 'final_file_exists',
+              'final_size_bytes', 'verified', 'plan_index', 'planned_destination', 'category',
+              'status', 'error', 'final_sha256', 'planned', 'processed', 'created', 'failed',
+              'remaining', 'cancelled', 'elapsed_seconds', 'operation_error', 'cleanup_warnings']
+    rows = []
+    outcomes = {item.index: item for item in getattr(result, 'outcomes', ())}
+    if plan is not None or outcomes:
+        items = enumerate(plan.items, 1) if plan is not None else ((index, None) for index in outcomes)
+        for index, planned_item in items:
+            outcome = outcomes.get(index)
+            row = {
+                'plan_index': index,
+                'source_path': str(planned_item.track.path if planned_item else outcome.source),
+                'planned_destination': str(planned_item.destination_dir / planned_item.filename) if planned_item else '',
+                'category': planned_item.category if planned_item else outcome.category,
+                'status': outcome.status if outcome else 'not_started',
+                'destination_path': str(outcome.destination) if outcome and outcome.destination else '',
+                'raw_copy_sha256_match': bool(outcome and outcome.raw_verified),
+                'final_file_exists': bool(outcome and outcome.status == 'verified'),
+                'final_size_bytes': outcome.final_size_bytes if outcome else 0,
+                'verified': bool(outcome and outcome.status == 'verified'),
+                'error': outcome.error if outcome else '',
+                'final_sha256': outcome.final_sha256 if outcome else '',
+            }
+            rows.append(row)
+    else:
+        # Compatibility for older callers constructing a verification-only result.
+        for item in getattr(result, 'verified', ()):
+            rows.append({
+                'source_path': str(item.source), 'destination_path': str(item.destination),
+                'raw_copy_sha256_match': item.raw_copy_sha256_match,
+                'final_file_exists': item.final_file_exists, 'final_size_bytes': item.final_size_bytes,
+                'verified': bool(item.raw_copy_sha256_match and item.final_file_exists and item.final_size_bytes > 0),
+            })
     with path.open('w', encoding='utf-8-sig', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
-        for item in getattr(result, 'verified', ()):
-            writer.writerow({
-                'source_path': str(item.source),
-                'destination_path': str(item.destination),
-                'raw_copy_sha256_match': item.raw_copy_sha256_match,
-                'final_file_exists': item.final_file_exists,
-                'final_size_bytes': item.final_size_bytes,
-                'verified': bool(item.raw_copy_sha256_match and item.final_file_exists and item.final_size_bytes > 0),
-            })
+        for row in rows:
+            for key in ('planned', 'processed', 'created', 'failed', 'remaining', 'cancelled', 'elapsed_seconds'):
+                row[key] = getattr(result, key, '')
+            row['operation_error'] = getattr(result, 'fatal_error', '')
+            row['cleanup_warnings'] = ' | '.join(getattr(result, 'cleanup_warnings', ()))
+            writer.writerow(row)
     return path

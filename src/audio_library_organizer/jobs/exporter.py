@@ -3,10 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from collections import Counter
+from time import perf_counter
 
 from audio_library_organizer.domain.models import TrackRecord
 from audio_library_organizer.domain.settings import LibraryPaths
-from audio_library_organizer.safety.copy_pipeline import copy_without_overwrite, verify_exact_copy
+from audio_library_organizer.safety.copy_pipeline import copy_without_overwrite, verify_exact_copy, sha256_file
 from audio_library_organizer.metadata.tag_writer import write_resolved_tags
 from audio_library_organizer.metadata.artwork import CoverArtArchiveClient, prepare_cover_image, extract_embedded_cover
 from audio_library_organizer.metadata.naming import sanitize_windows_component
@@ -19,6 +20,7 @@ class ExportItem:
     track: TrackRecord
     destination_dir: Path
     filename: str
+    category: str = 'review'
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +56,8 @@ class ExportPlan:
                 destination = library.not_selected
             else:
                 destination = library.review
-            items.append(ExportItem(track, destination, track.proposed_filename or track.filename))
+            category = 'not_selected' if status in {'duplicate', 'not_selected'} else status
+            items.append(ExportItem(track, destination, track.proposed_filename or track.filename, category))
         return cls(tuple(items), {
             'ready': counts.get('ready', 0),
             'duplicate': counts.get('duplicate', 0),
@@ -97,11 +100,81 @@ class CopyVerification:
 
 
 @dataclass(frozen=True, slots=True)
+class ExportOutcome:
+    index: int
+    source: Path
+    destination: Path | None
+    category: str
+    status: str
+    error: str = ''
+    raw_verified: bool = False
+    final_size_bytes: int = 0
+    final_sha256: str = ''
+
+
+@dataclass(frozen=True, slots=True)
+class ExportEvent:
+    phase: str
+    total: int
+    processed: int
+    created: int
+    failed: int
+    source: Path | None = None
+    destination: Path | None = None
+    message: str = ''
+    skipped: int = 0
+
+    @property
+    def remaining(self) -> int:
+        return max(0, self.total - self.processed)
+
+
+@dataclass(frozen=True, slots=True)
 class ExportResult:
     copied: tuple[Path, ...]
     errors: tuple[str, ...]
     verified: tuple[CopyVerification, ...] = ()
     verification_errors: tuple[str, ...] = ()
+    outcomes: tuple[ExportOutcome, ...] = ()
+    planned: int = 0
+    cancelled: bool = False
+    elapsed_seconds: float = 0.0
+    fatal_error: str = ''
+    cleanup_warnings: tuple[str, ...] = ()
+
+    @property
+    def created(self) -> int:
+        return len(self.verified)
+
+    @property
+    def processed(self) -> int:
+        return len(self.outcomes)
+
+    @property
+    def failed(self) -> int:
+        return sum(item.status not in {'verified', 'skipped'} for item in self.outcomes)
+
+    @property
+    def skipped(self) -> int:
+        return sum(item.status == 'skipped' for item in self.outcomes)
+
+    @property
+    def remaining(self) -> int:
+        return max(0, self.planned - self.processed)
+
+    @property
+    def category_counts(self) -> dict[str, int]:
+        counts = Counter(item.category for item in self.outcomes if item.status == 'verified')
+        return {category: counts[category] for category in ('ready', 'review', 'not_selected')}
+
+    @property
+    def status(self) -> str:
+        if self.cancelled:
+            return 'cancelled'
+        if (self.fatal_error or self.cleanup_warnings or self.errors or self.verification_errors or self.failed
+                or self.skipped or self.remaining or self.created != self.planned):
+            return 'problems'
+        return 'success'
 
 
 def _prepared_source_cover(track: TrackRecord):
@@ -178,47 +251,87 @@ def resolve_cover_for_export(track: TrackRecord, artwork, cover_cache: dict[str,
     return None
 
 
-def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None) -> ExportResult:
+def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
+                      cancelled=None, event=None) -> ExportResult:
+    """Finish the current item safely; cancellation only prevents the next item."""
+    started = perf_counter()
+    cancelled = cancelled or (lambda: False)
     copied: list[Path] = []
     errors: list[str] = []
     verified: list[CopyVerification] = []
     verification_errors: list[str] = []
+    outcomes: list[ExportOutcome] = []
     artwork = artwork_client or CoverArtArchiveClient()
-    cover_cache: dict[str, tuple[bytes,str] | None] = {}
+    cover_cache: dict[str, tuple[bytes, str] | None] = {}
     total = len(plan.items)
+
+    def emit(phase, source=None, destination=None, message=''):
+        if event is not None:
+            event(ExportEvent(phase, total, len(outcomes), len(verified),
+                              sum(o.status != 'verified' for o in outcomes),
+                              source, destination, message))
+
+    emit('operation_started')
+    cleanup_warnings: list[str] = []
     for index, item in enumerate(plan.items, 1):
-        target: Path | None = None
-        try:
-            target = copy_without_overwrite(item.track.path, item.destination_dir, item.filename)
-            raw_ok = verify_exact_copy(item.track.path, target, source_sha256=item.track.sha256)
-            if not raw_ok:
+        if cancelled():
+            break
+        target = None
+        raw_ok, final_size, final_sha = False, 0, ''
+        stage = 'copy_error'
+        source = Path(item.track.path)
+
+        def prepare(staged):
+            nonlocal stage, raw_ok, final_size, final_sha
+            emit('copied', source, staged)
+            stage = 'verification_error'
+            if not verify_exact_copy(source, staged, source_sha256=item.track.sha256):
                 raise OSError('Kopia nie przeszła weryfikacji SHA-256/rozmiaru przed zapisaniem tagów.')
-
+            raw_ok = True
+            emit('raw_verified', source, staged)
+            stage = 'tag_error'
             cover = resolve_cover_for_export(item.track, artwork, cover_cache)
+            emit('tagging', source, staged)
             if cover:
-                write_resolved_tags(target, item.track, cover_bytes=cover[0], cover_mime=cover[1], replace_cover=True)
+                write_resolved_tags(staged, item.track, cover_bytes=cover[0], cover_mime=cover[1], replace_cover=True)
             else:
-                # Last-resort safety for unsupported formats. The source copy is still preserved.
-                write_resolved_tags(target, item.track)
+                write_resolved_tags(staged, item.track)
+            emit('tags_written', source, staged)
+            stage = 'verification_error'
+            emit('final_verifying', source, staged)
+            final_stat = staged.stat()
+            final_size = final_stat.st_size
+            if not staged.is_file() or final_size <= 0:
+                raise OSError('Plik końcowy nie istnieje lub ma zerowy rozmiar.')
+            # Tags intentionally change the raw SHA; keep a separate final digest.
+            final_sha = sha256_file(staged)
+            after_hash = staged.stat()
+            fields = ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_ctime_ns')
+            if tuple(getattr(after_hash, f) for f in fields) != tuple(getattr(final_stat, f) for f in fields):
+                raise OSError('Destination changed during final verification.')
+            stage = 'copy_error'  # Publication itself can still fail.
 
-            final_exists = target.is_file()
-            final_size = target.stat().st_size if final_exists else 0
-            if not final_exists or final_size <= 0:
-                verification_errors.append(f'{target}: plik końcowy nie istnieje lub ma zerowy rozmiar.')
-                continue
+        emit('item_started', source)
+        try:
+            target = copy_without_overwrite(source, item.destination_dir, item.filename,
+                                           prepare=prepare, on_warning=cleanup_warnings.append)
+            emit('final_verified', source, target)
             copied.append(target)
-            verified.append(CopyVerification(
-                source=Path(item.track.path),
-                destination=target,
-                raw_copy_sha256_match=True,
-                final_file_exists=True,
-                final_size_bytes=final_size,
-            ))
+            verified.append(CopyVerification(source, target, True, True, final_size))
+            outcomes.append(ExportOutcome(index, source, target, item.category, 'verified',
+                                          raw_verified=True, final_size_bytes=final_size, final_sha256=final_sha))
+            emit('item_finished', source, target)
         except Exception as exc:
-            errors.append(f'{item.track.path}: {exc}')
-            if target is not None and target.exists() and not verify_exact_copy(item.track.path, target, source_sha256=item.track.sha256):
-                verification_errors.append(f'{target}: kopia niezgodna ze źródłem.')
+            error = f'{source}: {exc}'
+            (verification_errors if stage == 'verification_error' else errors).append(error)
+            outcomes.append(ExportOutcome(index, source, target, item.category, stage, error,
+                                          raw_ok, final_size, final_sha))
+            emit('item_failed', source, target, error)
         finally:
             if progress is not None:
                 progress(index, total, item.track.filename)
-    return ExportResult(tuple(copied), tuple(errors), tuple(verified), tuple(verification_errors))
+    result = ExportResult(tuple(copied), tuple(errors), tuple(verified), tuple(verification_errors),
+                          tuple(outcomes), total, bool(cancelled()), perf_counter() - started,
+                          cleanup_warnings=tuple(cleanup_warnings))
+    emit('operation_finished')
+    return result

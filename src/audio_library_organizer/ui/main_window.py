@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from pathlib import Path
 from datetime import datetime
+from time import perf_counter
 import shutil
 import html
 import json
@@ -30,7 +31,7 @@ from audio_library_organizer.domain.preferences import (
     default_name_rules,
     restore_safe_defaults,
 )
-from audio_library_organizer.jobs.exporter import ExportPlan
+from audio_library_organizer.jobs.exporter import ExportPlan, ExportResult
 from audio_library_organizer.jobs.library_service import LibraryService
 from audio_library_organizer.jobs.identifier import IdentificationJob
 from audio_library_organizer.jobs.audio_identification import AudioIdentification
@@ -55,6 +56,7 @@ from audio_library_organizer.metadata.naming import (
     DEFAULT_FILENAME_TEMPLATE, propose_filename, filename_fields_from_template, template_from_filename_fields,
 )
 from audio_library_organizer.ui.confirmations import confirm_bulk_copy
+from audio_library_organizer.ui.export_dialogs import ExportProgressDialog, ExportSummaryDialog
 from audio_library_organizer.ui.state import should_refresh_live_scan, export_needs_library_review, library_status_text, save_app_settings
 from audio_library_organizer.ui.duplicates_page import DuplicatesPage
 from audio_library_organizer.ui.help_center import HelpCenter
@@ -2360,88 +2362,133 @@ class MainWindow(QMainWindow):
             if box.clickedButton() is not continue_button:
                 return
         cfg = ProviderSettings.from_store(self.qt_settings)
-        plan = ExportPlan.from_tracks(tracks, self.app_settings.library, folder_organization=cfg.folder_organization)
-        if not confirm_bulk_copy(self, plan.preview_summary, examples=plan.preview_lines(), folder_organization=cfg.folder_organization):
+        plan = ExportPlan.from_tracks(deepcopy(tracks), self.app_settings.library, folder_organization=cfg.folder_organization)
+        metrics = plan.preview_metrics()
+        if not confirm_bulk_copy(self, {**plan.summary, **metrics}, examples=plan.preview_lines(6),
+                                 folder_organization=cfg.folder_organization, plan=plan):
+            return
+        if self._thread is not None:
             return
         self._set_action_highlight(self.export_btn)
         self._set_operation_state('export', 'TWORZENIE PLIKÓW', 'Kopiowanie, zapis metadanych i techniczna kontrola kopii…')
         self._set_busy(True, 'Tworzenie plików i techniczna kontrola kopii…', kind='export')
-        thread = QThread(self); worker = ExportWorker(plan, adoption_repository=self.repository,
-            library_root=self.app_settings.library.root, known_libraries=self._known_adoption_libraries()); worker.moveToThread(thread)
-        thread.started.connect(worker.run); worker.progress.connect(self._export_progress); worker.finished.connect(self._export_finished); worker.failed.connect(self._job_failed)
-        worker.finished.connect(thread.quit); worker.failed.connect(thread.quit); thread.finished.connect(worker.deleteLater); thread.finished.connect(thread.deleteLater); thread.finished.connect(self._thread_done)
-        self._thread = thread; self._worker = worker; thread.start()
+        self._export_plan = plan
+        self._export_library = self.app_settings.library
+        self._export_language = self.preferences.language
+        self._export_metrics = metrics
+        self._export_started = perf_counter()
+        self._export_result = None
+        self._export_stop_requested = False
+        self._export_dialog = ExportProgressDialog(len(plan.items), self, language=self._export_language)
+        self._export_dialog.stop_requested.connect(self._request_export_stop)
+        thread = QThread(self)
+        worker = ExportWorker(plan, adoption_repository=self.repository,
+            library_root=self._export_library.root, known_libraries=self._known_adoption_libraries())
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.progress.connect(self._export_progress, Qt.ConnectionType.QueuedConnection)
+        worker.phase.connect(self._export_event, Qt.ConnectionType.QueuedConnection)
+        worker.finished.connect(self._export_finished, Qt.ConnectionType.QueuedConnection)
+        worker.failed.connect(self._export_failed, Qt.ConnectionType.QueuedConnection)
+        worker.finished.connect(worker.deleteLater)
+        worker.failed.connect(worker.deleteLater)
+        worker.finished.connect(thread.quit)
+        worker.failed.connect(thread.quit)
+        thread.finished.connect(self._export_thread_done, Qt.ConnectionType.QueuedConnection)
+        thread.finished.connect(thread.deleteLater)
+        self._thread, self._worker = thread, worker
+        self._export_dialog.show()
+        thread.start()
 
+    @Slot(int, int, str)
     def _export_progress(self, current: int, total: int, name: str):
         self.progress.setVisible(True); self.progress.setRange(0, max(1, total)); self.progress.setValue(current)
         self._show_operation(f'Tworzenie plików i kontrola techniczna {current}/{total}: {name}')
 
+    @Slot(object)
+    def _export_event(self, event):
+        dialog = getattr(self, '_export_dialog', None)
+        if dialog is not None:
+            dialog.update_event(event)
+
+    @Slot()
+    def _request_export_stop(self):
+        if not isinstance(self._worker, ExportWorker):
+            return
+        self._export_stop_requested = True
+        self._worker.cancel()
+        dialog = getattr(self, '_export_dialog', None)
+        if dialog is not None:
+            dialog.request_stop()
+
+    @Slot(object)
     def _export_finished(self, result):
-        stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        tracks = self.repository.list_tracks(available_only=True)
-        export_csv(tracks, self.app_settings.library.reports / f'eksport_{stamp}.csv')
-        session_report = export_session_html(tracks, self.app_settings.library.reports / f'raport_sesji_{stamp}.html', language=self.preferences.language)
-        verification_report = export_verification_csv(result, self.app_settings.library.reports / f'weryfikacja_kopii_{stamp}.csv')
-        verified = len(result.verified)
-        total = verified + len(result.errors) + len(result.verification_errors)
-        pending_review = build_operation_summary(tracks).get('review', 0)
-        if result.errors or result.verification_errors:
-            if self.preferences.language == 'en':
-                text = (
-                    f'Created and verified: {verified}/{max(total, len(result.copied))}\n'
-                    f'Copy errors: {len(result.errors)}\n'
-                    f'Verification errors: {len(result.verification_errors)}\n\n'
-                    f'Verification report: {verification_report}\n'
-                    f'Session report: {session_report}'
-                )
-            else:
-                text = (
-                    f'Stworzono i sprawdzono technicznie: {verified}/{max(total, len(result.copied))}\n'
-                    f'Błędy kopiowania: {len(result.errors)}\n'
-                    f'Błędy kontroli: {len(result.verification_errors)}\n\n'
-                    f'Raport kontroli: {verification_report}\n'
-                    f'Raport sesji: {session_report}'
-                )
-            box = QMessageBox(QMessageBox.Icon.Warning, self._t('Tworzenie plików wymaga uwagi'), text, parent=self)
-        else:
-            if self.preferences.language == 'en':
-                text = (
-                    f'Copied and verified: {verified}/{verified}\n'
-                    'The original copy passed SHA-256 verification before tag changes, and the final file is in the output folder.\n\n'
-                )
-                if pending_review:
-                    text += f'{pending_review} files still need review. Check their metadata and cover art in Library.\n\n'
-                else:
-                    text += 'No files need review in this session.\n\n'
-                text += f'Verification report: {verification_report}\nSession report: {session_report}'
-            else:
-                text = (
-                    f'Skopiowano i sprawdzono technicznie: {verified}/{verified}\n'
-                    'Kopia przed zmianą tagów przeszła kontrolę SHA-256, a plik końcowy istnieje w folderze docelowym.\n\n'
-                )
-                if pending_review:
-                    text += (
-                        f'Pozostało {pending_review} plików DO SPRAWDZENIA. '
-                        'Przejdź do Biblioteki, aby zweryfikować ich metadane i okładki.\n\n'
-                    )
-                else:
-                    text += 'W tej sesji nie ma już plików oznaczonych DO SPRAWDZENIA.\n\n'
-                text += f'Raport kontroli: {verification_report}\nRaport sesji: {session_report}'
-            box = QMessageBox(QMessageBox.Icon.Information, self._t('Pliki utworzone i sprawdzone'), text, parent=self)
-        library_button = box.addButton(self._t('Przejdź do Biblioteki'), QMessageBox.ButtonRole.ActionRole)
-        open_button = box.addButton(self._t('Otwórz folder biblioteki'), QMessageBox.ButtonRole.ActionRole)
-        box.addButton(QMessageBox.StandardButton.Ok)
-        box.exec()
-        if box.clickedButton() is library_button:
-            self._open_review()
-        elif box.clickedButton() is open_button:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.app_settings.library.root)))
-        self._set_operation_state(
-            'done', 'TWORZENIE PLIKÓW ZAKOŃCZONE',
-            f'Utworzono i sprawdzono technicznie {verified} plików. Raport kontroli zapisano w folderze raportów.'
+        # A result is not a QThread completion barrier. Keep ownership until
+        # thread.finished, then join the final native teardown before any dialog.
+        self._export_result = result
+
+    @Slot(str)
+    def _export_failed(self, message):
+        self._export_result = ExportResult((), (), planned=len(self._export_plan.items),
+            elapsed_seconds=perf_counter() - self._export_started, fatal_error=message,
+            cancelled=self._export_stop_requested)
+
+    @Slot()
+    def _export_thread_done(self):
+        thread = self._thread
+        if thread is not None:
+            thread.wait()  # finished was received; never wait on an active file.
+        self._thread, self._worker = None, None
+        dialog = self._export_dialog
+        self._export_dialog = None
+        dialog.finish()
+        dialog.deleteLater()
+        result = self._export_result or ExportResult((), (), planned=len(self._export_plan.items),
+            elapsed_seconds=perf_counter() - self._export_started, fatal_error='Worker ended without a result.')
+        from dataclasses import replace
+        result = replace(result, cancelled=result.cancelled or self._export_stop_requested,
+                         elapsed_seconds=max(result.elapsed_seconds, perf_counter() - self._export_started))
+        self._set_busy(False)
+        self._pending_auto_identify = False
+        self._set_action_highlight(self.review_btn if self.stack.currentIndex() == 1 else None)
+        plan, library = self._export_plan, self._export_library
+        tracks = [item.track for item in plan.items]
+        stamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f') + '_' + uuid4().hex[:8]
+        report_errors, verification_report = [], None
+        # Preserve existing reports and add every failed/unprocessed plan item
+        # to the copy audit. One failed report must not hide the other results.
+        reports = (
+            (export_verification_csv, (result, library.reports / f'weryfikacja_kopii_{stamp}.csv'), {'plan': plan}),
+            (export_csv, (tracks, library.reports / f'eksport_{stamp}.csv'), {}),
+            (export_session_html, (tracks, library.reports / f'raport_sesji_{stamp}.html'), {'language': self._export_language}),
         )
+        for writer, args, kwargs in reports:
+            try:
+                path = writer(*args, **kwargs)
+                if writer is export_verification_csv:
+                    verification_report = path
+            except Exception as exc:
+                prefix = 'Report error' if self._export_language == 'en' else 'Błąd raportu'
+                report_errors.append(f'{prefix}: {exc}')
+        summary = ExportSummaryDialog(result, plan, library.root, verification_report, self,
+            metrics=self._export_metrics, report_errors=report_errors, language=self._export_language)
+        if self._export_language == 'en':
+            title = {'success': 'CREATION COMPLETED', 'problems': 'CREATION NEEDS ATTENTION', 'cancelled': 'CREATION STOPPED'}[summary.outcome]
+            detail = f'Created and verified: {result.created}/{result.planned}. Remaining: {result.remaining}. Errors: {result.failed}.'
+        else:
+            title = {'success': 'TWORZENIE ZAKOŃCZONE', 'problems': 'TWORZENIE WYMAGA UWAGI', 'cancelled': 'TWORZENIE ZATRZYMANE'}[summary.outcome]
+            detail = f'Utworzono i zweryfikowano: {result.created}/{result.planned}. Pozostało: {result.remaining}. Błędy: {result.failed}.'
+        self._set_operation_state('done', title, detail)
+        try:
+            summary.exec()
+        finally:
+            summary.deleteLater()
 
     def closeEvent(self, event):
+        if isinstance(self._worker, ExportWorker):
+            self._request_export_stop()
+            event.ignore()
+            return
         self.library.cancel_context_actions()
         if isinstance(self._worker, (IdentificationWorker, AudioIdentificationWorker)):
             self._identification_closing = True

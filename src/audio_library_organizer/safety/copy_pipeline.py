@@ -1,20 +1,24 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
+import stat
+import tempfile
+import warnings
 from pathlib import Path
 
 
 def _unique_path(directory: Path, filename: str) -> Path:
     candidate = directory / filename
-    if not candidate.exists():
+    if not os.path.lexists(candidate):
         return candidate
     p = Path(filename)
     stem, suffix = p.stem, p.suffix
     index = 2
     while True:
         candidate = directory / f'{stem} ({index}){suffix}'
-        if not candidate.exists():
+        if not os.path.lexists(candidate):
             return candidate
         index += 1
 
@@ -41,11 +45,54 @@ def verify_exact_copy(source: Path, destination: Path, *, source_sha256: str | N
     return sha256_file(destination) == expected
 
 
-def copy_without_overwrite(source: Path, destination_dir: Path, filename: str | None = None) -> Path:
+def _publish_without_overwrite(staged: Path, target: Path) -> None:
+    # Windows rename never replaces an existing destination. POSIX rename does,
+    # so use an atomic new hard link on the same filesystem instead. Unsupported
+    # filesystems fail closed; never fall back to overwrite-prone copy/replace.
+    if os.name == 'nt':
+        os.rename(staged, target)
+    else:
+        os.link(staged, target, follow_symlinks=False)
+
+
+def copy_without_overwrite(source: Path, destination_dir: Path, filename: str | None = None, *,
+                           prepare=None, on_warning=None) -> Path:
+    """Prepare a private copy, then publish it atomically under a free name.
+
+    ``prepare`` can verify/write tags before publication. Cleanup is confined
+    to this operation's fresh temporary directory, never a shared final path.
+    """
     source = Path(source)
     destination_dir = Path(destination_dir)
+    name = filename or source.name
+    if name in {'.', '..'} or any(ord(c) in (0, 47, 58, 92) for c in name):
+        raise ValueError('Destination filename must be a single file name.')
     destination_dir.mkdir(parents=True, exist_ok=True)
-    target = _unique_path(destination_dir, filename or source.name)
-    # copy2 reads the source and writes only the destination; metadata on source is untouched.
-    shutil.copy2(source, target)
-    return target
+    working = Path(tempfile.mkdtemp(prefix='.alo-copy-', dir=destination_dir))
+    staged = working / name
+    try:
+        with source.open('rb') as source_handle, staged.open('xb') as target_handle:
+            if not stat.S_ISREG(os.fstat(source_handle.fileno()).st_mode):
+                raise OSError('Source is not a regular file.')
+            shutil.copyfileobj(source_handle, target_handle, length=1024 * 1024)
+        shutil.copystat(source, staged)
+        if prepare is not None:
+            prepare(staged)
+        while True:
+            target = _unique_path(destination_dir, name)
+            try:
+                _publish_without_overwrite(staged, target)
+                return target
+            except FileExistsError:
+                continue
+    finally:
+        try:
+            shutil.rmtree(working)
+        except OSError as exc:
+            # Publication may already have succeeded. Never turn a verified
+            # output into an uncounted failure because private cleanup failed.
+            message = f'Private copy cleanup failed: {working}: {exc}'
+            if on_warning is not None:
+                on_warning(message)
+            else:
+                warnings.warn(message, RuntimeWarning, stacklevel=2)
