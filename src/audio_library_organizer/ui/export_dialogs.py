@@ -7,13 +7,60 @@ from PySide6.QtCore import Qt, Signal, Slot, QUrl
 from PySide6.QtGui import QDesktopServices, QCloseEvent
 from PySide6.QtWidgets import (
     QDialog, QWidget, QFrame, QLabel, QPushButton, QVBoxLayout, QHBoxLayout,
-    QScrollArea, QSizePolicy, QProgressBar, QPlainTextEdit,
+    QScrollArea, QSizePolicy, QProgressBar, QPlainTextEdit, QMessageBox, QSpacerItem,
 )
 
 from audio_library_organizer.ui.i18n import language_for
 from audio_library_organizer.ui.icons import alo_icon
 
 GREEN, AMBER, VIOLET, BLUE, RED = '#35d893', '#d8a23a', '#db8fd4', '#66aaf0', '#f34d64'
+
+
+class ExportReviewWarning(QMessageBox):
+    """Variant B presentation; retain the existing QMessageBox decision roles."""
+    def __init__(self, review_count, parent=None, *, language=None):
+        super().__init__(parent)
+        language = language or language_for(parent)
+        text = lambda pl, en: en if language == 'en' else pl
+        self.setObjectName('ExportReviewWarning')
+        self.setProperty('variantB', True)
+        self.setWindowTitle(text('Najpierw sprawdź Bibliotekę', 'Check Library first'))
+        self.setTextFormat(Qt.TextFormat.PlainText)
+        self.setIconPixmap(alo_icon('warning', AMBER, 48).pixmap(48, 48))
+        noun = ('plik oznaczony' if review_count == 1 else
+                'pliki oznaczone' if 2 <= review_count % 10 <= 4 and not 12 <= review_count % 100 <= 14 else
+                'plików oznaczonych')
+        self.setText(text(f'Masz jeszcze {review_count} {noun} DO SPRAWDZENIA.',
+                          f'{review_count} files still need review.'))
+        self.setInformativeText(text(
+            'Najlepiej najpierw sprawdzić ich metadane, okładki i wersje w zakładce Biblioteka. '
+            'Techniczna kontrola kopii nie zastępuje tej weryfikacji.',
+            'Check their metadata, cover art and versions in Library first. '
+            'Technical copy verification does not replace that review.'))
+        self.review_button = self.addButton(text('Przejdź do Biblioteki', 'Go to Library'), QMessageBox.ButtonRole.AcceptRole)
+        self.continue_button = self.addButton(text('Utwórz mimo to', 'Create anyway'), QMessageBox.ButtonRole.DestructiveRole)
+        self.cancel_button = self.addButton(text('Anuluj', 'Cancel'), QMessageBox.ButtonRole.RejectRole)
+        self.review_button.setProperty('primary', True)
+        self.setDefaultButton(self.review_button)
+        self.setEscapeButton(self.cancel_button)
+        self.setStyleSheet('''
+            QMessageBox#ExportReviewWarning { background:#11171e; color:#dbe8ee; }
+            QLabel { color:#91a3b0; background:transparent; font-size:13px; }
+            QLabel#qt_msgbox_label { color:#dbe8ee; font-size:18px; font-weight:600; }
+            QPushButton { background:#202e38; color:#e0eaf0; border:1px solid #344955;
+                          border-radius:7px; padding:10px 16px; min-height:20px; }
+            QPushButton:hover { border-color:#83a5b7; }
+            QPushButton:focus { border:2px solid #9bc6dc; }
+            QPushButton[primary="true"] { background:#146dff; border-color:#3886ff; }
+        ''')
+        for label in self.findChildren(QLabel):
+            if label.objectName() != 'qt_msgboxex_icon_label':
+                label.setWordWrap(True)
+                label.setMaximumWidth(510)
+        width = min(620, max(280, self.screen().availableGeometry().width() - 80))
+        grid = self.layout()
+        grid.addItem(QSpacerItem(width, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum),
+                     grid.rowCount(), 0, 1, grid.columnCount())
 
 
 class _ElidedLabel(QLabel):
@@ -38,8 +85,9 @@ class _ElidedLabel(QLabel):
 
 
 class _ExportDialog(QDialog):
-    def __init__(self, parent=None, *, language=None):
+    def __init__(self, parent=None, *, language=None, compact=False):
         super().__init__(parent)
+        self.compact = compact
         self.language = language or language_for(parent)
         self.setProperty('_alo_language', self.language)
         self.setObjectName('ExportDialog')
@@ -68,8 +116,8 @@ class _ExportDialog(QDialog):
             QPlainTextEdit { background:#0e151c; color:#b8c9d3; border:1px solid #2b3b47; border-radius:6px; padding:8px; }
         ''')
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(22, 18, 22, 18)
-        outer.setSpacing(16)
+        outer.setContentsMargins(*( (18, 14, 18, 14) if compact else (22, 18, 22, 18) ))
+        outer.setSpacing(10 if compact else 16)
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -77,7 +125,7 @@ class _ExportDialog(QDialog):
         self.body.setObjectName('ExportBody')
         self.body_layout = QVBoxLayout(self.body)
         self.body_layout.setContentsMargins(0, 0, 10, 0)
-        self.body_layout.setSpacing(16)
+        self.body_layout.setSpacing(10 if compact else 16)
         self.scroll.setWidget(self.body)
         outer.addWidget(self.scroll, 1)
         self.footer = QWidget()
@@ -111,8 +159,8 @@ class _ExportDialog(QDialog):
         frame = QFrame()
         frame.setObjectName('ExportRisk' if risk else 'ExportCard')
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(8)
+        layout.setContentsMargins(*( (12, 10, 12, 10) if self.compact else (16, 14, 16, 14) ))
+        layout.setSpacing(6 if self.compact else 8)
         return frame, layout
 
     def heading(self, title, icon='copy', color=GREEN):
@@ -132,12 +180,23 @@ class _ExportDialog(QDialog):
         self.body_layout.addWidget(frame)
         return number
 
-    def tiles(self, values, captions=None):
+    def tiles(self, values, captions=None, *, icons=False):
         row = QHBoxLayout()
         labels = {}
         for key, title, color, count in values:
             frame, layout = self.panel()
-            layout.addWidget(self.label(title, size=12, color=color, bold=True))
+            title_label = self.label(title, size=12, color=color, bold=True)
+            if icons:
+                icon_row = QHBoxLayout()
+                glyph = QLabel()
+                icon_name = {'created': 'check', 'remaining': 'report', 'failed': 'cancel',
+                             'ready': 'check', 'review': 'report', 'not_selected': 'copy'}[key]
+                glyph.setPixmap(alo_icon(icon_name, color, 20).pixmap(20, 20))
+                icon_row.addWidget(glyph)
+                icon_row.addWidget(title_label, 1)
+                layout.addLayout(icon_row)
+            else:
+                layout.addWidget(title_label)
             labels[key] = self.label(str(count), size=29, color=color, bold=True)
             layout.addWidget(labels[key])
             if captions:
@@ -153,7 +212,7 @@ class _ExportDialog(QDialog):
             ('review', self.tr('DO SPRAWDZENIA', 'NEEDS REVIEW'), AMBER, counts.get('review', 0)),
             ('not_selected', self.tr('NIE WYBRANE', 'NOT SELECTED'), VIOLET, counts.get('not_selected', 0)),
         ], {key: f'{prefix} {folder}' for key, folder in (
-            ('ready', 'GOTOWE'), ('review', 'DO_SPRAWDZENIA'), ('not_selected', 'NIE_WYBRANE'))})
+            ('ready', 'GOTOWE'), ('review', 'DO_SPRAWDZENIA'), ('not_selected', 'NIE_WYBRANE'))}, icons=completed)
 
     def metric_row(self, layout, name, count, color=AMBER):
         row = QHBoxLayout()
@@ -239,16 +298,19 @@ class ExportProgressDialog(_ExportDialog):
     stop_requested = Signal()
 
     def __init__(self, total, parent=None, *, language=None):
-        super().__init__(parent, language=language)
+        super().__init__(parent, language=language, compact=True)
         self.running, self.stopping = True, False
         self._current_phase = 'operation_started'
         self.heading(self.tr('Tworzenie plików wynikowych', 'Creating output files'))
-        self.total_label = self.hero(total, self.tr('plików do utworzenia', 'files to create'))
-        self.counter = self.label(f'0 / {total} — 0%', bold=True)
-        self.body_layout.addWidget(self.counter)
+        self.counter = self.label(f'0 / {total} — 0%', size=24, bold=True)
+        self.counter.setWordWrap(False)
         self.check_progress = self.label('', muted=True)
+        self.check_progress.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.check_progress.hide()
-        self.body_layout.addWidget(self.check_progress)
+        counters = QHBoxLayout()
+        counters.addWidget(self.counter, 1)
+        counters.addWidget(self.check_progress, 1)
+        self.body_layout.addLayout(counters)
         self.progress = QProgressBar()
         self.progress.setRange(0, max(1, total))
         self.progress.setValue(0)
@@ -258,11 +320,12 @@ class ExportProgressDialog(_ExportDialog):
             ('created', self.tr('Utworzone', 'Created'), GREEN, 0),
             ('remaining', self.tr('Pozostało', 'Remaining'), BLUE, total),
             ('failed', self.tr('Błędy', 'Errors'), RED, 0),
-        ])
+        ], icons=True)
         frame, layout = self.panel()
         layout.addWidget(self.label(self.tr('Aktualnie przetwarzany plik:', 'Current file:'), bold=True))
         self.current_file = _ElidedLabel('—')
         self.current_target = _ElidedLabel('')
+        self.current_target.hide()
         self.stage = self.label(self.tr('Oczekiwanie na rozpoczęcie…', 'Waiting to start…'), color=BLUE)
         for widget in (self.current_file, self.current_target, self.stage):
             layout.addWidget(widget)
@@ -270,17 +333,19 @@ class ExportProgressDialog(_ExportDialog):
         self.body_layout.addWidget(self.label(self.tr('Dziennik operacji', 'Operation log'), bold=True))
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
-        self.log.setMaximumBlockCount(300)
-        self.log.setMinimumHeight(100)
-        self.log.setMaximumHeight(190)
-        self.body_layout.addWidget(self.log)
+        self.log.setMinimumHeight(64)
+        self.log.setMaximumHeight(180)
+        self.body_layout.addWidget(self.log, 1)
         self.notice = self.label('', color=AMBER)
+        self.notice.hide()
         self.body_layout.addWidget(self.notice)
         self.stop_button = QPushButton(self.tr('Zatrzymaj tworzenie', 'Stop creating'))
         self.stop_button.setProperty('danger', True)
         self.stop_button.setIcon(alo_icon('cancel', '#ffe2e6'))
         self.stop_button.clicked.connect(self.request_stop)
         self.footer_layout.addWidget(self.stop_button)
+        screen = self.screen().availableGeometry()
+        self.resize(min(760, screen.width() - 40), min(620, screen.height() - 60))
 
     @Slot(object)
     def update_event(self, event):
@@ -297,14 +362,17 @@ class ExportProgressDialog(_ExportDialog):
             if event.source is None:
                 self.current_file.set_full_text('—')
             self.current_target.set_full_text('')
+            self.current_target.hide()
         for key, value in (('created', event.created), ('remaining', event.remaining), ('failed', event.failed)):
             self.count_labels[key].setText(str(value))
         if event.source is not None:
             self.current_file.set_full_text(event.source.name, str(event.source))
         if event.phase == 'item_started':
             self.current_target.set_full_text('')
+            self.current_target.hide()
         if event.destination is not None:
             self.current_target.set_full_text(f'→ {event.destination}', str(event.destination))
+            self.current_target.show()
         stages = {
             'preflight_context': ('FAZA 1 — Sprawdzanie bezpieczeństwa: biblioteki i SQLite', 'PHASE 1 — Library safety checks: libraries and SQLite'),
             'preflight_sources': ('FAZA 1 — Sprawdzanie bezpieczeństwa: analiza źródeł i audio', 'PHASE 1 — Library safety checks: sources and audio'),
@@ -343,6 +411,7 @@ class ExportProgressDialog(_ExportDialog):
             text = self.tr('Bieżący plik zostanie bezpiecznie dokończony. Następny nie zostanie rozpoczęty.',
                            'The current file will finish safely. The next file will not start.')
         self.notice.setText(text)
+        self.notice.show()
 
     @Slot()
     def request_stop(self):
@@ -375,7 +444,8 @@ class ExportProgressDialog(_ExportDialog):
 
 class ExportSummaryDialog(_ExportDialog):
     def __init__(self, result, plan, library_root, report, parent=None, *, metrics=None, report_errors=(), language=None):
-        super().__init__(parent, language=language)
+        super().__init__(parent, language=language, compact=True)
+        self.body_layout.setSpacing(8)
         self.heading(self.tr('Tworzenie zakończone', 'Creation completed'),
                      'check' if result.status == 'success' and not report_errors else 'warning',
                      GREEN if result.status == 'success' and not report_errors else AMBER)
@@ -410,6 +480,10 @@ class ExportSummaryDialog(_ExportDialog):
             prefix = self.tr('Zatrzymano przed rozpoczęciem kopiowania. Wszystkie pozycje pozostały nieprzetworzone.',
                              'Stopped before copying began. All items remain unprocessed.')
             self.notice.setText(prefix + ('\n' + self.notice.text() if self.notice.text() else ''))
+        self.notice.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse
+                                            | Qt.TextInteractionFlag.TextSelectableByKeyboard)
+        self.notice.setToolTip(self.notice.text())
+        self.notice.setVisible(bool(self.notice.text()))
         self.body_layout.addWidget(self.notice)
         self.body_layout.addWidget(self.label(self.tr('Co dalej?', 'What next?'), size=18, bold=True))
         self.actions = QWidget()
@@ -437,7 +511,12 @@ class ExportSummaryDialog(_ExportDialog):
             if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
                 raise OSError(self.tr('Nie udało się otworzyć folderu lub raportu.', 'Could not open the folder or report.'))
         except OSError as exc:
-            self.notice.setText(str(exc))
+            message = str(exc)
+            previous = self.notice.text()
+            if message not in previous.splitlines():
+                self.notice.setText('\n'.join(filter(None, (previous, message))))
+            self.notice.setToolTip(self.notice.text())
+            self.notice.show()
 
     @Slot()
     def open_folder(self):

@@ -56,7 +56,7 @@ from audio_library_organizer.metadata.naming import (
     DEFAULT_FILENAME_TEMPLATE, propose_filename, filename_fields_from_template, template_from_filename_fields,
 )
 from audio_library_organizer.ui.confirmations import confirm_bulk_copy
-from audio_library_organizer.ui.export_dialogs import ExportProgressDialog, ExportSummaryDialog
+from audio_library_organizer.ui.export_dialogs import ExportProgressDialog, ExportSummaryDialog, ExportReviewWarning
 from audio_library_organizer.ui.state import should_refresh_live_scan, export_needs_library_review, library_status_text, save_app_settings
 from audio_library_organizer.ui.duplicates_page import DuplicatesPage
 from audio_library_organizer.ui.help_center import HelpCenter
@@ -2337,24 +2337,8 @@ class MainWindow(QMainWindow):
             return
         summary = build_operation_summary(tracks)
         if export_needs_library_review(summary):
-            box = QMessageBox(self)
-            box.setIcon(QMessageBox.Icon.Warning)
-            box.setWindowTitle(self._t('Najpierw sprawdź Bibliotekę'))
-            if self.preferences.language == 'en':
-                box.setText(
-                    f"{summary['review']} files still need review.\n\n"
-                    'Check their metadata, cover art and versions in Library first. '
-                    'Technical copy verification does not replace that review.'
-                )
-            else:
-                box.setText(
-                    f"Masz jeszcze {summary['review']} plików oznaczonych DO SPRAWDZENIA.\n\n"
-                    'Najlepiej najpierw sprawdzić ich metadane, okładki i wersje w zakładce Biblioteka. '
-                    'Techniczna kontrola kopii nie zastępuje tej weryfikacji.'
-                )
-            review_button = box.addButton(self._t('Przejdź do Biblioteki'), QMessageBox.ButtonRole.AcceptRole)
-            continue_button = box.addButton(self._t('Utwórz mimo to'), QMessageBox.ButtonRole.DestructiveRole)
-            box.addButton(self._t('Anuluj'), QMessageBox.ButtonRole.RejectRole)
+            box = ExportReviewWarning(summary['review'], self, language=self.preferences.language)
+            review_button, continue_button = box.review_button, box.continue_button
             box.exec()
             if box.clickedButton() is review_button:
                 self._open_review()
