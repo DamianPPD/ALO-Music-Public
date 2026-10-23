@@ -146,6 +146,11 @@ class _GuiThreadRelay(QObject):
     finished = Signal(object)
     failed = Signal(str)
     phase = Signal(str)
+    progress = Signal(int, int, str)
+
+    @Slot(int, int, str)
+    def forward_progress(self, current: int, total: int, name: str):
+        self.progress.emit(current, total, name)
 
     @Slot(object)
     def forward_finished(self, result):
@@ -210,20 +215,24 @@ class AudioIdentificationWorker(QObject):
 class IdentificationWorker(QObject):
     _raw_finished = Signal(object)
     _raw_failed = Signal(str)
-    progress = Signal(int, int, str)
+    _raw_progress = Signal(int, int, str)
 
     def __init__(self, job):
         super().__init__()
         self.job = job
         self._cancelled = Event()
-        self.job.progress = lambda cur,total,name: self.progress.emit(cur,total,name)
+        self.job.progress = lambda cur,total,name: self._raw_progress.emit(cur,total,name)
         self.job.cancelled = self._cancelled.is_set
 
         # The worker is constructed on the GUI thread and moved afterwards.
         # Keep this relay parentless so its thread affinity remains the GUI
-        # thread. Any Python lambda connected to ``finished``/``failed`` is
+        # thread. Python callbacks connected to progress/finished/failed are
         # therefore invoked from the GUI thread rather than from QThread.run().
         self._gui_relay = _GuiThreadRelay()
+        self._raw_progress.connect(
+            self._gui_relay.forward_progress,
+            Qt.ConnectionType.QueuedConnection,
+        )
         self._raw_finished.connect(
             self._gui_relay.forward_finished,
             Qt.ConnectionType.QueuedConnection,
@@ -240,6 +249,10 @@ class IdentificationWorker(QObject):
     @property
     def failed(self):
         return self._gui_relay.failed
+
+    @property
+    def progress(self):
+        return self._gui_relay.progress
 
     def cancel(self):
         self._cancelled.set()

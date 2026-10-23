@@ -1919,8 +1919,7 @@ class MainWindow(QMainWindow):
         thread = QThread(self); worker = IdentificationWorker(job); worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.progress.connect(lambda current, total, name: self._identify_progress(current, total, name)
-                                if self._editor_request_current(repository, library_id, editor, request, generation) else None,
-                                Qt.ConnectionType.QueuedConnection)
+                                if self._editor_request_current(repository, library_id, editor, request, generation) else None)
         worker.finished.connect(lambda result, t=track, e=editor: self._single_track_identification_finished(result, t, e)
                                 if self._editor_request_current(repository, library_id, e, request, generation) else None)
         worker.failed.connect(lambda message, e=editor: self._single_track_identification_failed(message, e)
@@ -2310,8 +2309,7 @@ class MainWindow(QMainWindow):
         current = lambda: self._identification_context_current(repository, library_id, generation)
         thread = QThread(self); worker = IdentificationWorker(job); worker.moveToThread(thread)
         thread.started.connect(worker.run)
-        worker.progress.connect(lambda done, total, name: self._identify_progress(done, total, name) if current() else None,
-                                Qt.ConnectionType.QueuedConnection)
+        worker.progress.connect(lambda done, total, name: self._identify_progress(done, total, name) if current() else None)
         worker.finished.connect(lambda result: self._identify_finished(result) if current() else None)
         worker.failed.connect(lambda message: self._job_failed(message) if current() else None)
         worker.finished.connect(thread.quit); worker.failed.connect(thread.quit); thread.finished.connect(worker.deleteLater); thread.finished.connect(thread.deleteLater); thread.finished.connect(self._thread_done)
