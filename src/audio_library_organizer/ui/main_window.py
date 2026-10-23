@@ -8,6 +8,7 @@ import html
 import json
 import sqlite3
 from uuid import uuid4
+from functools import partial
 
 from PySide6.QtCore import Qt, QThread, QSettings, Signal, Slot, QUrl, QTimer, QSize, QVariantAnimation
 from PySide6.QtGui import QPixmap, QDesktopServices, QIcon, QColor
@@ -842,6 +843,13 @@ class StartNavButton(QPushButton):
         super().leaveEvent(event)
 
 
+def _read_menu_snapshot(repository, library_root):
+    """Worker-only fresh read; never dereference MainWindow on a pool thread."""
+    snapshot = repository.file_check_snapshot()
+    return (snapshot.read_context(library_root), tuple(snapshot.tracks),
+            {tid: cached.evaluation for tid, cached in snapshot.cached})
+
+
 class MainWindow(QMainWindow):
     def __init__(self, app_settings: AppSettings, qt_settings: QSettings, parent=None):
         super().__init__(parent)
@@ -992,6 +1000,12 @@ class MainWindow(QMainWindow):
         self.library.manual_field_requested.connect(self._apply_manual_field)
         self.library.edit_requested.connect(self._edit_metadata)
         self.library.approve_requested.connect(self._approve_track)
+        self.library.review_requested.connect(lambda track: self._set_ready_from_editor(track, False))
+        self.library.context_notice.connect(self._show_operation)
+        self.library.set_context_provider(self._library_context_snapshot,
+                                          worker_reader=self._library_context_reader)
+        self.library.context_playlist_requested.connect(self._export_context_playlist)
+        self.library.context_collection_requested.connect(self._create_context_collection)
         self.library.undo_requested.connect(self._undo_last_change)
         self.library.create_collection_requested.connect(self._create_collection_from_tracks)
         self.library.playlist_requested.connect(self._export_playlist)
@@ -1275,6 +1289,48 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, self._t('Nie można zapisać playlisty'), self._t(str(exc))); return
         self._show_operation(f'Utworzono playlistę: {result.name}')
         QMessageBox.information(self, self._t('Playlista gotowa'), self._t(f'Zapisano {len(paths)} utworów:\n{result}'))
+
+    def _export_context_playlist(self, request):
+        token, paths = request
+        if self.library._context_tracks(token) is None or not paths:
+            return
+        default = self.app_settings.library.custom_folders / 'playlista.m3u8'
+        filename, _ = QFileDialog.getSaveFileName(self, self._t('Zapisz playlistę M3U8'),
+                                                 str(default), self._t('Playlista M3U8 (*.m3u8)'))
+        if not filename:
+            return
+        target = Path(filename)
+        if target.suffix.lower() != '.m3u8':
+            target = target.with_suffix('.m3u8')
+        # The dialog is not an authorization cache: recheck on the worker again.
+        self.library.run_context_command(token, 'playlist', (str(target),), self._context_playlist_written)
+
+    def _context_playlist_written(self, result, error):
+        if error:
+            QMessageBox.critical(self, self._t('Nie można zapisać playlisty'), self._t(error))
+            return
+        path, count = result
+        self._show_operation(f'Utworzono playlistę: {path.name}')
+        QMessageBox.information(self, self._t('Playlista gotowa'), self._t(f'Zapisano {count} utworów:\n{path}'))
+
+    def _create_context_collection(self, request):
+        token, tracks = request
+        if self.library._context_tracks(token) is None or not tracks:
+            return
+        name, ok = QInputDialog.getText(self, self._t('Utwórz folder z zaznaczonych'),
+                                       self._t(f'Nazwa nowego folderu ({len(tracks)} utworów):'))
+        if not ok or not name.strip():
+            return
+        self.library.run_context_command(token, 'collection', (self.app_settings.library, name.strip()),
+                                         self._context_collection_planned)
+
+    def _context_collection_planned(self, plan, error):
+        if error:
+            QMessageBox.warning(self, self._t('Nie można utworzyć folderu'), self._t(error))
+            return
+        if not plan.items or self._thread is not None:
+            return
+        self._start_collection_plan(plan)
 
     def _backup_settings_payload(self) -> dict[str, object]:
         return {
@@ -1704,8 +1760,14 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, self._t('Nie można utworzyć folderu'), self._t(str(exc))); return
         if self._thread is not None:
             return
+        self._start_collection_plan(plan)
+
+    def _start_collection_plan(self, plan):
+        if not plan.items:
+            QMessageBox.warning(self, self._t('Brak dostępnych plików'), self._t('Żaden z zaznaczonych plików nie jest obecnie dostępny.'))
+            return
         self._set_operation_state('export', 'TWORZENIE FOLDERU Z ZAZNACZONYCH UTWORÓW', f'Kopiowanie {len(plan.items)} zaznaczonych utworów…')
-        self._set_busy(True, f'Tworzenie folderu „{name.strip()}”…', kind='collection')
+        self._set_busy(True, f'Tworzenie folderu „{plan.items[0].destination_dir.name}”…', kind='collection')
         thread = QThread(self); worker = ExportWorker(plan); worker.moveToThread(thread)
         thread.started.connect(worker.run); worker.progress.connect(self._export_progress); worker.finished.connect(self._collection_finished); worker.failed.connect(self._job_failed)
         worker.finished.connect(thread.quit); worker.failed.connect(thread.quit); thread.finished.connect(worker.deleteLater); thread.finished.connect(thread.deleteLater); thread.finished.connect(self._thread_done)
@@ -2058,11 +2120,22 @@ class MainWindow(QMainWindow):
         self.availability = self.repository.sync_availability()
         return self.repository.list_tracks(available_only=True)
 
+    def _library_context_snapshot(self):
+        snapshot = self.repository.file_check_snapshot()
+        return (snapshot.read_context(self.app_settings.library.root), list(snapshot.tracks),
+                {tid: cached.evaluation for tid, cached in snapshot.cached})
+
+    def _library_context_reader(self):
+        # Called on GUI: capture repository/root now. No QObject goes to worker.
+        return partial(_read_menu_snapshot, self.repository, str(self.app_settings.library.root))
+
     def refresh_data(self):
         snapshot = self.repository.file_check_snapshot()
         self._read_context = snapshot.read_context(self.app_settings.library.root)
         self.player.set_read_context(self._read_context)
         self.library.set_read_context(self._read_context)
+        self.library.set_file_state_evaluations(snapshot.library_id,
+                                               {tid: cached.evaluation for tid, cached in snapshot.cached})
         self.duplicates.library_id = snapshot.library_id
         all_tracks = list(snapshot.tracks)
         tracks = all_tracks
@@ -2371,6 +2444,7 @@ class MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event):
+        self.library.cancel_context_actions()
         if isinstance(self._worker, (IdentificationWorker, AudioIdentificationWorker)):
             self._identification_closing = True
             self._identification_generation += 1
@@ -2384,4 +2458,5 @@ class MainWindow(QMainWindow):
             self._worker.cancel()
             event.ignore()
             return
+        self.library.cancel_context_actions(closing=True)
         super().closeEvent(event)

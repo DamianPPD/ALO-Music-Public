@@ -3,8 +3,12 @@ from __future__ import annotations
 from html import escape
 from math import isfinite
 from pathlib import Path
-from weakref import ref
+from weakref import ref, WeakMethod
 from threading import Event
+from copy import deepcopy
+from dataclasses import replace
+import sqlite3
+import shiboken6
 
 from PySide6.QtCore import Qt, Signal, Slot, QUrl, QStringListModel, QItemSelectionModel, QSignalBlocker, QEvent, QTimer, QRect, QSize, QThreadPool
 from PySide6.QtGui import QStandardItem, QStandardItemModel, QPixmap, QColor, QBrush, QPen, QPainter, QDesktopServices, QIcon
@@ -19,10 +23,13 @@ from PySide6.QtWidgets import (
 from audio_library_organizer import __version__
 from audio_library_organizer import crash_debug
 from audio_library_organizer.domain.models import TrackRecord
-from audio_library_organizer.jobs.managed_files import track_identity, lexical_locator, ReadPurpose, resolve_read_path, local_read_plan
+from audio_library_organizer.domain.file_state import FileState
+from audio_library_organizer.jobs.managed_files import track_identity, lexical_locator, ReadPurpose, MaterialKind, resolve_read_path, local_read_plan
 from audio_library_organizer.duplicates.families import group_version_families
 from audio_library_organizer.metadata.artwork import extract_embedded_cover, read_artwork_bytes
 from audio_library_organizer.ui.workers import ReadTask
+from audio_library_organizer.jobs.context_menu import MenuContext, MenuWork, frozen_value
+from audio_library_organizer.ui.context_tasks import MenuTasks
 from audio_library_organizer.metadata.online_lock import is_online_locked
 from audio_library_organizer.metadata.genre import genre_items, primary_genre
 from audio_library_organizer.ui.state import (
@@ -34,6 +41,10 @@ from audio_library_organizer.ui.assets import asset_path
 from audio_library_organizer.ui.genre_input import build_genre_suggestions
 from audio_library_organizer.ui.i18n import ui_text, localized_no_cover_name, tr, language_for
 from audio_library_organizer.ui.icons import alo_icon, library_icon
+from audio_library_organizer.ui.library_file_state import (
+    FILE_STATE_COLORS, FileStatePresentation, presentation_from_evaluation,
+    index_file_state_presentations,
+)
 
 
 PLAYING_ROLE = int(Qt.ItemDataRole.UserRole) + 1
@@ -41,6 +52,8 @@ VISUAL_ORDER_ROLE = int(Qt.ItemDataRole.UserRole) + 2
 STATUS_ACCENT_ROLE = int(Qt.ItemDataRole.UserRole) + 3
 STATUS_BACKGROUND_ROLE = int(Qt.ItemDataRole.UserRole) + 4
 LIBRARY_SORT_ROLE = int(Qt.ItemDataRole.UserRole) + 5
+FILE_STATE_ROLE = int(Qt.ItemDataRole.UserRole) + 6
+HOVER_BACKGROUND = QColor('#243039')
 PLAYING_BACKGROUND = QColor('#142b23')
 PLAYING_ACCENT = QColor('#4cb68a')
 SELECTED_BACKGROUND = QColor('#203038')
@@ -144,6 +157,10 @@ class LibraryRowDelegate(QStyledItemDelegate):
         self.initStyleOption(clean, index)
         clean.state &= ~QStyle.StateFlag.State_HasFocus
         selected = bool(clean.state & QStyle.StateFlag.State_Selected)
+        hovered = bool(clean.state & QStyle.StateFlag.State_MouseOver)
+        # Paint one neutral hover above every physical-state tint. Selection is
+        # independent and always wins; QSS must not paint a second hover layer.
+        clean.state &= ~QStyle.StateFlag.State_MouseOver
         playing = bool(index.data(PLAYING_ROLE))
         if index.column() == 0:
             clean.features &= ~QStyleOptionViewItem.ViewItemFeature.HasCheckIndicator
@@ -153,9 +170,9 @@ class LibraryRowDelegate(QStyledItemDelegate):
             clean.icon = QIcon()
             clean.features &= ~(QStyleOptionViewItem.ViewItemFeature.HasDisplay
                                 | QStyleOptionViewItem.ViewItemFeature.HasDecoration)
-        if selected or playing:
+        if selected or playing or hovered:
             clean.state &= ~QStyle.StateFlag.State_Selected
-            background = SELECTED_BACKGROUND if selected else PLAYING_BACKGROUND
+            background = SELECTED_BACKGROUND if selected else PLAYING_BACKGROUND if playing else HOVER_BACKGROUND
             clean.backgroundBrush = QBrush(background)
             painter.save()
             painter.fillRect(option.rect, background)
@@ -175,7 +192,7 @@ class LibraryRowDelegate(QStyledItemDelegate):
         if index.column() == 0:
             square = QRect(option.rect.center().x() - 8, option.rect.center().y() - 8, 16, 16)
             _paint_library_checkbox(painter, square, self._check_state(index),
-                                    bool(clean.state & QStyle.StateFlag.State_MouseOver))
+                                    hovered)
         accent = index.data(STATUS_ACCENT_ROLE)
         if selected or playing:
             painter.save()
@@ -211,6 +228,10 @@ class LibraryPage(QWidget):
     create_collection_requested = Signal(object)
     playlist_requested = Signal(object)
     queue_next_requested = Signal(object)
+    review_requested = Signal(object)
+    context_notice = Signal(str)
+    context_playlist_requested = Signal(object)
+    context_collection_requested = Signal(object)
 
     HEADERS = ['', 'Status', 'Wykonawca', 'Tytuł', 'Rok', 'Gatunek', 'BPM', 'Długość', 'Jakość', 'Format']
     COLUMN_MINIMUMS = {2: 70, 3: 70, 4: 48, 5: 70, 6: 48, 7: 64, 8: 72, 9: 56}
@@ -239,6 +260,19 @@ class LibraryPage(QWidget):
         self._checked_paths: set[str] = set()
         self._syncing_checks = False
         self._visible_check_state = Qt.CheckState.Unchecked
+        self._context_provider = None
+        self._context_worker_reader = None
+        self._menu_tasks = MenuTasks(self)
+        self._context_menu_state = None
+        self._menu_epoch = 0
+        self._context_serial = 0
+        self._context_cancel = Event()
+        self._context_pending = None
+        self._context_closed = False
+        self._file_evaluations = {}
+        self._file_evaluations_library = None
+        self._file_context_presentations = {}
+        QApplication.instance().aboutToQuit.connect(self._context_quit)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(4, 4, 4, 4)
@@ -286,6 +320,13 @@ class LibraryPage(QWidget):
         self.format_filter.setFixedWidth(160)
         self.format_filter.setToolTip(ui_text(self, 'Filtruj według formatu pliku'))
         self._sync_format_options()
+
+        self.file_filter = QComboBox()
+        self.file_filter.setObjectName('LibraryFileFilter')
+        self.file_filter.setFixedWidth(220)
+        self.file_filter.setAccessibleName(ui_text(self, 'Plik'))
+        self.file_filter.setToolTip(ui_text(self, 'Filtruj według stanu pliku'))
+        self._sync_file_state_options()
 
         self.collection_btn = QPushButton('Utwórz folder z zaznaczonych', self); self.collection_btn.setObjectName('LibraryCollectionAction'); self.collection_btn.setIcon(library_icon('folder_add', '#cbd8df', 18)); self.collection_btn.clicked.connect(self._request_collection)
         self.playlist_btn = QPushButton('Utwórz playlistę', self); self.playlist_btn.setObjectName('LibraryPlaylistAction'); self.playlist_btn.setIcon(library_icon('playlist', '#cbd8df', 18)); self.playlist_btn.clicked.connect(self._request_playlist)
@@ -516,7 +557,12 @@ class LibraryPage(QWidget):
         self.bpm_max.textChanged.connect(self._filters_changed)
         self.status.currentIndexChanged.connect(self._filters_changed)
         self.format_filter.currentIndexChanged.connect(self._filters_changed)
+        self.file_filter.currentIndexChanged.connect(self._filters_changed)
         self.table.selectionModel().selectionChanged.connect(self._show_detail)
+        self.table.selectionModel().selectionChanged.connect(self._context_view_changed)
+        self.table.selectionModel().currentChanged.connect(self._context_view_changed)
+        self.table.model().layoutChanged.connect(self._context_view_changed)
+        self.table.horizontalHeader().sortIndicatorChanged.connect(self._context_view_changed)
         self.table.horizontalHeader().sortIndicatorChanged.connect(self._update_view_state_label)
         self._update_view_state_label()
         self._update_selection_count()
@@ -578,12 +624,12 @@ class LibraryPage(QWidget):
         super().resizeEvent(event)
 
     def _layout_filters(self, width: int):
-        compact = width < 1260
+        compact = width < 1500
         if compact == getattr(self, '_filters_compact', None):
             return
         self._filters_compact = compact
         widgets = (self.search, self.genre_filter, self.bpm_min, self.bpm_max,
-                   self.status, self.format_filter, self.reset_view_btn)
+                   self.status, self.format_filter, self.file_filter, self.reset_view_btn)
         for widget in widgets:
             self._filters_top.removeWidget(widget)
             self._filters_bottom.removeWidget(widget)
@@ -644,6 +690,24 @@ class LibraryPage(QWidget):
         self.format_filter.style().unpolish(self.format_filter)
         self.format_filter.style().polish(self.format_filter)
 
+    def _sync_file_state_options(self):
+        chosen = self.file_filter.currentData() or ''
+        with QSignalBlocker(self.file_filter):
+            self.file_filter.clear()
+            self.file_filter.addItem(ui_text(self, 'Plik: Wszystkie'), '')
+            for state, color in FILE_STATE_COLORS.items():
+                # A native dot, not a new status icon or an asset.
+                pixmap = QPixmap(14, 14)
+                pixmap.fill(Qt.GlobalColor.transparent)
+                painter = QPainter(pixmap)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QColor(color.accent))
+                painter.drawEllipse(3, 3, 8, 8)
+                painter.end()
+                self.file_filter.addItem(QIcon(pixmap), ui_text(self, 'Plik: '+color.label), state.value)
+            self.file_filter.setCurrentIndex(max(0, self.file_filter.findData(chosen)))
+
     def _on_check_item_changed(self, item):
         if self._syncing_checks or item.column() != 0:
             return
@@ -695,6 +759,7 @@ class LibraryPage(QWidget):
         self.table.horizontalHeader().viewport().update()
 
     def _filters_changed(self, *_):
+        self.cancel_context_actions()
         self._checked_paths.clear()
         self.refresh(clear_checks=True)
         self.table.selectionModel().clearSelection()
@@ -737,6 +802,7 @@ class LibraryPage(QWidget):
         return handled
 
     def set_tracks(self, tracks: list[TrackRecord]):
+        self.cancel_context_actions()
         self._tracks = tracks
         keep_identity = any(track.track_id for track in tracks)
         if not keep_identity:
@@ -756,7 +822,9 @@ class LibraryPage(QWidget):
         previous = getattr(self, '_read_context', None)
         if context == previous:
             return
+        self.cancel_context_actions()
         self._read_context = context
+        self._file_context_presentations = index_file_state_presentations(context)
         self._cover_request_serial += 1
         if hasattr(self, '_cover_cancel'):
             self._cover_cancel.set()
@@ -764,8 +832,29 @@ class LibraryPage(QWidget):
             self._checked_paths.clear()
             self._playing_path = None
             self.table.selectionModel().clearSelection()
+            self.table.selectionModel().clearCurrentIndex()
+
+    def set_file_state_evaluations(self, library_id, evaluations):
+        """Display cache evaluations from the same coherent repository snapshot.
+
+        ReadContext deliberately replaces cache facts with conservative binding
+        facts for read planning. Display history must not use that replacement.
+        """
+        if library_id != self._file_evaluations_library or evaluations != self._file_evaluations:
+            self.cancel_context_actions()
+        self._file_evaluations_library = library_id
+        self._file_evaluations = dict(evaluations)
+
+    def _file_presentation(self, track):
+        context = getattr(self, '_read_context', None)
+        evaluation = (self._file_evaluations.get(track.track_id)
+                      if context and context.library_id == self._file_evaluations_library else None)
+        if evaluation is not None:
+            return presentation_from_evaluation(evaluation)
+        return self._file_context_presentations.get(track.track_id, FileStatePresentation())
 
     def closeEvent(self, event):
+        self.cancel_context_actions(closing=True)
         self._cover_request_serial += 1
         if hasattr(self, '_cover_cancel'):
             self._cover_cancel.set()
@@ -870,6 +959,9 @@ class LibraryPage(QWidget):
             filters.append((f'BPM {bpm_from}–{bpm_to}', '#a5b2bd'))
         if self.format_filter.currentData():
             filters.append((f'{ui_text(self, "Format")}: {self.format_filter.currentData()}', '#85bdd6'))
+        if self.file_filter.currentData():
+            filters.append((self.file_filter.currentText(),
+                            FILE_STATE_COLORS[self.file_filter.currentData()].accent))
         if not filters:
             filters.append((tr('library.view.none', language), '#a5b2bd'))
         sort_label = tr('library.view.sort', language)
@@ -890,6 +982,7 @@ class LibraryPage(QWidget):
             QSignalBlocker(self.search), QSignalBlocker(self.genre_filter),
             QSignalBlocker(self.bpm_min), QSignalBlocker(self.bpm_max), QSignalBlocker(self.status),
             QSignalBlocker(self.format_filter),
+            QSignalBlocker(self.file_filter),
         ]
         self.search.clear()
         self.genre_filter.clear()
@@ -899,6 +992,7 @@ class LibraryPage(QWidget):
         if all_index >= 0:
             self.status.setCurrentIndex(all_index)
         self.format_filter.setCurrentIndex(0)
+        self.file_filter.setCurrentIndex(0)
         del blockers
         self._paint_category_icons()
         self.table.sortByColumn(1, Qt.SortOrder.AscendingOrder)
@@ -918,10 +1012,12 @@ class LibraryPage(QWidget):
     def refresh(self, *_, preserve_order: bool = False, clear_checks: bool = False):
         checked = set() if clear_checks else self._checked_paths.copy()
         self._sync_format_options()
+        self._sync_file_state_options()
         view_state = self._capture_view_state()
         text = self.search.text().casefold().strip()
         wanted = self.status.currentData() or 'all'
         wanted_format = self.format_filter.currentData() or ''
+        wanted_file_state = self.file_filter.currentData() or ''
         previous_order = view_state.get('visual_order') or []
         order_map = {key: index for index, key in enumerate(previous_order)} if preserve_order else {}
         sort_order = view_state.get('sort_order', Qt.SortOrder.AscendingOrder)
@@ -931,6 +1027,9 @@ class LibraryPage(QWidget):
         self.table.setSortingEnabled(False)
         self.model.removeRows(0, self.model.rowCount())
         for track in self._tracks:
+            file_presentation = self._file_presentation(track)
+            if wanted_file_state and file_presentation.state != wanted_file_state:
+                continue
             if not track_matches_quick_filter(track, wanted):
                 continue
             if wanted_format and self._format_of(track) != wanted_format:
@@ -960,18 +1059,19 @@ class LibraryPage(QWidget):
                 item.setData(value, LIBRARY_SORT_ROLE)
             status = effective_status(track)
             problem = status == 'error' or (status == 'review' and review_severity(track) == 'critical')
-            tint, row_accent = None, None
+            row_accent = None
             if problem:
-                icon_name, icon_color, tint = 'status_problem', '#f34d64', '#23181d'
+                icon_name, icon_color = 'status_problem', '#f34d64'
                 row_accent = QColor('#bc3d50')
             elif status == 'review':
-                icon_name, icon_color, tint = 'status_review', '#d8a23a', '#1b1b18'
+                icon_name, icon_color = 'status_review', '#d8a23a'
                 row_accent = QColor('#b8862f')
             else:
                 icon_name = {'ready': 'status_ready', 'duplicate': 'duplicates', 'not_selected': 'cancel'}.get(status, 'info')
                 icon_color = '#35d893' if status == 'ready' else presentation.accent
             icon_factory = library_icon if problem or status in {'ready', 'review'} else alo_icon
             items[1].setIcon(icon_factory(icon_name, icon_color, 16))
+            tint = file_presentation.background
             key = self._path_key(track)
             visible_keys.add(key)
             order_index = order_map.get(key)
@@ -984,12 +1084,18 @@ class LibraryPage(QWidget):
                 item.setData(is_playing, PLAYING_ROLE)
                 item.setData(stable_sort_value, VISUAL_ORDER_ROLE)
                 item.setData(row_accent, STATUS_ACCENT_ROLE)
+                item.setData(file_presentation.state, FILE_STATE_ROLE)
                 if tint is not None:
                     item.setBackground(QBrush(QColor(tint)))
                 item.setData(item.background(), STATUS_BACKGROUND_ROLE)
             items[0].setCheckable(True)
             items[0].setCheckState(Qt.CheckState.Checked if key in checked else Qt.CheckState.Unchecked)
-            items[3].setToolTip(track.title or '')
+            file_note = ui_text(self, file_presentation.label)
+            if file_presentation.confirmed:
+                file_note += '\n' + ui_text(self, 'Stan z ostatniej kontroli; odczyt wymaga ponownej weryfikacji.')
+            elif file_presentation.state is not None:
+                file_note += '\n' + ui_text(self, 'Ostatni potwierdzony stan; wymaga ponownej kontroli.')
+            items[3].setToolTip((track.title or '') + '\n' + file_note)
             items[2].setToolTip(track.artist or '')
             items[0].setData(track, Qt.ItemDataRole.UserRole)
             if is_playing:
@@ -1347,37 +1453,279 @@ class LibraryPage(QWidget):
             return
         self.playlist_requested.emit([track.path for track in tracks])
 
-    def _show_context_menu(self, pos):
+    def set_context_provider(self, provider, *, worker_reader=None):
+        """Return a fresh (ReadContext, tracks[, evaluations]) snapshot."""
+        self.cancel_context_actions()
+        self._context_provider = provider
+        # GUI-side factory; its return value may capture repository/root, never widgets.
+        self._context_worker_reader = worker_reader
+
+    def _context_view_changed(self, *_):
+        if self._context_menu_state is not None or self._context_pending is not None:
+            self.cancel_context_actions()
+
+    def _context_view(self):
+        current = self._current_track()
+        header = self.table.horizontalHeader()
+        return (tuple(t.track_id for t in self._selected_tracks()),
+                current.track_id if current else None,
+                tuple(t.track_id for t in self.visible_tracks()),
+                header.sortIndicatorSection(), header.sortIndicatorOrder().value)
+
+    @Slot()
+    def _context_quit(self):
+        self.cancel_context_actions(closing=True)
+
+    def cancel_context_actions(self, *, closing=False):
+        self._menu_epoch += 1
+        self._context_serial += 1
+        self._context_cancel.set()
+        self._context_pending = None
+        self._menu_tasks.cancel(closing=closing)
+        state, self._context_menu_state = self._context_menu_state, None
+        if state is not None:
+            state['retired'] = True
+            owned_menu = state['menu']()
+            if owned_menu is not None and shiboken6.isValid(owned_menu):
+                owned_menu.close()
+        menu = getattr(self, '_active_context_menu', None)
+        if menu is not None:
+            menu.close()
+        if closing:
+            self._context_closed = True
+
+    def _context_tracks(self, token):
+        context = token.read_context
+        if (self._context_closed or token.epoch != self._menu_epoch
+                or self._read_context != context or self._context_view() != token.view
+                or frozen_value(self._file_evaluations) != token.evaluations):
+            return None
+        current = {}
+        for track_id, before in token.records:
+            matches = [t for t in self._tracks if t.track_id == track_id]
+            if len(matches) != 1 or frozen_value(matches[0]) != before:
+                return None
+            current[track_id] = matches[0]
+        return context, current, current[token.target_id]
+
+    def _context_plan(self, track, context, action, serial):
+        plan = resolve_read_path(track, context, ReadPurpose.PLAYBACK, generation=serial)
+        if self._file_presentation(track).state == FileState.CONFLICT and action not in {
+                'reveal_source', 'collection', 'playlist'}:
+            return None
+        if action in {'reveal_source', 'collection', 'playlist'}:
+            return plan if plan.kind == MaterialKind.SOURCE else plan.fallback
+        if action == 'reveal_managed' and plan.kind != MaterialKind.MANAGED:
+            return None
+        if action == 'reveal_managed':
+            return replace(plan, fallback=None)
+        return plan
+
+    def _build_context_menu(self, pos):
         index = self.table.indexAt(pos)
-        if index.isValid():
-            self.table.selectRow(index.row())
-        track = self._current_track()
-        if track is None:
-            return
+        if not index.isValid() or self._context_closed:
+            return None
+        self.cancel_context_actions()
+        selection = self.table.selectionModel()
+        if not selection.isRowSelected(index.row(), index.parent()):
+            selection.select(index, QItemSelectionModel.SelectionFlag.ClearAndSelect | QItemSelectionModel.SelectionFlag.Rows)
+        selection.setCurrentIndex(index, QItemSelectionModel.SelectionFlag.NoUpdate)
+        track = self.model.item(index.row(), 0).data(Qt.ItemDataRole.UserRole)
+        context = getattr(self, '_read_context', None)
+        if context is None or not track.track_id:
+            return None
+        tracks = self._selected_tracks()
+        token = MenuContext(context, self._menu_epoch,
+                            tuple((t.track_id, frozen_value(t)) for t in tracks), track.track_id,
+                            frozen_value(self._file_evaluations), self._context_view(), self._menu_epoch)
         menu = QMenu(self)
-        play = menu.addAction(library_icon('play', '#cbd8df', 18), ui_text(self, 'Odtwórz'))
-        play_next = menu.addAction(library_icon('next', '#cbd8df', 18), ui_text(self, 'Odtwórz jako następny'))
-        edit = menu.addAction(library_icon('metadata_edit', '#9af0b6', 18), ui_text(self, 'Edytuj metadane'))
+        menu.setObjectName('LibraryContextMenu')
+        presentation = self._file_presentation(track)
+        menu.addSection(ui_text(self, presentation.label))
+        if not presentation.confirmed:
+            menu.addSection(ui_text(self, 'Wymaga ponownej kontroli'))
+        if len(tracks) > 1:
+            menu.addSection(ui_text(self, 'Akcje wskazanego utworu'))
+
+        actions, probes = {}, []
+        def add(parent, key, label, enabled=True):
+            action = parent.addAction(ui_text(self, label))
+            action.setData(key)
+            action.setEnabled(enabled)
+            if not enabled:
+                action.setToolTip(ui_text(self, 'Brak potwierdzonego materiału do odczytu.'))
+            action.triggered.connect(lambda _checked=False, k=key: self._dispatch_context_action(k, token))
+            actions[key] = action
+            return action
+
+        def file_action(parent, key, label, targets):
+            add(parent, key, label, False)
+            probes.append((key, tuple(self._context_plan(t, context, key, 0) for t in targets)))
+
+        opening = menu.addMenu(ui_text(self, 'Otwórz'))
+        opening.setObjectName('LibraryContextMenu')
+        for key, label in [('open', 'Otwórz plik'), ('reveal', 'Pokaż w Eksploratorze'),
+                           ('reveal_source', 'Pokaż folder źródłowy'),
+                           ('reveal_managed', 'Pokaż folder biblioteki')]:
+            file_action(opening, key, label, (track,))
+        add(menu, 'edit', 'Edytuj metadane')
+        add(menu, 'details', 'Pokaż szczegóły')
+        if len(tracks) == 1:
+            decisions = menu.addMenu(ui_text(self, 'Zmień stan metadanych'))
+            decisions.setObjectName('LibraryContextMenu')
+            add(decisions, 'ready', 'GOTOWE')
+            add(decisions, 'review', 'DO SPRAWDZENIA')
         menu.addSeparator()
-        folder = menu.addAction(library_icon('folder', '#cbd8df', 18), ui_text(self, 'Dodaj do folderów z zaznaczonych utworów'))
-        playlist = menu.addAction(library_icon('playlist', '#cbd8df', 18), ui_text(self, 'Utwórz playlistę z zaznaczonych'))
+        file_action(menu, 'play', 'Odtwórz', (track,))
+        file_action(menu, 'next', 'Odtwórz jako następny', (track,))
         menu.addSeparator()
-        reveal = menu.addAction(library_icon('folder', '#cbd8df', 18), ui_text(self, 'Pokaż w Eksploratorze'))
-        chosen = menu.exec(self.table.viewport().mapToGlobal(pos))
-        if chosen is play:
-            self.play_requested.emit(track)
-        elif chosen is play_next:
-            self.queue_next_requested.emit(track)
-        elif chosen is edit:
+        file_action(menu, 'collection', 'Dodaj do folderów z zaznaczonych utworów', tracks)
+        file_action(menu, 'playlist', 'Utwórz playlistę z zaznaczonych', tracks)
+        self._context_menu_state = dict(menu=ref(menu), token=token, actions=actions,
+                                        hidden=False, retired=False, dispatched=False)
+        menu.setProperty('availabilityComplete', False)
+        menu.setProperty('contextMenuId', token.menu_id)
+        menu.aboutToHide.connect(lambda: self._context_menu_hidden(token.menu_id))
+        menu.destroyed.connect(lambda: self._context_menu_retired(token.menu_id))
+        self._menu_tasks.submit(MenuWork(token, 'probe', tuple(probes)), self._context_probe_ready, token)
+        return menu
+
+    def _context_menu_hidden(self, menu_id):
+        state = self._context_menu_state
+        if state is not None and state['token'].menu_id == menu_id:
+            state['hidden'] = True
+            self._menu_tasks.cancel_probe()
+
+    def _context_menu_retired(self, menu_id):
+        state = self._context_menu_state
+        if state is not None and state['token'].menu_id == menu_id:
+            state['retired'] = True
+            state['actions'] = {}
+            self._menu_tasks.cancel_probe()
+
+    def _context_probe_ready(self, token, values, error):
+        state = self._context_menu_state
+        if (state is None or state['token'] != token or state['hidden'] or state['retired']
+                or self._context_tracks(token) is None):
+            return
+        menu = state['menu']()
+        if menu is None or not shiboken6.isValid(menu):
+            return
+        for key, enabled in values or ():
+            action = state['actions'].get(key)
+            if action is not None and shiboken6.isValid(action):
+                action.setEnabled(not error and enabled)
+                if enabled and not error:
+                    action.setToolTip('')
+        menu.setProperty('availabilityComplete', True)
+        menu.setProperty('availabilityError', error)
+
+    def _show_context_menu(self, pos):
+        menu = self._build_context_menu(pos)
+        if menu is None:
+            return
+        token = self._context_menu_state['token']
+        try:
+            self._active_context_menu = menu
+            chosen = menu.exec(self.table.viewport().mapToGlobal(pos))
+            # Native submenu hide ordering is platform dependent. The return
+            # value is the authoritative selection, after all submenu hides.
+            if chosen is not None and chosen.data():
+                self._dispatch_context_action(chosen.data(), token, native_choice=True)
+        finally:
+            self._context_menu_retired(menu.property('contextMenuId'))
+            self._active_context_menu = None
+            menu.deleteLater()
+
+    def _dispatch_context_action(self, action, token, *, native_choice=False):
+        state = self._context_menu_state
+        if (state is None or state['token'] != token or state['retired'] or state['dispatched']
+                or (state['hidden'] and not native_choice)):
+            return
+        current = self._context_tracks(token)
+        if current is None:
+            self.context_notice.emit(ui_text(self, 'Dane utworu zmieniły się. Otwórz menu ponownie.'))
+            return
+        context, tracks, track = current
+        try:
+            state['dispatched'] = True
+            reader = self._context_worker_reader() if self._context_worker_reader else None
+            if self._context_provider is not None and reader is None:
+                raise ValueError('A worker-safe repository snapshot reader is required')
+            targets = list(tracks.values()) if action in {'collection', 'playlist'} else [track]
+            physical = action not in {'edit', 'ready', 'review', 'details'}
+            self._context_serial += 1
+            serial = self._context_serial
+            plans = tuple(self._context_plan(t, context, action, serial) for t in targets) if physical else ()
+            self._context_pending = (serial, action, token)
+            self._menu_tasks.submit(MenuWork(token, 'action', plans, reader),
+                                    self._context_action_ready, token, serial, action)
+        except (OSError, RuntimeError, ValueError, sqlite3.Error):
+            self._context_pending = None
+            self.context_notice.emit(ui_text(self, 'Nie można bezpiecznie odczytać pliku. Sprawdź bibliotekę.'))
+
+    def _context_action_ready(self, token, serial, action, paths, error):
+        if serial != self._context_serial or self._context_pending != (serial, action, token):
+            return
+        self._context_pending = None
+        current = self._context_tracks(token)
+        if current is None or error:
+            self.context_notice.emit(ui_text(self, 'Nie można bezpiecznie odczytać pliku. Sprawdź bibliotekę.'))
+            return
+        _context, tracks, track = current
+        if action == 'edit':
             self.edit_requested.emit(track)
-        elif chosen is folder:
-            tracks = self._checked_tracks() or [track]
-            self.create_collection_requested.emit(tracks)
-        elif chosen is playlist:
-            tracks = self._checked_tracks() or [track]
-            self.playlist_requested.emit([t.path for t in tracks])
-        elif chosen is reveal:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(track.path.parent)))
+        elif action == 'ready':
+            self.approve_requested.emit(track)
+        elif action == 'review':
+            self.review_requested.emit(track)
+        elif action == 'details':
+            for row in range(self.model.rowCount()):
+                candidate = self.model.item(row, 0).data(Qt.ItemDataRole.UserRole)
+                if candidate.track_id == track.track_id:
+                    self.table.selectionModel().setCurrentIndex(
+                        self.model.index(row, 0), QItemSelectionModel.SelectionFlag.NoUpdate)
+                    break
+            else:
+                return
+            self._show_detail()
+            if not self.details_btn.isChecked():
+                self.details_btn.click()
+        elif action == 'play':
+            self.play_requested.emit(track)
+        elif action == 'next':
+            self.queue_next_requested.emit(track)
+        elif action == 'collection':
+            self.context_collection_requested.emit((token, tuple(tracks.values())))
+        elif action == 'playlist':
+            self.context_playlist_requested.emit((token, paths))
+        else:
+            path = paths[0] if action == 'open' else paths[0].parent
+            if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
+                self.context_notice.emit(ui_text(self, 'Nie udało się otworzyć pliku lub folderu.'))
+
+    def run_context_command(self, token, operation, data, callback):
+        current = self._context_tracks(token)
+        if current is None or operation not in {'playlist', 'collection'}:
+            return False
+        context, tracks, _track = current
+        reader = self._context_worker_reader() if self._context_worker_reader else None
+        if reader is None:
+            return False
+        self._context_serial += 1
+        serial = self._context_serial
+        plans = tuple(self._context_plan(t, context, operation, serial) for t in tracks.values())
+        self._context_pending = (serial, operation, token)
+        self._menu_tasks.submit(MenuWork(token, operation, plans, reader, data),
+                                self._context_command_ready, token, serial, operation, WeakMethod(callback))
+        return True
+
+    def _context_command_ready(self, token, serial, operation, callback, value, error):
+        if self._context_pending != (serial, operation, token) or serial != self._context_serial:
+            return
+        self._context_pending = None
+        if self._context_tracks(token) is not None and callback() is not None:
+            callback()(value, error)
 
     def _edit_current(self):
         track = self._current_track()

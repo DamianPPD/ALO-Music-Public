@@ -86,15 +86,17 @@ def test_status_column_is_icon_only_compact_and_keeps_accessible_labels(status_p
         page.model.item(i, 1).text() for i in range(4))
 
 
-def test_status_tints_cover_row_without_coloring_text(status_page):
+def test_metadata_status_without_physical_facts_keeps_neutral_row_and_text(status_page):
     _, page, tracks = status_page
     for track in tracks:
         row = _row(page, track)
         assert all(page.model.item(row, column).foreground().style() == Qt.BrushStyle.NoBrush
                    for column in range(page.model.columnCount()))
     assert _body_pixel(page, tracks[0]).name() == '#11171e'
-    assert _body_pixel(page, tracks[1]).name() == '#1b1b18'
-    assert _body_pixel(page, tracks[2]).name() == '#23181d'
+    # Stage 4.1 assigns row tints to physical file states, independently of
+    # metadata status. These standalone records have no file-state evidence.
+    assert _body_pixel(page, tracks[1]).name() == '#11171e'
+    assert _body_pixel(page, tracks[2]).name() == '#11171e'
     assert _body_pixel(page, tracks[1], 8) == _body_pixel(page, tracks[1])
 
 
@@ -189,7 +191,7 @@ def test_status_rows_have_no_colored_horizontal_grid(status_page):
     app.processEvents()
     pixmap = page.table.viewport().grab()
     image, ratio = pixmap.toImage(), pixmap.devicePixelRatio()
-    for track, tint in ((tracks[1], '#1b1b18'), (tracks[2], '#23181d')):
+    for track, tint in ((tracks[1], '#11171e'), (tracks[2], '#11171e')):
         box = page.table.visualRect(page.model.index(_row(page, track), 3))
         for y in (box.top() + 1, box.bottom() - 1):
             assert image.pixelColor(round((box.left() + 12) * ratio), round(y * ratio)).name() == tint

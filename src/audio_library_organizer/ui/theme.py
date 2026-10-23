@@ -2661,6 +2661,14 @@ LIGHT_STYLE += START_STUDIO_STYLE
 
 # Minimal Outline Library controls are scoped to the Library page.
 LIBRARY_A_STYLE = r'''
+QMenu#LibraryContextMenu {
+    background:#121b23; color:#e6edf3; border:1px solid #34434b;
+    padding:4px; font-size:9pt;
+}
+QMenu#LibraryContextMenu::item { padding:5px 16px; border-radius:3px; }
+QMenu#LibraryContextMenu::item:selected { background:#203b45; color:#ffffff; }
+QMenu#LibraryContextMenu::item:disabled { color:#84939e; }
+QMenu#LibraryContextMenu::separator { height:1px; background:#2c3d47; margin:4px 7px; }
 QWidget#LibraryPage QPushButton#LibraryDetailEdit {
     min-height:36px; max-height:36px;
     background:#12382c;
@@ -2686,7 +2694,8 @@ QWidget#LibraryPage QPushButton#LibraryCollectionAction:disabled,
 QWidget#LibraryPage QPushButton#LibraryPlaylistAction:disabled {
     background:#131b21; border-color:#293740; color:#71848b;
 }
-QWidget#LibraryPage QComboBox#LibraryFormatFilter {
+QWidget#LibraryPage QComboBox#LibraryFormatFilter,
+QWidget#LibraryPage QComboBox#LibraryFileFilter {
     min-height:26px; max-height:26px; padding:2px 7px;
     background:#151f27; border:1px solid #34434b; border-radius:7px;
     color:#d9e5e8;
