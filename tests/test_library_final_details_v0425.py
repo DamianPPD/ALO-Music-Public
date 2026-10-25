@@ -161,7 +161,8 @@ def test_toolbar_filters_and_category_palette(tmp_path):
         for category, color in page.CATEGORY_COLORS.items():
             index = page.status.findData(category)
             assert index >= 0
-            expected = '#6de6a5' if category == page.status.currentData() else color
+            # Stage6.1A: active neutral "all" keeps the existing neutral color.
+            expected = page._category_accent(category) if category == page.status.currentData() else color
             assert page.status.model().item(index).foreground().color().name() == expected
             assert not page.status.itemIcon(index).isNull()
         page.search.setText('wrong')
@@ -340,9 +341,11 @@ def test_legend_stays_at_upper_right_when_toolbar_reflows(tmp_path):
     try:
         legend = install_library_status_legend(page)
         assert install_library_status_legend(page) is legend
-        assert len(legend.menu().actions()) == len(LEGEND_ITEMS) + 2
-        assert legend.menu().actions()[len(LEGEND_ITEMS)].isSeparator()
-        assert len(legend.menu().actions()[-1].menu().actions()) == 6
+        from PySide6.QtWidgets import QDialog, QLabel
+        assert legend.menu() is None
+        dialog = page.findChild(QDialog, 'LibraryLegendDialog')
+        assert len(dialog.findChildren(QLabel, 'LibraryLegendIcon')) == len(LEGEND_ITEMS)
+        assert len(dialog.findChildren(QLabel, 'LibraryLegendName')) == 11
         for width in (1920, 960, 800):
             page.resize(width, 720)
             page.show()
@@ -352,10 +355,10 @@ def test_legend_stays_at_upper_right_when_toolbar_reflows(tmp_path):
             assert box.right() >= page.width() - 12
             assert box.bottom() < page.split.geometry().top()
             assert legend.isVisible()
-        legend.menu().popup(legend.mapToGlobal(legend.rect().bottomLeft()))
+        legend.click()
         app.processEvents()
-        assert legend.menu().isVisible()
-        legend.menu().hide()
+        assert dialog.isVisible()
+        dialog.hide()
     finally:
         page.close()
 

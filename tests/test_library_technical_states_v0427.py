@@ -141,16 +141,18 @@ def test_stale_history_is_annotated_then_refresh_updates_current_state(tmp_path)
 def test_legend_separates_all_technical_states_from_existing_metadata_categories(tmp_path):
     page, _, _ = library_page(tmp_path)
     legend = install_library_status_legend(page)
-    submenu = next((a.menu() for a in legend.menu().actions() if a.menu() and a.text() == 'Plik'), None)
-    assert submenu is not None, 'Existing legend needs a separate technical-state section'
-    assert [a.text() for a in submenu.actions()] == LABELS
-    assert all(a.property('accent') and a.toolTip() for a in submenu.actions())
-    assert [a.text().split(' — ')[0] for a in legend.menu().actions()[:5]] == ['GOTOWE','DUPLIKAT','DO SPRAWDZENIA','PROBLEM','NIE WYBIERAM']
+    from PySide6.QtWidgets import QDialog, QLabel
+    assert legend.menu() is None
+    dialog = page.findChild(QDialog, 'LibraryLegendDialog')
+    names = dialog.findChildren(QLabel, 'LibraryLegendName')
+    assert [label.text() for label in names[5:]] == LABELS
+    assert all(label.text() for label in dialog.findChildren(QLabel, 'LibraryLegendDescription'))
+    assert [label.text() for label in names[:5]] == ['GOTOWE','DUPLIKAT','DO SPRAWDZENIA','PROBLEM','NIE WYBIERAM']
     apply_static_language(page,'en')
-    assert submenu.title() == 'File'
-    assert submenu.actions()[0].text() == 'In library'
+    assert dialog.findChildren(QLabel, 'LibraryLegendHeading')[1].text() == 'TECHNICAL FILE STATES'
+    assert names[5].text() == 'In library'
     apply_static_language(page,'pl')
-    assert submenu.actions()[0].text() == 'W bibliotece'
+    assert names[5].text() == 'W bibliotece'
 
 
 def test_file_sort_never_probes_disk_and_preserves_playing_marker(tmp_path, monkeypatch):

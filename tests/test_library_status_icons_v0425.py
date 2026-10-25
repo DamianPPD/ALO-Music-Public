@@ -260,23 +260,19 @@ def test_legend_is_in_top_filter_row_with_neutral_and_green_outline_icon(status_
         assert center.x() + legend.width() / 2 <= page.width()
 
 
-def test_legend_click_opens_existing_status_menu(status_page):
-    from PySide6.QtCore import QTimer
+def test_legend_click_opens_single_status_and_file_dialog(status_page):
     from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QDialog, QLabel
     from audio_library_organizer.ui.library_status_legend import install_library_status_legend
     _, page, _ = status_page
     legend = install_library_status_legend(page)
-    visible = []
-    def capture_popup_and_close():
-        visible.append(legend.menu().isVisible())
-        legend.menu().close()
-    # The popup runs a nested event loop; inspect and close it in that loop.
-    QTimer.singleShot(0, capture_popup_and_close)
+    assert legend.menu() is None
     QTest.mouseClick(legend, Qt.MouseButton.LeftButton)
-    assert visible == [True]
-    assert len(legend.menu().actions()) == 7
-    assert legend.menu().actions()[5].isSeparator()
-    assert len(legend.menu().actions()[6].menu().actions()) == 6
+    dialog = page.findChild(QDialog, 'LibraryLegendDialog')
+    assert dialog.isVisible()
+    assert len(dialog.findChildren(QLabel, 'LibraryLegendIcon')) == 5
+    assert len(dialog.findChildren(QLabel, 'LibraryLegendName')) == 11
+    dialog.close()
 
 
 def test_single_click_cycles_keep_details_consistent_without_playback(status_page):
@@ -312,18 +308,18 @@ def test_legend_svg_is_valid_minimal_outline_list():
 
 def test_nonsemantic_category_icons_are_neutral_until_hover_or_active(status_page):
     _, page, _ = status_page
-    for category, asset in (('no_cover', 'no_cover'), ('no_year', 'no_year'),
-                            ('not_selected', 'unselected')):
+    for category, asset, accent in (('no_cover', 'no_cover', '#f4bd75'), ('no_year', 'no_year', '#bdcbd3'),
+                                    ('not_selected', 'unselected', '#bdcbd3')):
         index = page.status.findData(category)
         assert _icon_pixels(page.status.itemIcon(index)) == _icon_pixels(
             library_icon(asset, '#bdcbd3', 18))
         page._paint_category_icons(index)
         assert _icon_pixels(page.status.itemIcon(index)) == _icon_pixels(
-            library_icon(asset, '#6de6a5', 18))
+            library_icon(asset, accent, 18))
         page._paint_category_icons()
         page.status.setCurrentIndex(index)
         assert _icon_pixels(page.status.itemIcon(index)) == _icon_pixels(
-            library_icon(asset, '#6de6a5', 18))
+            library_icon(asset, accent, 18))
         page.status.setCurrentIndex(page.status.findData('all'))
 
 
@@ -346,7 +342,7 @@ def test_reset_view_repaints_active_category_icons(status_page):
     page.reset_view_btn.click()
     assert page.status.currentData() == 'all'
     assert _icon_pixels(page.status.itemIcon(page.status.findData('all'))) == _icon_pixels(
-        library_icon('all_tracks', '#6de6a5', 18))
+        library_icon('all_tracks', '#bdcbd3', 18))
     assert _icon_pixels(page.status.itemIcon(page.status.findData('no_cover'))) == _icon_pixels(
         library_icon('no_cover', '#bdcbd3', 18))
 
@@ -354,13 +350,16 @@ def test_reset_view_repaints_active_category_icons(status_page):
 def test_status_accessibility_and_legend_refresh_live_in_both_languages(status_page):
     _, page, tracks = status_page
     from audio_library_organizer.ui.library_status_legend import install_library_status_legend
+    from PySide6.QtWidgets import QDialog, QLabel
     legend = install_library_status_legend(page)
-    problem = next(action for action in legend.menu().actions() if action.text().startswith('PROBLEM'))
-    assert not problem.icon().isNull()
+    dialog = page.findChild(QDialog, 'LibraryLegendDialog')
+    problem = dialog.findChildren(QLabel, 'LibraryLegendName')[3]
+    description = dialog.findChildren(QLabel, 'LibraryLegendDescription')[3]
+    assert not dialog.findChildren(QLabel, 'LibraryLegendIcon')[3].pixmap().isNull()
     for language, review_caption in (('en', 'NEEDS REVIEW'), ('pl', 'DO SPRAWDZENIA')):
         apply_static_language(page, language)
         page.refresh(preserve_order=True)
         assert page.model.item(_row(page, tracks[1]), 1).toolTip() == review_caption
         assert page.model.item(_row(page, tracks[2]), 1).toolTip() == 'PROBLEM'
         assert problem.text().startswith('PROBLEM')
-        assert ('Poważny' if language == 'pl' else 'serious') in problem.text()
+        assert ('Poważny' if language == 'pl' else 'serious').casefold() in description.text().casefold()

@@ -112,7 +112,8 @@ def test_sort_value_has_accent_and_filters_update_after_live_language_switch(
     page.genre_filter.setText('Trance')
     page.format_filter.setCurrentIndex(page.format_filter.findData('MP3'))
     document = _summary(page)
-    assert _format(document, page.status.currentText()).foreground().color().name() == '#d8a23a'
+    # Same established category accent as the selected filter, not the legend icon tint.
+    assert _format(document, page.status.currentText()).foreground().color().name() == '#f4bd75'
     assert _format(document, 'Trance').foreground().color().name() == '#b6a0ce'
     assert _format(document, 'MP3').foreground().color().name() == '#85bdd6'
     page._reset_view()

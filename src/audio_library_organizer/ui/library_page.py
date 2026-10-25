@@ -37,7 +37,7 @@ from audio_library_organizer.jobs.scanner import SUPPORTED_EXTENSIONS
 from audio_library_organizer.metadata.online_lock import is_online_locked
 from audio_library_organizer.metadata.genre import genre_items, primary_genre
 from audio_library_organizer.ui.state import (
-    library_status_text, library_status_presentation, track_matches_quick_filter,
+    library_status_text, library_status_presentation, status_presentation, track_matches_quick_filter,
     display_bpm, effective_status, review_severity, track_matches_library_filters,
 )
 from audio_library_organizer.ui.widgets import ClickableCoverLabel, show_cover_preview
@@ -657,20 +657,27 @@ class LibraryPage(QWidget):
     def set_history_provider(self, provider):
         self._history_provider = provider
 
+    @classmethod
+    def _category_accent(cls, key):
+        return cls.CATEGORY_COLORS.get('review' if key == 'no_cover' else key,
+                                       cls.CATEGORY_COLORS['all'])
+
     def _paint_category_icons(self, hovered_index: int = -1):
         selected = self.status.currentData()
-        self.status.setStyleSheet('color: #6de6a5;')
+        self.status.setStyleSheet(f'color: {self._category_accent(selected)};')
         for key, icon_name in self.CATEGORY_ICONS.items():
             index = self.status.findData(key)
             if index < 0:
                 continue
             active = key == selected
-            color = '#6de6a5' if active or index == hovered_index else self.CATEGORY_COLORS[key]
+            color = self._category_accent(key) if active or index == hovered_index else self.CATEGORY_COLORS[key]
             self.status.setItemIcon(index, library_icon(icon_name, color, 18))
             item = self.status.model().item(index)
             if item is not None:
                 item.setForeground(QBrush(QColor(color)))
-                item.setBackground(QBrush(QColor('#173c2d')) if active or index == hovered_index else QBrush())
+                status = 'review' if key == 'no_cover' else key
+                background = status_presentation(status).background if status in {'ready', 'duplicate', 'review', 'not_selected'} else None
+                item.setBackground(QBrush(QColor(background)) if background and (active or index == hovered_index) else QBrush())
 
     @staticmethod
     def _format_of(track: TrackRecord) -> str:
@@ -965,9 +972,7 @@ class LibraryPage(QWidget):
         filters: list[tuple[str, str]] = []
         status_text = self.status.currentText().strip()
         if (self.status.currentData() or 'all') != 'all':
-            color = {'review': '#d8a23a', 'error': '#f34d64', 'problem': '#f34d64',
-                     'ready': '#84cfa6', 'duplicate': '#b6a0ce'}.get(
-                self.status.currentData(), '#a5b2bd')
+            color = self._category_accent(self.status.currentData())
             filters.append((status_text, color))
         if self.search.text().strip():
             filters.append((f'{tr("library.view.search", language)} {self.search.text().strip()}', '#a5b2bd'))
