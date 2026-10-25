@@ -274,7 +274,9 @@ def test_legend_click_opens_existing_status_menu(status_page):
     QTimer.singleShot(0, capture_popup_and_close)
     QTest.mouseClick(legend, Qt.MouseButton.LeftButton)
     assert visible == [True]
-    assert len(legend.menu().actions()) == 5
+    assert len(legend.menu().actions()) == 7
+    assert legend.menu().actions()[5].isSeparator()
+    assert len(legend.menu().actions()[6].menu().actions()) == 6
 
 
 def test_single_click_cycles_keep_details_consistent_without_playback(status_page):

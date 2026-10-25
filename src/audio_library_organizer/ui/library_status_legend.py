@@ -7,6 +7,7 @@ from audio_library_organizer.ui.state import status_presentation
 from audio_library_organizer.ui.icons import alo_icon, library_icon
 from audio_library_organizer.ui.i18n import ui_text
 from audio_library_organizer.ui.library_controls import AccentMenu
+from audio_library_organizer.ui.library_file_state import FILE_STATE_COLORS
 
 
 LEGEND_ITEMS = (
@@ -50,6 +51,15 @@ def install_library_status_legend(library_page) -> QToolButton:
         action = menu.addAction(icon, ui_text(library_page, f'{label} — {description}'))
         action.setProperty('accent', accent)
         action.setToolTip(ui_text(library_page, description))
+    # Technical evidence is separate from the metadata/decision categories.
+    menu.addSeparator()
+    file_menu = AccentMenu(ui_text(library_page, 'Plik'), menu)
+    file_menu.setObjectName('LibraryFileStateLegendMenu')
+    for color in FILE_STATE_COLORS.values():
+        action = file_menu.addAction(ui_text(library_page, color.label))
+        action.setProperty('accent', color.accent)
+        action.setToolTip(ui_text(library_page, 'Stan z ostatniej kontroli; odczyt wymaga ponownej weryfikacji.'))
+    menu.addMenu(file_menu)
     button.setMenu(menu)
 
     button.setFixedSize(34, 34)

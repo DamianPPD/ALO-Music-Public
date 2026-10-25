@@ -241,7 +241,7 @@ def test_13000_cached_records_sort_without_file_or_network_io(page, tmp_path, mo
             guard.setattr(Path, name, forbidden)
         guard.setattr(requests.sessions.Session, 'request', forbidden)
         guard.setattr('audio_library_organizer.ui.library_page.extract_embedded_cover', forbidden)
-        for column in range(2, 10):
+        for column in range(2, page.model.columnCount()):
             page.table.sortByColumn(column, Qt.SortOrder.AscendingOrder)
             page.table.sortByColumn(column, Qt.SortOrder.DescendingOrder)
         page.table.sortByColumn(2, Qt.SortOrder.AscendingOrder)

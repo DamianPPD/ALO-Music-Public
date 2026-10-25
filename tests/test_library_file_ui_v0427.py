@@ -72,8 +72,8 @@ def test_physical_state_colors_entire_row_without_replacing_metadata_icon(tmp_pa
     for column in range(page.model.columnCount()):
         brush = page.model.item(row, column).background()
         assert (brush.color().name() if brush.style() != Qt.BrushStyle.NoBrush else None) == color.background
-    assert page.model.columnCount() == 10
-    assert 'Plik' not in page.HEADERS
+    assert page.model.columnCount() == 11
+    assert page.HEADERS.index('Plik') == 10
     assert not page.model.item(row, 1).icon().isNull()
     assert track.status == 'review'
     assert presentation.label in page.model.item(row, 3).toolTip()

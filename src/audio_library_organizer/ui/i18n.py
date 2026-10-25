@@ -62,6 +62,7 @@ TEXT_MAP_EN: dict[str, str] = {
     'Brak pliku biblioteki': 'Library file missing',
     'Konflikt': 'Conflict',
     'Stan pliku niepotwierdzony': 'File state unconfirmed',
+    'Niepotwierdzony': 'Unconfirmed',
     'Stan z ostatniej kontroli; odczyt wymaga ponownej weryfikacji.': 'State from the last check; reading requires revalidation.',
     'Akcje wskazanego utworu': 'Actions for the pointed track',
     'Otwórz': 'Open',

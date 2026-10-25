@@ -340,7 +340,9 @@ def test_legend_stays_at_upper_right_when_toolbar_reflows(tmp_path):
     try:
         legend = install_library_status_legend(page)
         assert install_library_status_legend(page) is legend
-        assert len(legend.menu().actions()) == len(LEGEND_ITEMS)
+        assert len(legend.menu().actions()) == len(LEGEND_ITEMS) + 2
+        assert legend.menu().actions()[len(LEGEND_ITEMS)].isSeparator()
+        assert len(legend.menu().actions()[-1].menu().actions()) == 6
         for width in (1920, 960, 800):
             page.resize(width, 720)
             page.show()

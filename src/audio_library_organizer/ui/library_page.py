@@ -46,7 +46,7 @@ from audio_library_organizer.ui.genre_input import build_genre_suggestions
 from audio_library_organizer.ui.i18n import ui_text, localized_no_cover_name, tr, language_for
 from audio_library_organizer.ui.icons import alo_icon, library_icon
 from audio_library_organizer.ui.library_file_state import (
-    FILE_STATE_COLORS, FileStatePresentation, presentation_from_evaluation,
+    FILE_STATE_COLORS, FILE_STATE_SORT_ORDER, FileStatePresentation, presentation_from_evaluation,
     index_file_state_presentations,
 )
 
@@ -237,8 +237,8 @@ class LibraryPage(QWidget):
     context_playlist_requested = Signal(object)
     context_collection_requested = Signal(object)
 
-    HEADERS = ['', 'Status', 'Wykonawca', 'Tytuł', 'Rok', 'Gatunek', 'BPM', 'Długość', 'Jakość', 'Format']
-    COLUMN_MINIMUMS = {2: 70, 3: 70, 4: 48, 5: 70, 6: 48, 7: 64, 8: 72, 9: 56}
+    HEADERS = ['', 'Status', 'Wykonawca', 'Tytuł', 'Rok', 'Gatunek', 'BPM', 'Długość', 'Jakość', 'Format', 'Plik']
+    COLUMN_MINIMUMS = {2: 70, 3: 70, 4: 48, 5: 70, 6: 48, 7: 64, 8: 72, 9: 56, 10: 140}
     CATEGORY_ICONS = {
         'all': 'all_tracks', 'ready': 'ready', 'duplicate': 'duplicates',
         'review': 'review', 'not_selected': 'unselected', 'no_cover': 'no_cover',
@@ -390,6 +390,7 @@ class LibraryPage(QWidget):
         self.table.setColumnWidth(3, 280)
         self.table.setColumnWidth(5, 150); self.table.setColumnWidth(6, 62); self.table.setColumnWidth(7, 76)
         self.table.setColumnWidth(8, 125); self.table.setColumnWidth(9, 72)
+        self.table.setColumnWidth(10, 210)
         header.sectionResized.connect(self._limit_column_width)
         self.table.sortByColumn(1, Qt.SortOrder.AscendingOrder)
         self.table.verticalHeader().setDefaultSectionSize(38)
@@ -561,7 +562,7 @@ class LibraryPage(QWidget):
         self.bpm_max.textChanged.connect(self._filters_changed)
         self.status.currentIndexChanged.connect(self._filters_changed)
         self.format_filter.currentIndexChanged.connect(self._filters_changed)
-        self.file_filter.currentIndexChanged.connect(self._filters_changed)
+        self.file_filter.currentIndexChanged.connect(self._file_filter_changed)
         self.table.selectionModel().selectionChanged.connect(self._show_detail)
         self.table.selectionModel().selectionChanged.connect(self._context_view_changed)
         self.table.selectionModel().currentChanged.connect(self._context_view_changed)
@@ -770,6 +771,12 @@ class LibraryPage(QWidget):
         self._checked_paths.clear()
         self.refresh(clear_checks=True)
         self.table.selectionModel().clearSelection()
+
+    def _file_filter_changed(self, *_):
+        # Preserve identity-based selection/checks that survive this filter.
+        # refresh() drops hidden checks, so group actions remain visible-only.
+        self.cancel_context_actions()
+        self.refresh()
 
     def _toggle_visible_checks(self):
         visible = {self._path_key(track) for track in self.visible_tracks()}
@@ -1057,9 +1064,12 @@ class LibraryPage(QWidget):
             presentation = library_status_presentation(track)
             is_playing = self._track_is_playing(track)
             status_text = ui_text(self, library_status_text(track))
+            file_text = ui_text(self, file_presentation.label)
+            if file_presentation.state is not None and not file_presentation.confirmed:
+                file_text += ' · ' + ui_text(self, 'Niepotwierdzony')
             values = [
                 '', status_text, track.artist or '', track.title or '', normalize_year(track.year) or '—', track.genre or '',
-                display_bpm(track.bpm), duration, quality, self._format_of(track),
+                display_bpm(track.bpm), duration, quality, self._format_of(track), file_text,
             ]
             items = [QStandardItem(str(value)) for value in values]
             # Cache raw values once. Header clicks use native Qt sorting without
@@ -1067,7 +1077,8 @@ class LibraryPage(QWidget):
             sort_values = ['', status_text, (track.artist or '').casefold(), (track.title or '').casefold(),
                            self._numeric_sort_value(normalize_year(track.year)), (primary_genre(track.genre) or '').casefold(),
                            self._numeric_sort_value(track.bpm), self._numeric_sort_value(track.duration_seconds),
-                           self._numeric_sort_value(track.bitrate_kbps), self._format_of(track).casefold()]
+                           self._numeric_sort_value(track.bitrate_kbps), self._format_of(track).casefold(),
+                           FILE_STATE_SORT_ORDER.get(file_presentation.state, len(FILE_STATE_SORT_ORDER))]
             for item, value in zip(items, sort_values):
                 item.setData(value, LIBRARY_SORT_ROLE)
             status = effective_status(track)
@@ -1108,6 +1119,10 @@ class LibraryPage(QWidget):
                 file_note += '\n' + ui_text(self, 'Stan z ostatniej kontroli; odczyt wymaga ponownej weryfikacji.')
             elif file_presentation.state is not None:
                 file_note += '\n' + ui_text(self, 'Ostatni potwierdzony stan; wymaga ponownej kontroli.')
+            items[10].setToolTip(file_note)
+            items[10].setData(file_text, Qt.ItemDataRole.AccessibleTextRole)
+            if file_presentation.accent is not None:
+                items[10].setForeground(QBrush(QColor(file_presentation.accent)))
             items[3].setToolTip((track.title or '') + '\n' + file_note)
             items[2].setToolTip(track.artist or '')
             items[0].setData(track, Qt.ItemDataRole.UserRole)
@@ -1128,6 +1143,10 @@ class LibraryPage(QWidget):
             # The refresh has now restored the visual order. Future explicit
             # header clicks sort by cached raw values again.
             self.model.setSortRole(LIBRARY_SORT_ROLE)
+            if view_state.get('sort_column') == self.HEADERS.index('Plik'):
+                # New evidence can change state ranks during set_tracks().
+                # Re-sort that column, retaining the restored order for ties.
+                self.model.sort(self.HEADERS.index('Plik'), sort_order)
         self._restore_view_state(view_state)
         self._show_detail()
         self._update_selection_count()

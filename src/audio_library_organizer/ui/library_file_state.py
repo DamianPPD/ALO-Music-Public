@@ -16,13 +16,16 @@ class FileStateColor:
 
 
 FILE_STATE_COLORS = {
-    FileState.IN_LIBRARY: FileStateColor('W bibliotece', '#bdcbd3', None),
+    FileState.IN_LIBRARY: FileStateColor('W bibliotece', '#6dcda0', '#142b23'),
     FileState.SOURCE_ONLY: FileStateColor('Tylko źródło', '#66aaf0', '#142235'),
-    FileState.NEEDS_UPDATE: FileStateColor('Do aktualizacji', '#53c9cb', '#11292c'),
-    FileState.SOURCE_UNAVAILABLE: FileStateColor('Źródło niedostępne', '#ef917d', '#30221f'),
-    FileState.MANAGED_FILE_MISSING: FileStateColor('Brak pliku biblioteki', '#f46a76', '#351b24'),
+    FileState.NEEDS_UPDATE: FileStateColor('Do aktualizacji', '#e5ad70', '#30251b'),
+    FileState.SOURCE_UNAVAILABLE: FileStateColor('Źródło niedostępne', '#f08b96', '#351b24'),
+    FileState.MANAGED_FILE_MISSING: FileStateColor('Brak pliku biblioteki', '#d8c56e', '#302b18'),
     FileState.CONFLICT: FileStateColor('Konflikt', '#db8fd4', '#302036'),
 }
+
+# The established dropdown/display order, not evaluator precedence or PL/EN text.
+FILE_STATE_SORT_ORDER = {state: rank for rank, state in enumerate(FILE_STATE_COLORS)}
 
 
 @dataclass(frozen=True)
