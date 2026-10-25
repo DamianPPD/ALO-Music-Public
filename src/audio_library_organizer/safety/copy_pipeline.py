@@ -72,10 +72,20 @@ def copy_without_overwrite(source: Path, destination_dir: Path, filename: str | 
     staged = working / name
     try:
         with source.open('rb') as source_handle, staged.open('xb') as target_handle:
-            if not stat.S_ISREG(os.fstat(source_handle.fileno()).st_mode):
+            source_mode = os.fstat(source_handle.fileno()).st_mode
+            if not stat.S_ISREG(source_mode):
                 raise OSError('Source is not a regular file.')
+            if os.name == 'posix':
+                # Narrow only this open copy, before writing payload. Owner-write
+                # is retained only if its actual creation policy already allowed
+                # it; source restrictions still cap group/other and ACL mask.
+                fresh_mode = os.fstat(target_handle.fileno()).st_mode & 0o777
+                mode = fresh_mode & ((source_mode & 0o777) | stat.S_IWUSR)
+                if mode != fresh_mode:
+                    os.fchmod(target_handle.fileno(), mode)
             shutil.copyfileobj(source_handle, target_handle, length=1024 * 1024)
-        shutil.copystat(source, staged)
+        # Do not clone filesystem attributes: source read-only state can prevent
+        # Mutagen writes and Windows cleanup. Windows keeps its fresh creation ACL.
         if prepare is not None:
             prepare(staged)
         while True:
