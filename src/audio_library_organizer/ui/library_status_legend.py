@@ -58,8 +58,8 @@ class LibraryLegendDialog(QDialog):
         self._body = QWidget()
         grid = QGridLayout(self._body)
         grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(12)
-        grid.setVerticalSpacing(7)
+        grid.setHorizontalSpacing(18)
+        grid.setVerticalSpacing(9)
         grid.setColumnStretch(2, 1)
 
         def heading(row, text):

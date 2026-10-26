@@ -99,7 +99,9 @@ QFrame#SetupCard { background:#141b22; border:1px solid #2b3744; border-radius:1
 QFrame#PathPreviewCard { background:#102019; border:1px solid #2f6145; border-radius:12px; }
 QLabel#FirstRunBrand { color:#ecf8f0; font-size:25pt; font-weight:850; }
 QLabel#FirstRunSubtitle { color:#8da098; font-size:10pt; font-weight:650; }
-QLabel#MutedText { color:#9daab9; }
+QLabel#MutedText,
+QDialog#LibraryLegendDialog QLabel#LibraryLegendDescription,
+QDialog#LibraryLegendDialog QLabel#LibraryLegendUnconfirmed { color:#9daab9; }
 
 QFrame#LocationCard { background:#111b18; border:1px solid #28513b; border-radius:12px; }
 QFrame#NamingCard { background:#141b22; border:1px solid #314052; border-radius:12px; }
@@ -634,7 +636,9 @@ QWidget { background:#f4f6f8; color:#1d2730; }
 QMainWindow { background:#eef1f4; }
 QFrame#TopNav { background:#ffffff; border-bottom:1px solid #d5dce3; }
 QLabel#BrandName { color:#15211a; }
-QLabel#BrandVersion, QLabel#MutedText, QLabel#CompactPlayerTime { color:#66727e; }
+QLabel#BrandVersion, QLabel#MutedText, QLabel#CompactPlayerTime,
+QDialog#LibraryLegendDialog QLabel#LibraryLegendDescription,
+QDialog#LibraryLegendDialog QLabel#LibraryLegendUnconfirmed { color:#66727e; }
 QPushButton#TopNavButton { color:#4f5c68; }
 QPushButton#TopNavButton:hover { background:#edf2f5; color:#16202a; }
 QPushButton#TopNavButton:checked { background:#e6f5ec; color:#177647; border-bottom:2px solid #27a865; }

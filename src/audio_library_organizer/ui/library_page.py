@@ -300,7 +300,7 @@ class LibraryPage(QWidget):
         self.bpm_min.ensurePolished()
         bpm_width = max(84, self.bpm_min.fontMetrics().horizontalAdvance('BPM from') + 28)
         self.bpm_min.setFixedWidth(bpm_width); self.bpm_max.setFixedWidth(bpm_width)
-        self.status = QComboBox(); self.status.setFixedWidth(190)
+        self.status = QComboBox(); self.status.setObjectName('LibraryCategoryFilter'); self.status.setFixedWidth(190)
         self.status.addItem(library_icon('all_tracks', '#8fe9ad', 18), 'Wszystkie utwory', 'all')
         all_index = self.status.findData('all')
         self.status.insertSeparator(self.status.count())
@@ -664,7 +664,16 @@ class LibraryPage(QWidget):
 
     def _paint_category_icons(self, hovered_index: int = -1):
         selected = self.status.currentData()
-        self.status.setStyleSheet(f'color: {self._category_accent(selected)};')
+        accent = self._category_accent(selected)
+        selector = 'QComboBox#LibraryCategoryFilter'
+        style = f'{selector} {{ color: {accent}; }}'
+        if selected in self.CATEGORY_ICONS and selected != 'all':
+            # Category state persists after blur; focus adds a distinct pattern
+            # with the same border width, geometry and existing category color.
+            style += (f'{selector} {{ border-color: {accent}; }}'
+                      f'{selector}:focus {{ border-style: dashed; }}')
+        if self.status.styleSheet() != style:
+            self.status.setStyleSheet(style)
         for key, icon_name in self.CATEGORY_ICONS.items():
             index = self.status.findData(key)
             if index < 0:
