@@ -180,7 +180,7 @@ def _observation_uncertainty(obs: FileObservation | None, label: str) -> str | N
     return None
 
 
-def evaluate_file_state(facts: FileFacts) -> FileStateEvaluation:
+def evaluate_file_state(facts: FileFacts, *, difference=None) -> FileStateEvaluation:
     """Evaluate sufficient evidence in priority order, retaining history otherwise.
 
     Confirmed conflict > expected missing > changed output > current output >
@@ -210,6 +210,13 @@ def evaluate_file_state(facts: FileFacts) -> FileStateEvaluation:
             return _confirmed(facts, FileState.MANAGED_FILE_MISSING, 'EXPECTED_MANAGED_MISSING')
         if facts.ownership != Ownership.CONFIRMED or facts.owner_track_id != facts.track_id:
             return _unresolved(facts, 'OWNERSHIP_UNCONFIRMED')
+        if difference is not None:
+            from .output_spec import OutputDifference, NAMESPACE, VERSION
+            if (not isinstance(difference, OutputDifference)
+                    or (difference.track_id, difference.checked_at) != (facts.track_id, facts.checked_at)
+                    or (difference.namespace, difference.version) != (NAMESPACE, VERSION)):
+                return _unresolved(facts, 'OUTPUT_DIFFERENCE_IDENTITY_MISMATCH')
+            return _confirmed(facts, FileState.NEEDS_UPDATE, 'MANAGED_FIELD_DIFFERENCE')
         if facts.desired is None or facts.applied is None:
             return _unresolved(facts, 'OUTPUT_SNAPSHOT_UNKNOWN')
         if (facts.desired.namespace, facts.desired.version) != (facts.applied.namespace, facts.applied.version):

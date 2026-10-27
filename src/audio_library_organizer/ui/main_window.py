@@ -11,7 +11,7 @@ import sqlite3
 from uuid import uuid4
 from functools import partial
 
-from PySide6.QtCore import Qt, QThread, QSettings, Signal, Slot, QUrl, QTimer, QSize, QVariantAnimation
+from PySide6.QtCore import Qt, QThread, QSettings, Signal, Slot, QUrl, QTimer, QSize, QVariantAnimation, QFileSystemWatcher
 from PySide6.QtGui import QPixmap, QDesktopServices, QIcon, QColor
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -879,6 +879,12 @@ class MainWindow(QMainWindow):
         self._file_check_context = None
         self._file_check_repository = None
         self._file_check_closing = False
+        self._output_operation = None
+        self._output_session = {}
+        self._output_baseline_evals = {}
+        self._output_watcher = QFileSystemWatcher(self)
+        self._output_watcher.fileChanged.connect(self._output_watch_changed)
+        self._output_watcher.directoryChanged.connect(self._output_watch_changed)
         self.last_reconciliation_result = None
         self._adoption_dialog = None
         self._adoption_view_context = None
@@ -1245,6 +1251,7 @@ class MainWindow(QMainWindow):
         self._show_operation(f'Biblioteka „{profile.name}” została wyzerowana. Możesz dodać nowe pliki do skanowania.')
 
     def _rebind_active_profile(self, profile, *, repository=None, availability=None):
+        self._invalidate_output_states()
         self._identification_generation += 1
         if isinstance(self._worker, (IdentificationWorker, AudioIdentificationWorker)):
             self._worker.cancel()
@@ -1558,6 +1565,7 @@ class MainWindow(QMainWindow):
         self._open_review()
         if self._thread is not None or self._file_check_closing:
             return
+        self._invalidate_output_states()
         library_id = self.library_registry.active.library_id
         operation_id = str(uuid4())
         self._file_check_generation += 1
@@ -1570,10 +1578,16 @@ class MainWindow(QMainWindow):
             self._adoption_dialog = None
         self._pending_auto_identify = False
         paths = self.app_settings.library
+        from audio_library_organizer.jobs.output_session import OutputCheckOperation, output_policy
+        selected = self.library._selected_tracks()
+        self._output_operation = OutputCheckOperation(library_id, operation_id,
+            self._file_check_generation, output_policy(ProviderSettings.from_store(self.qt_settings)),
+            selected[0].track_id if len(selected) == 1 else None)
         thread = QThread(self)
         worker = FileReconciliationWorker(self.repository, library_id=library_id,
             operation_id=operation_id, managed_roots=(paths.ready, paths.review, paths.not_selected),
-            library_root=paths.root, known_libraries=self._known_adoption_libraries())
+            library_root=paths.root, known_libraries=self._known_adoption_libraries(),
+            output_operation=self._output_operation)
         worker.moveToThread(thread)
         self._thread, self._worker = thread, worker
         self._set_operation_state('review', 'WERYFIKACJA W BIBLIOTECE', 'Sprawdzanie plików…')
@@ -1610,6 +1624,7 @@ class MainWindow(QMainWindow):
         if not self._file_check_matches(result.library_id, result.operation_id):
             return
         self.last_reconciliation_result = result
+        self._accept_output_delivery(result)
         summary = result.summary
         if self.preferences.language == 'en':
             text = (f'{"Check cancelled" if result.cancelled else "Check complete"}: '
@@ -1632,6 +1647,119 @@ class MainWindow(QMainWindow):
         return tuple(KnownLibrary(str(profile.library_root),
             str(profile.library_root / '.alo' / 'library.sqlite3'), profile.library_id)
             for profile in self.library_registry.profiles)
+
+    def _invalidate_output_states(self, track_id=None):
+        """Revoke only new session evidence; leave independent baseline states."""
+        operation = self._output_operation
+        request = operation.current_request() if operation is not None else None
+        if operation is not None and (track_id is None or request is None or request.track_id == track_id):
+            operation.invalidate()
+        for tid in tuple(self._output_session):
+            if track_id is None or tid == track_id:
+                self._output_session.pop(tid)
+        if not self._output_session:
+            paths = self._output_watcher.files() + self._output_watcher.directories()
+            if paths:
+                self._output_watcher.removePaths(paths)
+        if hasattr(self, 'library') and self._read_context is not None:
+            merged = dict(self._output_baseline_evals)
+            merged.update({tid: d.pending.evaluation for tid, d in self._output_session.items()})
+            self.library.set_file_state_evaluations(self._read_context.library_id, merged)
+            self.library.refresh(preserve_order=True)
+
+    @Slot(str)
+    def _output_watch_changed(self, path):
+        # Additional invalidation, NEVER the acceptance-time identity proof.
+        for tid, delivery in tuple(self._output_session.items()):
+            material_paths = (delivery.source_locator, delivery.managed_locator,
+                str(Path(delivery.source_locator).parent), str(Path(delivery.managed_locator).parent))
+            if path in material_paths:
+                self._invalidate_output_states(tid)
+                continue
+            database_paths = (str(self.repository.database_path.parent), *tuple(
+                str(self.repository.database_path) + suffix for suffix in ('', '-wal', '-journal')))
+            if path in database_paths:
+                # SQLite's own cache/checkpoint/journal activity is not a
+                # metadata edit. Keep evidence only after fresh validation.
+                from audio_library_organizer.jobs.output_session import context_matches, material_matches, output_policy, database_safe
+                operation = self._output_operation
+                request = operation.current_request() if operation is not None else None
+                try:
+                    if not database_safe(delivery):
+                        self._invalidate_output_states(tid)
+                        continue
+                    current = self.repository.adopted_assessment_snapshot(tid, timeout=0.0)
+                    if (request is not None and request.generation == self._file_check_generation
+                            and request.policy_revision == output_policy(ProviderSettings.from_store(self.qt_settings))
+                            and context_matches(delivery, current, request) and material_matches(delivery)):
+                        journals = [str(self.repository.database_path) + suffix for suffix in ('', '-wal', '-journal')]
+                        missing = [p for p in journals if p not in self._output_watcher.files() and Path(p).exists()]
+                        if not missing or not self._output_watcher.addPaths(missing):
+                            continue
+                except (sqlite3.Error, OSError, ValueError, RuntimeError):
+                    pass
+                self._invalidate_output_states(tid)
+            elif path in delivery.watch_paths:
+                self._invalidate_output_states(tid)
+
+    def _accept_output_delivery(self, result):
+        from audio_library_organizer.jobs.output_session import context_matches, material_matches, output_policy, database_safe
+        delivery = result.output_delivery
+        operation = self._output_operation
+        if (delivery is None or operation is None or result.cancelled
+                or delivery.root != str(self.app_settings.library.root)
+                or delivery.database_locator != str(self.repository.database_path) or not database_safe(delivery)):
+            return
+        request = operation.current_request()
+        if (request is None or request.generation != self._file_check_generation
+                or request.policy_revision != output_policy(ProviderSettings.from_store(self.qt_settings))
+                or not self._file_check_matches(request.library_id, request.operation_id)):
+            return
+        # Register first; then check actual local metadata, not a queued watcher.
+        paths = delivery.watch_paths
+        if self._output_watcher.addPaths(list(paths)):
+            self._output_watcher.removePaths(self._output_watcher.files() + self._output_watcher.directories())
+            return
+        journals = [str(self.repository.database_path) + suffix for suffix in ('-wal', '-journal')]
+        journals = [p for p in journals if Path(p).exists()]
+        if journals and self._output_watcher.addPaths(journals):
+            self._output_watcher.removePaths(self._output_watcher.files() + self._output_watcher.directories())
+            return
+        try:
+            current = self.repository.adopted_assessment_snapshot(request.track_id, timeout=0.0)
+            if not context_matches(delivery, current, request) or not material_matches(delivery):
+                return
+            self._output_session[request.track_id] = delivery
+            self.refresh_data()
+        except (sqlite3.Error, OSError, ValueError, RuntimeError):
+            self._output_session.pop(request.track_id, None)
+        finally:
+            if not self._output_session:
+                watches = self._output_watcher.files() + self._output_watcher.directories()
+                if watches:
+                    self._output_watcher.removePaths(watches)
+
+    def _output_evaluations(self, snapshot):
+        from audio_library_organizer.jobs.output_session import context_matches, material_matches, output_policy, database_safe
+        from audio_library_organizer.storage.repository import AdoptedAssessmentSnapshot
+        from audio_library_organizer.domain.file_state import FileState
+        merged = dict(self._output_baseline_evals)
+        tracks = {t.track_id: t for t in snapshot.tracks}
+        policy = output_policy(ProviderSettings.from_store(self.qt_settings))
+        operation = self._output_operation
+        request = operation.current_request() if operation is not None else None
+        for tid, delivery in tuple(self._output_session.items()):
+            current = AdoptedAssessmentSnapshot(snapshot.library_id, tracks.get(tid),
+                snapshot.sources, snapshot.managed_bindings)
+            if (request is None or request.generation != self._file_check_generation
+                    or request.policy_revision != policy or not context_matches(delivery, current, request)
+                    or not database_safe(delivery) or not material_matches(delivery)):
+                self._output_session.pop(tid)
+                continue
+            baseline = merged.get(tid)
+            if baseline is None or baseline.state not in (FileState.CONFLICT, FileState.MANAGED_FILE_MISSING):
+                merged[tid] = delivery.pending.evaluation
+        return merged
 
     def _open_legacy_adoption(self):
         if self._thread is not None or self.last_reconciliation_result is None:
@@ -1739,6 +1867,7 @@ class MainWindow(QMainWindow):
         self.help.show_topic(title)
 
     def _settings_saved(self):
+        self._invalidate_output_states()
         self.refresh_data()
 
     def _activate_player_track(self, track):
@@ -1895,6 +2024,7 @@ class MainWindow(QMainWindow):
         saved = self.repository.save_metadata(track.track_id, metadata_changes(before, track),
             expected_revision=metadata_revision(before), library_id=self.change_history.library_id)
         self._copy_track_state(track, saved)
+        self._invalidate_output_states(track.track_id)
 
     def _identification_context_current(self, repository, library_id, generation):
         return (isValid(self) and not self._identification_closing and self.repository is repository
@@ -2024,6 +2154,7 @@ class MainWindow(QMainWindow):
             return
         self.change_history.record([previous], 'Zatwierdzenie źródła audio')
         self._copy_track_state(track, saved)
+        self._invalidate_output_states(track.track_id)
         self.refresh_data()
         self.library.select_track(track)
 
@@ -2148,8 +2279,6 @@ class MainWindow(QMainWindow):
         self._read_context = snapshot.read_context(self.app_settings.library.root)
         self.player.set_read_context(self._read_context)
         self.library.set_read_context(self._read_context)
-        self.library.set_file_state_evaluations(snapshot.library_id,
-                                               {tid: cached.evaluation for tid, cached in snapshot.cached})
         self.duplicates.library_id = snapshot.library_id
         all_tracks = list(snapshot.tracks)
         tracks = all_tracks
@@ -2166,6 +2295,8 @@ class MainWindow(QMainWindow):
                     fresh = self.repository.get_track(track.track_id)
                     if fresh is not None:
                         self._copy_track_state(track, fresh)
+        self._output_baseline_evals = {tid: cached.evaluation for tid, cached in snapshot.cached}
+        self.library.set_file_state_evaluations(snapshot.library_id, self._output_evaluations(snapshot))
         self.player.reconcile_tracks(tracks)
         summary = build_operation_summary(tracks)
         health = build_library_health(all_tracks)

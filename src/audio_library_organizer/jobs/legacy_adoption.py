@@ -681,6 +681,10 @@ def binding_facts(binding,track,root,*,at=None,current=False):
         FileFacts,FileObservation,FileAvailability,OutputSnapshot,Ownership)
     at=binding.adopted_at if at is None else at
     namespace='alo.legacy-adoption.tags-locator'
+    # An approved ownership binding is not proof of complete applied fields.
+    # Missing/corrupt optional snapshot values stay unknown, never fabricated.
+    value=binding.applied_snapshot.get('value')
+    applied=OutputSnapshot(namespace,1,value) if isinstance(value,str) and value else None
     return FileFacts(track.track_id,at,
         managed=FileObservation(track.track_id,binding.locator(root),FileAvailability.PRESENT,at,
                                 reason='APPROVED_ADOPTION_RECHECK_REQUIRED',is_current=current),
@@ -689,4 +693,4 @@ def binding_facts(binding,track,root,*,at=None,current=False):
         # full desired routing/normalization policy, owned by the later output
         # specification stage. Keep that knowledge unknown instead of clean.
         desired=None,
-        applied=OutputSnapshot(namespace,1,binding.applied_snapshot['value']),is_current=current)
+        applied=applied,is_current=current)

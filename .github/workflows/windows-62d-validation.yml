@@ -1,0 +1,90 @@
+name: ALO 6.2D native Windows Server validation
+run-name: ALO 6.2D / Windows Server 2022 / ${{ github.sha }}
+
+on:
+  push:
+    branches:
+      - ci/windows-62d-validation
+
+permissions:
+  contents: read
+
+concurrency:
+  group: alo-62d-windows-validation
+  cancel-in-progress: false
+
+jobs:
+  native-windows:
+    if: github.repository == 'DamianPPD/ALO-Music-Public' && github.ref == 'refs/heads/ci/windows-62d-validation'
+    runs-on: windows-2022
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Record real Windows Server environment
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $evidence = Join-Path $env:RUNNER_TEMP 'alo-62d-evidence'
+          New-Item -ItemType Directory -Path $evidence -Force | Out-Null
+          $os = Get-CimInstance Win32_OperatingSystem
+          $volume = Get-Volume -DriveLetter ([IO.Path]::GetPathRoot($env:GITHUB_WORKSPACE).Substring(0,1))
+          [ordered]@{
+            caption = $os.Caption; version = $os.Version; build = $os.BuildNumber
+            architecture = $os.OSArchitecture; filesystem = [string]$volume.FileSystemType
+            drive_type = [string]$volume.DriveType; runner_os = $env:RUNNER_OS
+            runner_arch = $env:RUNNER_ARCH; image_os = $env:ImageOS; image_version = $env:ImageVersion
+            scope = 'Native Windows Server 2022. NOT Windows 10/11 Desktop.'
+          } | ConvertTo-Json | Set-Content (Join-Path $evidence 'environment.json') -Encoding utf8
+
+      - name: Checkout isolated test commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Exact official CPython 3.11.9 x64
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        with:
+          python-version: '3.11.9'
+          architecture: x64
+          check-latest: false
+
+      - name: Verify Python provenance and prepare pinned private environment
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = python -c "import sys; print(sys.executable)"
+          if ($LASTEXITCODE -ne 0) { throw 'Python probe failed' }
+          $signature = Get-AuthenticodeSignature -LiteralPath $path
+          $file = Join-Path $env:RUNNER_TEMP 'alo-62d-evidence/environment.json'
+          $data = Get-Content $file -Raw | ConvertFrom-Json
+          $data | Add-Member -NotePropertyName python_executable -NotePropertyValue $path
+          $data | Add-Member -NotePropertyName python_sha256 -NotePropertyValue ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant())
+          $data | Add-Member -NotePropertyName python_signature_status -NotePropertyValue ([string]$signature.Status)
+          $data | Add-Member -NotePropertyName python_signer -NotePropertyValue ([string]$signature.SignerCertificate.Subject)
+          $data | ConvertTo-Json | Set-Content $file -Encoding utf8
+          python -I .ci/62d/ci.py prepare
+          if ($LASTEXITCODE -ne 0) { throw 'Environment/preflight failed; no application PASS' }
+
+      - name: Run original 42 native cases, stop on first non-pass
+        run: |
+          python -I .ci/62d/ci.py run
+          if ($LASTEXITCODE -ne 0) { throw 'Original native runner did not pass' }
+
+      - name: Preserve and summarize all available results
+        if: always()
+        run: |
+          if (Test-Path '.ci/62d/ci.py') {
+            python -I .ci/62d/ci.py finish
+            if ($LASTEXITCODE -ne 0) { throw 'Evidence finalization failed; raw files remain for artifact upload' }
+          }
+
+      - name: Upload available evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ALO-62D-Windows-Server-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/alo-62d-evidence/
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 6

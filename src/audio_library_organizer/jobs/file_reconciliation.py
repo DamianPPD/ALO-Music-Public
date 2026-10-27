@@ -100,6 +100,18 @@ class ReconciliationSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class PendingOutputAssessment:
+    """Worker evidence only, NOT an accepted UI state or a cache fact.
+
+    Delivery-time revisions/material validation and bulk ownership indexing are
+    not implied. MainWindow requires a separate validated OutputDelivery.
+    """
+    request: object
+    assessment: object
+    evaluation: FileStateEvaluation
+
+
+@dataclass(frozen=True, slots=True)
 class ReconciliationResult:
     library_id: str
     operation_id: str
@@ -118,6 +130,61 @@ class ReconciliationResult:
     skipped: int
     cache_saved: int
     adoption_inventory: object = None
+    pending_output_assessment: PendingOutputAssessment | None = None
+    output_delivery: object = None
+
+
+def _pending_output_check(repository, root, snapshot, files, request, current_request, cancelled,
+                          cache_rejected):
+    """Assess ONE explicit record; never loop the single-record 6.2A adapter.
+
+    A future bulk/UI consumer must supply a reviewed delivery boundary. This
+    packet cannot replace the baseline evaluation, historical cache or facts.
+    """
+    from dataclasses import asdict
+    from .adopted_output import assess_adopted_mp3, AdoptedAssessment
+    from .legacy_adoption import _source_context
+    from audio_library_organizer.metadata.change_history import metadata_revision
+    from audio_library_organizer.storage.managed_bindings import evidence_digest
+
+    items = [item for item in files if item.track_id == request.track_id]
+    tracks = [track for track in snapshot.tracks if track.track_id == request.track_id]
+    if len(items) != 1 or len(tracks) != 1 or cancelled():
+        return None
+    item, track = items[0], tracks[0]
+
+    def refuse(reason):
+        assessment = AdoptedAssessment(evaluate_file_state(FileFacts(track.track_id, item.facts.checked_at)), reason)
+        return PendingOutputAssessment(request, assessment, item.evaluation)
+
+    if cache_rejected:
+        return refuse('CHECK_CONTEXT_OR_CACHE_REJECTED')
+    if track.manual_cover_path:
+        return refuse('COVER_CONTENT_CONTEXT_REQUIRED')
+    if (item.source.availability != FileAvailability.PRESENT
+            or item.evaluation.state in (FileState.CONFLICT, FileState.MANAGED_FILE_MISSING)):
+        return refuse('RECONCILIATION_PRIORITY_OR_SOURCE_UNCERTAIN')
+    owners = [binding for binding in snapshot.managed_bindings if binding.track_id == track.track_id]
+    if len(owners) != 1 or owners[0].binding_id != request.binding_id:
+        return refuse('INITIAL_APPROVED_BINDING_REQUIRED')
+    assessment = assess_adopted_mp3(repository, root, request,
+        current_request=current_request, cancelled=cancelled)
+    if cancelled():
+        return None
+    if assessment.guard is not None:
+        guard = assessment.guard
+        if (guard.metadata_revision != metadata_revision(track)
+                or guard.binding_revision != evidence_digest(asdict(owners[0]))
+                or guard.source_context != _source_context(track, snapshot.sources, snapshot.library_id)
+                or current_request() != request):
+            return refuse('CHECK_INPUT_REVISIONS_CHANGED')
+    # Use the SAME evaluator on reconciliation's actual facts. Preserve
+    # conflict/missing/uncertainty precedence, not adapter.evaluation alone.
+    difference = assessment.difference
+    if difference is not None:
+        difference = replace(difference, checked_at=item.facts.checked_at)
+    evaluation = evaluate_file_state(item.facts, difference=difference)
+    return PendingOutputAssessment(request, assessment, evaluation)
 
 
 def _technical(info, digest=None):
@@ -300,7 +367,8 @@ def _facts(track, source, at, cached, prepared, managed_context, *, cancelled=Fa
 def check_library(repository, *, library_id=None, operation_id=None, checked_at=None,
                   cancelled=None, progress=None, managed_roots=(), prepared_facts=(),
                   prepared_library_id=None, library_root=None, known_libraries=(),
-                  include_adoption=False) -> ReconciliationResult:
+                  include_adoption=False, output_request=None,
+                  current_output_request=None) -> ReconciliationResult:
     """Check active registry scope and return candidates without accepting them.
 
     ``prepared_facts`` is an explicit current evidence boundary, never a cache
@@ -316,6 +384,13 @@ def check_library(repository, *, library_id=None, operation_id=None, checked_at=
     snapshot = repository.file_check_snapshot()
     if library_id is not None and library_id != snapshot.library_id:
         raise ValueError('Library identity does not match check context.')
+    if output_request is not None:
+        from .adopted_output import AssessmentRequest
+        if (not isinstance(output_request, AssessmentRequest) or not callable(current_output_request)
+                or (output_request.library_id, output_request.operation_id) != (snapshot.library_id, operation_id)):
+            raise ValueError('Output assessment context does not match this check.')
+    elif current_output_request is not None:
+        raise ValueError('Output assessment context requires an explicit request.')
     supplied = tuple(prepared_facts)
     if supplied and prepared_library_id != snapshot.library_id:
         raise ValueError('Prepared facts belong to another library context.')
@@ -554,6 +629,14 @@ def check_library(repository, *, library_id=None, operation_id=None, checked_at=
         adoption = inventory_legacy_outputs(repository, library_root=library_root, known_libraries=known_libraries,
             cancelled=is_cancelled, progress=progress)
         was_cancelled = was_cancelled or adoption.cancelled
+    pending = None
+    if output_request is not None and not was_cancelled:
+        pending = _pending_output_check(repository, library_root, snapshot, files, output_request,
+            current_output_request, is_cancelled, 'CACHE_WRITE_REJECTED' in reason_codes)
+        was_cancelled = was_cancelled or is_cancelled()
+        if was_cancelled:
+            pending = None
+            reason_codes.add('CANCELLED')
     return ReconciliationResult(snapshot.library_id, operation_id, at, summary, sources, tuple(files), tuple(new_candidates),
                                 tuple(moves), tuple(orphan_candidates), tuple(conflicts), tuple(unresolved),
-                                tuple(sorted(reason_codes)), was_cancelled, completed, len(files) - completed, saved, adoption)
+                                tuple(sorted(reason_codes)), was_cancelled, completed, len(files) - completed, saved, adoption, pending)

@@ -1,0 +1,305 @@
+[
+  {
+    "name": "PySide6",
+    "version": "6.10.3",
+    "filename": "pyside6-6.10.3-cp39-abi3-win_amd64.whl",
+    "url": "https://files.pythonhosted.org/packages/69/b2/0b12acdc85a05034917ceecea4fe1aaed91c72fa3de6211666a572566174/pyside6-6.10.3-cp39-abi3-win_amd64.whl",
+    "sha256": "c7847e4ae7b1aef1aad822ca7f175c2100c4f9f3af679125cbbdf2b364b32007",
+    "size": 569697,
+    "requires_dist": [
+      "shiboken6==6.10.3",
+      "PySide6_Essentials==6.10.3",
+      "PySide6_Addons==6.10.3"
+    ],
+    "requires_python": "<3.15,>=3.9"
+  },
+  {
+    "name": "PySide6_Essentials",
+    "version": "6.10.3",
+    "filename": "pyside6_essentials-6.10.3-cp39-abi3-win_amd64.whl",
+    "url": "https://files.pythonhosted.org/packages/bf/11/7cfcfc74213b8e33aecef6fa05dcedf45e65385155f07486a514a9777b0d/pyside6_essentials-6.10.3-cp39-abi3-win_amd64.whl",
+    "sha256": "051a70e2df79cf1c012a208ad82a98e8de23ca7fe3b0f3344d07152d15705b59",
+    "size": 74610897,
+    "requires_dist": [
+      "shiboken6==6.10.3"
+    ],
+    "requires_python": "<3.15,>=3.9"
+  },
+  {
+    "name": "PySide6_Addons",
+    "version": "6.10.3",
+    "filename": "pyside6_addons-6.10.3-cp39-abi3-win_amd64.whl",
+    "url": "https://files.pythonhosted.org/packages/2c/5d/28dc9b8c926c86530c42cab4ed4f1bc43f025da8b7d8a39d3e18f8a937f3/pyside6_addons-6.10.3-cp39-abi3-win_amd64.whl",
+    "sha256": "b465b38d1ec3476a9197441fe6a62a1fac97c45a8094f11c2d7e318aee1e3fb3",
+    "size": 164743124,
+    "requires_dist": [
+      "shiboken6==6.10.3",
+      "PySide6_Essentials==6.10.3"
+    ],
+    "requires_python": "<3.15,>=3.9"
+  },
+  {
+    "name": "shiboken6",
+    "version": "6.10.3",
+    "filename": "shiboken6-6.10.3-cp39-abi3-win_amd64.whl",
+    "url": "https://files.pythonhosted.org/packages/fa/6a/488cf05549e3888dff5424e7713e29e45955c14f2041bf99f3f493b1acc8/shiboken6-6.10.3-cp39-abi3-win_amd64.whl",
+    "sha256": "38261c88e87a1c32d1302b642b755470d2369c78af3c7d7d9e95d631f79b556c",
+    "size": 1222126,
+    "requires_dist": null,
+    "requires_python": "<3.15,>=3.9"
+  },
+  {
+    "name": "pytest",
+    "version": "8.4.2",
+    "filename": "pytest-8.4.2-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/a8/a4/20da314d277121d6534b3a980b29035dcd51e6744bd79075a6ce8fa4eb8d/pytest-8.4.2-py3-none-any.whl",
+    "sha256": "872f880de3fc3a5bdc88a11b39c9710c3497a547cfa9320bc3c5e62fbf272e79",
+    "size": 365750,
+    "requires_dist": [
+      "colorama>=0.4; sys_platform == \"win32\"",
+      "exceptiongroup>=1; python_version < \"3.11\"",
+      "iniconfig>=1",
+      "packaging>=20",
+      "pluggy<2,>=1.5",
+      "pygments>=2.7.2",
+      "tomli>=1; python_version < \"3.11\"",
+      "argcomplete; extra == \"dev\"",
+      "attrs>=19.2; extra == \"dev\"",
+      "hypothesis>=3.56; extra == \"dev\"",
+      "mock; extra == \"dev\"",
+      "requests; extra == \"dev\"",
+      "setuptools; extra == \"dev\"",
+      "xmlschema; extra == \"dev\""
+    ],
+    "requires_python": ">=3.9"
+  },
+  {
+    "name": "mutagen",
+    "version": "1.47.0",
+    "filename": "mutagen-1.47.0-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/b0/7a/620f945b96be1f6ee357d211d5bf74ab1b7fe72a9f1525aafbfe3aee6875/mutagen-1.47.0-py3-none-any.whl",
+    "sha256": "edd96f50c5907a9539d8e5bba7245f62c9f520aef333d13392a79a4f70aca719",
+    "size": 194391,
+    "requires_dist": null,
+    "requires_python": ">=3.7"
+  },
+  {
+    "name": "Pillow",
+    "version": "11.3.0",
+    "filename": "pillow-11.3.0-cp311-cp311-win_amd64.whl",
+    "url": "https://files.pythonhosted.org/packages/f1/cc/29c0f5d64ab8eae20f3232da8f8571660aa0ab4b8f1331da5c2f5f9a938e/pillow-11.3.0-cp311-cp311-win_amd64.whl",
+    "sha256": "1a992e86b0dd7aeb1f053cd506508c0999d710a8f07b4c791c63843fc6a807ac",
+    "size": 6986055,
+    "requires_dist": [
+      "furo; extra == \"docs\"",
+      "olefile; extra == \"docs\"",
+      "sphinx>=8.2; extra == \"docs\"",
+      "sphinx-autobuild; extra == \"docs\"",
+      "sphinx-copybutton; extra == \"docs\"",
+      "sphinx-inline-tabs; extra == \"docs\"",
+      "sphinxext-opengraph; extra == \"docs\"",
+      "olefile; extra == \"fpx\"",
+      "olefile; extra == \"mic\"",
+      "pyarrow; extra == \"test-arrow\"",
+      "check-manifest; extra == \"tests\"",
+      "coverage>=7.4.2; extra == \"tests\"",
+      "defusedxml; extra == \"tests\"",
+      "markdown2; extra == \"tests\"",
+      "olefile; extra == \"tests\"",
+      "packaging; extra == \"tests\"",
+      "pyroma; extra == \"tests\"",
+      "pytest; extra == \"tests\"",
+      "pytest-cov; extra == \"tests\"",
+      "pytest-timeout; extra == \"tests\"",
+      "pytest-xdist; extra == \"tests\"",
+      "trove-classifiers>=2024.10.12; extra == \"tests\"",
+      "typing-extensions; python_version < \"3.10\" and extra == \"typing\"",
+      "defusedxml; extra == \"xmp\""
+    ],
+    "requires_python": ">=3.9"
+  },
+  {
+    "name": "requests",
+    "version": "2.32.5",
+    "filename": "requests-2.32.5-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl",
+    "sha256": "2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6",
+    "size": 64738,
+    "requires_dist": [
+      "charset_normalizer<4,>=2",
+      "idna<4,>=2.5",
+      "urllib3<3,>=1.21.1",
+      "certifi>=2017.4.17",
+      "PySocks!=1.5.7,>=1.5.6; extra == \"socks\"",
+      "chardet<6,>=3.0.2; extra == \"use-chardet-on-py3\""
+    ],
+    "requires_python": ">=3.9"
+  },
+  {
+    "name": "numpy",
+    "version": "2.2.6",
+    "filename": "numpy-2.2.6-cp311-cp311-win_amd64.whl",
+    "url": "https://files.pythonhosted.org/packages/31/0a/f354fb7176b81747d870f7991dc763e157a934c717b67b58456bc63da3df/numpy-2.2.6-cp311-cp311-win_amd64.whl",
+    "sha256": "e8213002e427c69c45a52bbd94163084025f533a55a59d6f9c5b820774ef3303",
+    "size": 12907455,
+    "requires_dist": null,
+    "requires_python": ">=3.10"
+  },
+  {
+    "name": "soundfile",
+    "version": "0.13.1",
+    "filename": "soundfile-0.13.1-py2.py3-none-win_amd64.whl",
+    "url": "https://files.pythonhosted.org/packages/14/e9/6b761de83277f2f02ded7e7ea6f07828ec78e4b229b80e4ca55dd205b9dc/soundfile-0.13.1-py2.py3-none-win_amd64.whl",
+    "sha256": "1e70a05a0626524a69e9f0f4dd2ec174b4e9567f4d8b6c11d38b5c289be36ee9",
+    "size": 1019162,
+    "requires_dist": [
+      "cffi>=1.0",
+      "numpy"
+    ],
+    "requires_python": null
+  },
+  {
+    "name": "cffi",
+    "version": "1.17.1",
+    "filename": "cffi-1.17.1-cp311-cp311-win_amd64.whl",
+    "url": "https://files.pythonhosted.org/packages/3d/97/50228be003bb2802627d28ec0627837ac0bf35c90cf769812056f235b2d1/cffi-1.17.1-cp311-cp311-win_amd64.whl",
+    "sha256": "caaf0640ef5f5517f49bc275eca1406b0ffa6aa184892812030f04c2abf589a0",
+    "size": 181400,
+    "requires_dist": [
+      "pycparser"
+    ],
+    "requires_python": ">=3.8"
+  },
+  {
+    "name": "pycparser",
+    "version": "2.22",
+    "filename": "pycparser-2.22-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/13/a3/a812df4e2dd5696d1f351d58b8fe16a405b234ad2886a0dab9183fb78109/pycparser-2.22-py3-none-any.whl",
+    "sha256": "c3702b6d3dd8c7abc1afa565d7e63d53a1d0bd86cdc24edd75470f4de499cfcc",
+    "size": 117552,
+    "requires_dist": null,
+    "requires_python": ">=3.8"
+  },
+  {
+    "name": "colorama",
+    "version": "0.4.6",
+    "filename": "colorama-0.4.6-py2.py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl",
+    "sha256": "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6",
+    "size": 25335,
+    "requires_dist": null,
+    "requires_python": "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,>=2.7"
+  },
+  {
+    "name": "iniconfig",
+    "version": "2.1.0",
+    "filename": "iniconfig-2.1.0-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/2c/e1/e6716421ea10d38022b952c159d5161ca1193197fb744506875fbb87ea7b/iniconfig-2.1.0-py3-none-any.whl",
+    "sha256": "9deba5723312380e77435581c6bf4935c94cbfab9b1ed33ef8d238ea168eb760",
+    "size": 6050,
+    "requires_dist": null,
+    "requires_python": ">=3.8"
+  },
+  {
+    "name": "packaging",
+    "version": "25.0",
+    "filename": "packaging-25.0-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/20/12/38679034af332785aac8774540895e234f4d07f7545804097de4b666afd8/packaging-25.0-py3-none-any.whl",
+    "sha256": "29572ef2b1f17581046b3a2227d5c611fb25ec70ca1ba8554b24b0e69331a484",
+    "size": 66469,
+    "requires_dist": null,
+    "requires_python": ">=3.8"
+  },
+  {
+    "name": "pluggy",
+    "version": "1.6.0",
+    "filename": "pluggy-1.6.0-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl",
+    "sha256": "e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746",
+    "size": 20538,
+    "requires_dist": [
+      "pre-commit; extra == \"dev\"",
+      "tox; extra == \"dev\"",
+      "pytest; extra == \"testing\"",
+      "pytest-benchmark; extra == \"testing\"",
+      "coverage; extra == \"testing\""
+    ],
+    "requires_python": ">=3.9"
+  },
+  {
+    "name": "Pygments",
+    "version": "2.19.2",
+    "filename": "pygments-2.19.2-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/c7/21/705964c7812476f378728bdf590ca4b771ec72385c533964653c68e86bdc/pygments-2.19.2-py3-none-any.whl",
+    "sha256": "86540386c03d588bb81d44bc3928634ff26449851e99741617ecb9037ee5ec0b",
+    "size": 1225217,
+    "requires_dist": [
+      "colorama>=0.4.6; extra == \"windows-terminal\""
+    ],
+    "requires_python": ">=3.8"
+  },
+  {
+    "name": "charset-normalizer",
+    "version": "3.4.3",
+    "filename": "charset_normalizer-3.4.3-cp311-cp311-win_amd64.whl",
+    "url": "https://files.pythonhosted.org/packages/f4/9c/996a4a028222e7761a96634d1820de8a744ff4327a00ada9c8942033089b/charset_normalizer-3.4.3-cp311-cp311-win_amd64.whl",
+    "sha256": "31a9a6f775f9bcd865d88ee350f0ffb0e25936a7f930ca98995c05abf1faf21c",
+    "size": 107108,
+    "requires_dist": null,
+    "requires_python": ">=3.7"
+  },
+  {
+    "name": "idna",
+    "version": "3.10",
+    "filename": "idna-3.10-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/76/c6/c88e154df9c4e1a2a66ccf0005a88dfb2650c1dffb6f5ce603dfbd452ce3/idna-3.10-py3-none-any.whl",
+    "sha256": "946d195a0d259cbba61165e88e65941f16e9b36ea6ddb97f00452bae8b1287d3",
+    "size": 70442,
+    "requires_dist": [
+      "ruff>=0.6.2; extra == \"all\"",
+      "mypy>=1.11.2; extra == \"all\"",
+      "pytest>=8.3.2; extra == \"all\"",
+      "flake8>=7.1.1; extra == \"all\""
+    ],
+    "requires_python": ">=3.6"
+  },
+  {
+    "name": "urllib3",
+    "version": "2.5.0",
+    "filename": "urllib3-2.5.0-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/a7/c2/fe1e52489ae3122415c51f387e221dd0773709bad6c6cdaa599e8a2c5185/urllib3-2.5.0-py3-none-any.whl",
+    "sha256": "e6b01673c0fa6a13e374b50871808eb3bf7046c4b125b216f6bf1cc604cff0dc",
+    "size": 129795,
+    "requires_dist": [
+      "brotli>=1.0.9; platform_python_implementation == \"CPython\" and extra == \"brotli\"",
+      "brotlicffi>=0.8.0; platform_python_implementation != \"CPython\" and extra == \"brotli\"",
+      "h2<5,>=4; extra == \"h2\"",
+      "pysocks!=1.5.7,<2.0,>=1.5.6; extra == \"socks\"",
+      "zstandard>=0.18.0; extra == \"zstd\""
+    ],
+    "requires_python": ">=3.9"
+  },
+  {
+    "name": "certifi",
+    "version": "2025.8.3",
+    "filename": "certifi-2025.8.3-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/e5/48/1549795ba7742c948d2ad169c1c8cdbae65bc450d6cd753d124b17c8cd32/certifi-2025.8.3-py3-none-any.whl",
+    "sha256": "f6c12493cfb1b06ba2ff328595af9350c65d6644968e5d3a2ffd78699af217a5",
+    "size": 161216,
+    "requires_dist": null,
+    "requires_python": ">=3.7"
+  },
+  {
+    "name": "imageio-ffmpeg",
+    "version": "0.6.0",
+    "filename": "imageio_ffmpeg-0.6.0-py3-none-win_amd64.whl",
+    "url": "https://files.pythonhosted.org/packages/2c/c6/fa760e12a2483469e2bf5058c5faff664acf66cadb4df2ad6205b016a73d/imageio_ffmpeg-0.6.0-py3-none-win_amd64.whl",
+    "sha256": "02fa47c83703c37df6bfe4896aab339013f62bf02c5ebf2dce6da56af04ffc0a",
+    "size": 31246824,
+    "requires_dist": null,
+    "requires_python": ">=3.9",
+    "executable_entry": "imageio_ffmpeg/binaries/ffmpeg-win-x86_64-v7.1.exe",
+    "executable_sha256": "2ce797a0f88d7f067180338fb227f7b1928ea727bd9a4d7a1d022f7c52af71a3",
+    "provenance": "imageio-ffmpeg0.6.0 official PyPI Windows AMD64 wheel; pinned wheel SHA and RECORD; third-party FFmpeg7.1 build, not a PSF/GitHub signed tool"
+  }
+]

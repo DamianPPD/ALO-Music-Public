@@ -82,7 +82,8 @@ class FileReconciliationWorker(QObject):
     progress = Signal(str, str, int, int, str)
 
     def __init__(self, repository, *, library_id, operation_id, managed_roots=(),
-                 library_root=None, known_libraries=()):
+                 library_root=None, known_libraries=(), output_request=None,
+                 current_output_request=None, output_operation=None):
         super().__init__()
         self.repository = repository
         self.library_id = library_id
@@ -90,21 +91,39 @@ class FileReconciliationWorker(QObject):
         self.managed_roots = tuple(managed_roots)
         self.library_root = library_root
         self.known_libraries = tuple(known_libraries)
+        # Explicit single-record diagnostics remain supported. MainWindow uses
+        # the revocable operation and a separate guarded session delivery.
+        self.output_request = output_request
+        self.current_output_request = current_output_request
+        self.output_operation = output_operation
         self._cancelled = Event()
 
     def cancel(self):
         self._cancelled.set()
+        if self.output_operation is not None:
+            self.output_operation.invalidate()
 
     @Slot()
     def run(self):
         try:
+            if self.output_operation is not None:
+                self.output_request = self.output_operation.choose(self.repository.list_managed_bindings())
+                self.current_output_request = (self.output_operation.current_request
+                    if self.output_request is not None else None)
             result = check_library(self.repository, library_id=self.library_id,
                 operation_id=self.operation_id, managed_roots=self.managed_roots,
                 library_root=self.library_root, known_libraries=self.known_libraries,
                 include_adoption=self.library_root is not None,
+                output_request=self.output_request,
+                current_output_request=self.current_output_request,
                 cancelled=self._cancelled.is_set,
                 progress=lambda current, total, name: self.progress.emit(
                     self.library_id, self.operation_id, current, total, name))
+            if self.output_operation is not None and self.output_request is not None and not result.cancelled:
+                from dataclasses import replace
+                from audio_library_organizer.jobs.output_session import prepare_delivery
+                result = replace(result, output_delivery=prepare_delivery(self.repository,self.library_root,
+                    result.pending_output_assessment,self.output_operation.current_request()))
             self.finished.emit(result)
         except Exception as exc:
             self.failed.emit(self.library_id, self.operation_id, str(exc))

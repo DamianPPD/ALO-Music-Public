@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from mutagen import File as MutagenFile
@@ -9,17 +8,7 @@ from mutagen.flac import FLAC, Picture
 from mutagen.mp4 import MP4, MP4Cover
 
 from audio_library_organizer.domain.models import TrackRecord
-
-_BPM_SUFFIX = re.compile(r'\s*\[\s*\d+(?:\.\d+)?\s*bpm\s*\]\s*$', re.IGNORECASE)
-
-
-def build_title_tag(track: TrackRecord) -> str | None:
-    if not track.title:
-        return None
-    title = _BPM_SUFFIX.sub('', track.title).strip()
-    if track.bpm is not None:
-        title += f' [{int(round(track.bpm))}bpm]'
-    return title
+from .mp3_output import build_title_tag, mp3_text_frames, mp3_discogs_frame, REMOVED_NUMBER_FRAMES
 
 
 def _write_mp3(path: Path, track: TrackRecord, cover_bytes: bytes | None, cover_mime: str, replace_cover: bool) -> None:
@@ -27,22 +16,14 @@ def _write_mp3(path: Path, track: TrackRecord, cover_bytes: bytes | None, cover_
         tags = ID3(path)
     except ID3NoHeaderError:
         tags = ID3()
-    values = {
-        'TPE1': (TPE1, track.artist),
-        'TIT2': (TIT2, build_title_tag(track)),
-        'TALB': (TALB, track.album),
-        'TDRC': (TDRC, track.year),
-        'TCON': (TCON, track.genre),
-        'TBPM': (TBPM, str(int(round(track.bpm))) if track.bpm is not None else None),
-    }
+    frames = mp3_text_frames(track)
     # ALO output policy: album/disc sequencing is intentionally removed.
     # Numbers that are part of the actual title/version remain untouched.
-    tags.delall('TRCK')
-    tags.delall('TPOS')
-    for frame_id, (cls, value) in values.items():
-        if value:
-            tags.delall(frame_id)
-            tags.add(cls(encoding=3, text=str(value)))
+    for number_frame in REMOVED_NUMBER_FRAMES.values():
+        tags.delall(number_frame)
+    for frame in frames.values():
+        tags.delall(frame.FrameID)
+        tags.add(frame)
     if track.comment:
         tags.delall('COMM')
         tags.add(COMM(encoding=3, lang='eng', desc='', text=track.comment))
@@ -50,8 +31,9 @@ def _write_mp3(path: Path, track: TrackRecord, cover_bytes: bytes | None, cover_
     for key in list(tags.keys()):
         if key.startswith('WXXX:') and getattr(tags[key], 'desc', '').casefold() == 'discogs':
             del tags[key]
-    if track.discogs_url:
-        tags.add(WXXX(encoding=3, desc='Discogs', url=track.discogs_url))
+    discogs_frame = mp3_discogs_frame(track)
+    if discogs_frame is not None:
+        tags.add(discogs_frame)
     if replace_cover:
         tags.delall('APIC')
     if cover_bytes:

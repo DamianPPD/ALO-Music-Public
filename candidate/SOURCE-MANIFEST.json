@@ -1,0 +1,2544 @@
+{
+  "head": "ea20be0f6db1788f0a2a834fcdba355f2d828ddb",
+  "base_tree": "de616e0fe890353463181b9c785ba9152189f842",
+  "input_tree": "220de1cc6a1f25836cd8c119e1f2a1b145a17f09",
+  "tree": "42d7476ff4a740008ddbda3fbb82440ddae163ef",
+  "files": [
+    {
+      "path": ".gitattributes",
+      "mode": "100644",
+      "blob": "7f0562b8c529f8f73504eebcf9fdc6ac00693005",
+      "sha256": "62adb3b2ed673416afdae93e2821d24e155afcacebef501fcf15bb71dd8f2eba"
+    },
+    {
+      "path": ".github/workflows/build-release-windows.yml",
+      "mode": "100644",
+      "blob": "7c298c4f9ebebe54266abd19568858cfae2447ff",
+      "sha256": "c9abcd9317d5578193ccfa5da9f20bb683bd8c0921c17cae540925a868935ff0"
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "blob": "97d9c4a283965bd68a066611815e614dcfd6471f",
+      "sha256": "99301ea846b1c0d398c2c5e8dafb318a2f98f12d496e6529344ef0268981f26d"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "mode": "100644",
+      "blob": "40f89f3556807a57b3ef7a7a2eb51b98361a4254",
+      "sha256": "1a4f1cc6e2b9459419dfbf4b2d88945b5fd45eed63de93cea5b8807481e2b29f"
+    },
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "blob": "f288702d2fa16d3cdf0035b15a9fcbc552cd88e7",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "blob": "dbde7bdf89477854ba2b6c648230eca1a3b0a5da",
+      "sha256": "db2ef294c4bb7e11f9f0094bd7779394921af45a47a1cdcce06464e1316487fa"
+    },
+    {
+      "path": "START_ALO.bat",
+      "mode": "100644",
+      "blob": "28cdd21b41628865685fcbe5ded521bdd7a58592",
+      "sha256": "c74fedd61c8743550799df2fc400e52d69a9d94570af8dd8c7506c9f428c689f"
+    },
+    {
+      "path": "START_HERE.txt",
+      "mode": "100644",
+      "blob": "5c6eba5cdb1633450cc3163c6d8c3c86449b2f47",
+      "sha256": "4f0e1a8e6a7c8ceff927fd23cac36c252ac43cf789b61e09d2cefb800dcae27d"
+    },
+    {
+      "path": "WINDOWS.md",
+      "mode": "100644",
+      "blob": "5f663592e96fc034be4baa1d1f5450b5e2d85c3c",
+      "sha256": "35607dd72c9d30fd967a288f2b9aef000b1b1488f178f8beb6f73a324ae29de3"
+    },
+    {
+      "path": "audio_library_organizer.spec",
+      "mode": "100644",
+      "blob": "1336877994a32746bcf658b4467aa01ce4312c8c",
+      "sha256": "960474a855aa355aa4474662f5c345b778555adecc07dc54c2907756afb9ce47"
+    },
+    {
+      "path": "docs/windows_crash_capture.md",
+      "mode": "100644",
+      "blob": "2b505b0c9b68d72e11314573224bcd7196ecc3d5",
+      "sha256": "a19412e65290d634043ae5084c3644f5cd51163a59a58dc5b99f9ccecd5fee81"
+    },
+    {
+      "path": "installer/ALO-Music.iss",
+      "mode": "100644",
+      "blob": "535bd7d501c56395190cc86f0a47111189ed2234",
+      "sha256": "7b69c25b69ff9378fda9b33e3b15182d971101c62f22391e3e129f855a997ac4"
+    },
+    {
+      "path": "pyproject.toml",
+      "mode": "100644",
+      "blob": "26cb9a3570e34a762e0cc0f999b261affea06b20",
+      "sha256": "13579917c1baa245f892d19f2f580509ef364d705b11d2bcdbf02b8d5811185a"
+    },
+    {
+      "path": "run_audio_library_organizer.bat",
+      "mode": "100644",
+      "blob": "c3355be9a27d925dac00a1554f77c7a19f862eab",
+      "sha256": "559206045ff9698c3041d7b10cd6d3080ab51d8b3cf1e8f263d73311941bd646"
+    },
+    {
+      "path": "scripts/bootstrap_windows.ps1",
+      "mode": "100644",
+      "blob": "ec9ce3ae98da9e9d30966ecc31ec99f1a4452889",
+      "sha256": "0922c06e6659ea2e5ed556c414177e2c0a6a1742ffbf1854346091eabc53f2a2"
+    },
+    {
+      "path": "scripts/build_release_windows.ps1",
+      "mode": "100644",
+      "blob": "31c3b411b4f8e1ae581e140adeebfa2ae5236fbb",
+      "sha256": "fda90373219cc5fee2bf3b3b078de689db9aeebf5e0ad421242ec1fa1717d295"
+    },
+    {
+      "path": "scripts/build_windows.ps1",
+      "mode": "100644",
+      "blob": "95052b1a88006a8f2673b6eb398b9f6284428ddd",
+      "sha256": "2f6313a2d84a626666bb1907d538685dfb224b81ca63fbc9bb5a6d2f7f7ed29d"
+    },
+    {
+      "path": "scripts/render_ui_reference.py",
+      "mode": "100644",
+      "blob": "bbe62e8e7b3349bbf3b4fa17add5944ce6baa9f0",
+      "sha256": "487597dca8f4eb584cc2b49fbe36bfe9a9d45ab86390ac762714e8ccd1a9ac3b"
+    },
+    {
+      "path": "src/audio_library_organizer/__init__.py",
+      "mode": "100644",
+      "blob": "1ac334a82cc83114a7aea411140f786e181a0cf3",
+      "sha256": "243d2baa168580740267623a7c5c70a46ec06f6a06d6bfc01e8edb32229035a3"
+    },
+    {
+      "path": "src/audio_library_organizer/__main__.py",
+      "mode": "100644",
+      "blob": "d62c29d20d5d4f2a914ea64e765c38b3ad0e2868",
+      "sha256": "7ac2cb8fe752f58a11fc89bd1e6aac03fba3ce34c323c898d4f85ca20541278f"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/alo.ico",
+      "mode": "100644",
+      "blob": "de7d307dca7cfb391637828ac7526ef3f69d18be",
+      "sha256": "943f98caa92076cc034e15145e56b2ed16b05ee7fe27f073e2a05fb3f6737f55"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/alo_header.png",
+      "mode": "100644",
+      "blob": "989ba1f2c5641a5da4567d5b04d0e72377417b0a",
+      "sha256": "b82e38b1c72cb0a8dcffc0809acb33ca0a7e48ea7a8a1c31388ef594da46b721"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/alo_icon.png",
+      "mode": "100644",
+      "blob": "a8800c58d3b5f78360a2c832faf3284c6f4b34c5",
+      "sha256": "3da4ba3076bb07637aa87c86985694a7991be14a1e42efb48b1dcf506ec0899f"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/alo_logo_full.png",
+      "mode": "100644",
+      "blob": "2c3d6ae3fafd03c50109cc84e526185c74202b48",
+      "sha256": "468fcadef36ec0f3009ad7528bb38fde2ac444c609b8e1974bab64c89a727fe2"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/check_green.svg",
+      "mode": "100644",
+      "blob": "52618ac27700cd11cf692304c129fc9a98a23dfd",
+      "sha256": "95d81527870d961e169ac896ed6b2628d277e9b29359c51cea757b398d57975f"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/flag_gb.svg",
+      "mode": "100644",
+      "blob": "969c8b315026526c506e9d4a84f05ffc18b5f680",
+      "sha256": "a4b913f2cfada63e9dc705e3417943e02af3bc7274ee105dd59b145dbfc396a6"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/flag_pl.svg",
+      "mode": "100644",
+      "blob": "92e570a01f04e003e6a87163dda8fc7163db92c8",
+      "sha256": "9623981f8da39e8dd09d1afacc2e9d1f7fae25c919234a03eb1d630c65f958db"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/add_tracks.svg",
+      "mode": "100644",
+      "blob": "7b1a1afb2fdb010f3c6c0d948b1306be0ec432ae",
+      "sha256": "fda1877fb9c379812f8e165957bcbda4d5ef21f64622682a86f9f36bfb6e6c5e"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/alert_circle.svg",
+      "mode": "100644",
+      "blob": "183f9f390ad594377fa183f9cec73b73215c291a",
+      "sha256": "e3b89c44a401e1b9f8db2c8e4befa9800a2df84a8ec34c08dc040c406c7aae53"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/api_key.svg",
+      "mode": "100644",
+      "blob": "a8db632ddea4893395c0af3cec79dc356c61d079",
+      "sha256": "3063f9678093477da46eae65525b3ba720673007079c4afe69effefea6cb8740"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/audio_recognize.svg",
+      "mode": "100644",
+      "blob": "c261885233b93eec6cda9217391f84d05141ed5b",
+      "sha256": "3055d22fdd064464de5e9554fa2e756bf0f58969897ad9c261b0ef9bc6f0131d"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/cancel.svg",
+      "mode": "100644",
+      "blob": "ab8fe61fe3209c8b59bbe0061a3f7b3678854cd4",
+      "sha256": "254c8570263fb75fb55a7284ef865e21df40526273d30270cc513d2614366f96"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/check_library.svg",
+      "mode": "100644",
+      "blob": "c2eac4c6c691e2413836ab02d56a520d47fda163",
+      "sha256": "95c652a675c0477ceb1b2926c6a7e294bf8f8a0a048d428e483ef85adcef8b9e"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/chevron_left.svg",
+      "mode": "100644",
+      "blob": "6804acb4ea82123a07e029595b63a5bec59c32d2",
+      "sha256": "bef4e28e54bac257516c030fa8ee74e77761e9ba320f0ad76166d3a31128cf37"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/chevron_right.svg",
+      "mode": "100644",
+      "blob": "cc6a5945fd9cb10a6808e623aab65d38bc86a7e9",
+      "sha256": "405e8edfcd1ec922ff71fa31215fb20515bef15192bf9fb713beb0c689ef0c9b"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/compare.svg",
+      "mode": "100644",
+      "blob": "771493ebd43539db55ba42d35789ae1f9418d63e",
+      "sha256": "02d53a22a9150d6f35a1117a409982d239f426d6e83a24f1e432bf9a7d1aacad"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/control_close.svg",
+      "mode": "100644",
+      "blob": "dd0d7aca2c234550c8c2a80f3f102343b2ee36aa",
+      "sha256": "eee252d58af104ff2918ced06290337894c8f78ba2c5c35e43b6c798686c7d07"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/control_more.svg",
+      "mode": "100644",
+      "blob": "2b647d1721c4df8d4cf93a613f6a8e760631e71d",
+      "sha256": "240e8e719a7276fda7d6765a83b3f4f658bd1d4f3c212f3ca1f036170a727f8f"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/copy.svg",
+      "mode": "100644",
+      "blob": "9e8d4a84480ef3d48c5e05edeff8d2be6ae34d4b",
+      "sha256": "041801637298104195bf2237f25c691b78edcbfa6317eb160a51187529a0849a"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/cover.svg",
+      "mode": "100644",
+      "blob": "70e8fa34ed65106414e73c5130a201abf1c7f3e9",
+      "sha256": "61f0f4a5506ef5f1550b8fa2508cd2a5557bfd6830da12c353aa2cb9eeb9012a"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/duplicates.svg",
+      "mode": "100644",
+      "blob": "30e0f1bd4611b77c67bca2bc596fa86201428225",
+      "sha256": "d4d6f532a3fa7763f3186e28edae5ed91a3e9882719d9cfb100a6ce205d1ef81"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/edit.svg",
+      "mode": "100644",
+      "blob": "3a5fdc197faae277f7d9aecb7ce0278cca784f74",
+      "sha256": "57ed3647878d6ba8f5a4083233051e4b29a2a6d8892dac76948ea702765f3582"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/editor_online_recognize.svg",
+      "mode": "100644",
+      "blob": "0c126391983ff1431122afdb9ea8efe8e1a08c2a",
+      "sha256": "90210553c182fa79f33a4b6d5fa7c3b34a7ab55eb21b806c82efe606692c6ed5"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/export.svg",
+      "mode": "100644",
+      "blob": "92be60ede18c8b6ed985f7c31220f4aca3397637",
+      "sha256": "1b22a161a1637d688ddf866dc72a9d1fb29d8119138766ab79cb3f649e41b596"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/external.svg",
+      "mode": "100644",
+      "blob": "4a0d57d2a6c27c029b185c265e8cd4680082f287",
+      "sha256": "7c31a7a262ec8d352a48b246d9991dee2f9c132be7d7f0712a05650cf3602acf"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/folder.svg",
+      "mode": "100644",
+      "blob": "98dfe69ea2dc9623f3cd3d9bc783632aa414d22e",
+      "sha256": "7a66a6e9cb371a7fb4647f940ea658dc9861b54026f63fbd639768a1ee9abc84"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/folder_open.svg",
+      "mode": "100644",
+      "blob": "6b3deb896700e9207b432c11053e871dffc5de94",
+      "sha256": "9740c0106af678205d92f0c135f3577fec3406b6e8e23cc7631cb855889dde38"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/help.svg",
+      "mode": "100644",
+      "blob": "08f8d7782dc7266fa3367f77d0e1006e43406625",
+      "sha256": "ba93d5f2205ad0bd48329359680a9999fc285b40d1280504d16f49a54a1ed957"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/info.svg",
+      "mode": "100644",
+      "blob": "890c7244c2649e4261fa5ccb1be36ff9762f3256",
+      "sha256": "afc21bc0bcd74b253436b7d837e436e1e1c554036f6f26332ec09a6b11ab5df3"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/integration.svg",
+      "mode": "100644",
+      "blob": "2cf5416a73288afa5ef20086faf91e8fc58f9956",
+      "sha256": "3cc24bbacb6578a1c8efc45df4feafa7cc00dd053951dcbb856273da08e61496"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/library.svg",
+      "mode": "100644",
+      "blob": "7ef0a6ef85508f25e0bb50b9d686b0caf5557e1d",
+      "sha256": "7801733c04ec59940a41334558006a470fdcad928d31be5b45ff8fcb4060a466"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/lock.svg",
+      "mode": "100644",
+      "blob": "57bb1a58b3f85bf195f268bb8eaf8c83b9286058",
+      "sha256": "7123e477b51dcdad7a9ec2d558908c1b494e279be1a9f650793ee7c2d7ed5f42"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/metadata.svg",
+      "mode": "100644",
+      "blob": "f8c3be27705061ec03b20b4884b8c58814abd693",
+      "sha256": "00f2f38b581b81475aa9d04b29cf025b19d1999281bf94c3b2eb544a6034ecc6"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/mute.svg",
+      "mode": "100644",
+      "blob": "0d7e5abff5862f333312a921f6a7b5325615631b",
+      "sha256": "98d118e6c9a381a1e6d9476f96f1b3eb135cf2366b70a41a10cdb391d5f3fc4b"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/pause.svg",
+      "mode": "100644",
+      "blob": "2689bcf4ff64c6a9d287902b91e67c0e9cbdd4e9",
+      "sha256": "f054e79ed8a9d71659e6f6db7dd72f1f1eb7fb618db95a2ecf9014619cec1982"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/play.svg",
+      "mode": "100644",
+      "blob": "864f499e9d5df5bdc425c71aa8c2d9384f3b9598",
+      "sha256": "8701291f992a79cadab0515158514fda83494d12ab3a3405fc75985cab1e51d5"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/provider_acoustid.svg",
+      "mode": "100644",
+      "blob": "0d3a687b71e3e8763b2684586b196a36c0e97f25",
+      "sha256": "f7a1623d46c0651e704bd553b61fdd9d2c237d00e8fb4c37ca1aedbf5c45460a"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/provider_apple.svg",
+      "mode": "100644",
+      "blob": "131da1de6d2dfa997dd5bd33cb62377146f4cfab",
+      "sha256": "5771c600aaef131c594d6e2762f3406c85875f49d687fe5c5d1ed7f22d2a612f"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/provider_discogs.svg",
+      "mode": "100644",
+      "blob": "f576236bc52f2ab7d9d4962967ce56b633d09fee",
+      "sha256": "a409dd45eed688f43a309e0f5f748b276289ce7b667427c624bd7a2097744ac6"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/provider_musicbrainz.svg",
+      "mode": "100644",
+      "blob": "85d05e5877194c4ab3c8fb3d4e94fd0f853cbf1f",
+      "sha256": "602640d376d73688ecdc5c96721c94b0cd9115d4de5a864eae7d79d31cb9ad6c"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/recognize.svg",
+      "mode": "100644",
+      "blob": "e640d845bc906cac2d132ab720d2bbea1c40cc82",
+      "sha256": "1a26a6ca1368a05e962809a54d9b975a21845a5fbf2b448a1ee5268b5ccd01c4"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/refresh.svg",
+      "mode": "100644",
+      "blob": "93cc709965cc83259ff658a3b32c62883f17773b",
+      "sha256": "54aac55ff896bc941e14bc939045aaf12c726db1560182722c25b8bd99cc2081"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/report.svg",
+      "mode": "100644",
+      "blob": "6e2e4a574f0c196564f496276259d59be8639016",
+      "sha256": "6815194a06ea406386686582cc83a4bb9375e7bcffbd6bc3d0f20b24c9a0936a"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/restore.svg",
+      "mode": "100644",
+      "blob": "40116c16ca42a5cb37df71b0718aed7092bfbe58",
+      "sha256": "f8c31b45319d4b21479763e6a8cdf7b8a1b92208cfd4fa457ea48b9a1d0ac83d"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/save.svg",
+      "mode": "100644",
+      "blob": "f16bdc05825f6df32ae562db4b4e1909bda7f8d7",
+      "sha256": "b5b9d5239d4fc47c8974af7dd3f8725e234b93102bcd15bc22fe807993adc4b4"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/scan.svg",
+      "mode": "100644",
+      "blob": "56cfb8767901df247ff75866a3b7b897bd7747c5",
+      "sha256": "7a336faeba0fe690f49d2923e957f0c6c7301ba6ccbd73021298a3c41582ea47"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/settings.svg",
+      "mode": "100644",
+      "blob": "76b96248dd4de8e4e0464a9120d129760d3cadfd",
+      "sha256": "b9f3a2dda617121ed55a41455a2b1c8512ebd2000c8c5b63958e849ab3f9d192"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/settings_online.svg",
+      "mode": "100644",
+      "blob": "a57a6a3df47258eba6d06a43089bc84ebb20a7d9",
+      "sha256": "ceb12f1062018110d5809e93f6d7fef00d89bb2bc4bd17c2190291167fb4b7dc"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/start.svg",
+      "mode": "100644",
+      "blob": "1549749cc9b42135680d1f2ad7e6ae62b05b55ac",
+      "sha256": "56facacaaf68e5fe566b23b1eeae9bfa040204097249a644c6eccdec0662c296"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/start_source_add.svg",
+      "mode": "100644",
+      "blob": "a06bc66a4f84f232a55db5a831f0234e6923f7a1",
+      "sha256": "0656130c2d4f9da4483cca90612695b73b6a33af93eef8ce8e7c85a17ccf4688"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/status.svg",
+      "mode": "100644",
+      "blob": "238c72ac74739a5b9aaa471f89f217d8034a3160",
+      "sha256": "806ba7023f104d29aa4178a8b3cb7bda5db85e317e8a3458656b0fcc805cc800"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/undo.svg",
+      "mode": "100644",
+      "blob": "3f9e823324ac9b9e8a219937b98095ee47f1ffdf",
+      "sha256": "11d396e511d7ed4a32bf008b52c94a1ae8ba0b38d8c5c0abc031c6b950c3f835"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/unlock.svg",
+      "mode": "100644",
+      "blob": "0721012ce9d6b781c6817598731c206d0f6bb013",
+      "sha256": "e549c9a0f7c974fd1f4372f7e5a7a1c15e269fc69d7c8fde9e034edfb36ea889"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/volume.svg",
+      "mode": "100644",
+      "blob": "2309fee293b7eda734dc09069d341a62df473eea",
+      "sha256": "db38ed29b9886bc9043dfe0868363e52bafb56687732b96183f1364958a5576b"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/a1/warning.svg",
+      "mode": "100644",
+      "blob": "28ff0e40f15a36ca9c5b533d064367e84c650772",
+      "sha256": "332bef1a21e0023c23836b8774c52c3fd7c4631412be3c1fe7175f4764312a2e"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/album.svg",
+      "mode": "100644",
+      "blob": "a497a95e62f7311fc49adde4719db0509daa0770",
+      "sha256": "18218d3265d409e4c929910338ad6b39d008f00deb2539aab0a532b0747acec9"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/all_tracks.svg",
+      "mode": "100644",
+      "blob": "ebf31c36209ada1357456a8f7586577966ea8aca",
+      "sha256": "0f41d5a043be036f8f6c6724ca127238226c7abca3a7afa202b63bbe1246e577"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/approve.svg",
+      "mode": "100644",
+      "blob": "20c3eb32983e53f862953cbc23e009b18db48633",
+      "sha256": "8f03c7fa9c5ab893a6e40d07502f29d64e5f15aab6d3f73248abc83802383d19"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/artist.svg",
+      "mode": "100644",
+      "blob": "3d6670fb2408cd7fd68d910efdd06a033d2c1234",
+      "sha256": "f6c549cfaad7760e692b7e577dd1e06995c4556b2078bb4e737cbff9d2c21d3f"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/calendar.svg",
+      "mode": "100644",
+      "blob": "76a8d39bc14c00dc0caf0a43c630df9e6ded9611",
+      "sha256": "ca6338677c01f22aa87897bd1a0149ea56da392012b0249567d7f745d3860663"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/channels.svg",
+      "mode": "100644",
+      "blob": "d8f6151afa8d8dc1d86af32f83b4094908d2ac9d",
+      "sha256": "9be2b5150d55f17df270e591e9248437be2f35d7f4fa3b32e9a43476a37cd2e0"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/clock.svg",
+      "mode": "100644",
+      "blob": "fc09d5178f9265ac9311b8ed654d05a92a2ef51a",
+      "sha256": "76c80f5c96a5f05fa18cddbd28d961dd69ffd305b0066a85f761ffaefd8ed4d0"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/collapse.svg",
+      "mode": "100644",
+      "blob": "55959c02378c048f34276a4543f32aba89c4f3e2",
+      "sha256": "99ca90da5a846004e6d4377c6de795b9222ebadb07ef96c09748b0e8e59fecf7"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/details.svg",
+      "mode": "100644",
+      "blob": "80a18c608ef9a2a69ffc5e68c807d5bb1eb9e206",
+      "sha256": "45c6db314d7edc62e32ee739975febdabafb9e5c8bc60f13aebb7937de697255"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/duplicates.svg",
+      "mode": "100644",
+      "blob": "3dbe5b8f5640a732e545b8ef400e849e00c7e211",
+      "sha256": "5d6a323d5770718cf693cfd99e1023f83f9aec6dd08a40e5273a53eff5dadfac"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/empty_check.svg",
+      "mode": "100644",
+      "blob": "d56c4b1a36a011100387ff7760b25ee8bc43cd45",
+      "sha256": "cd4b04d05d9c6beedfa8d3c6e4900018602f35df092fad898a64d14a8c950e48"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/expand.svg",
+      "mode": "100644",
+      "blob": "96ea82a545d145252de3dbd38dda40f12585e4b5",
+      "sha256": "85f93f7648f0af7271057da1c55b000b6596cfe2d4f40c7648c69907be57c2b2"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/file_format.svg",
+      "mode": "100644",
+      "blob": "7f7483c3fefdf3b9434df9d082d615480b4a4bf3",
+      "sha256": "90d1acd6a4fef4cbad6fb97d7d24a49aa55df806624a60a899e3a59014c88290"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/file_size.svg",
+      "mode": "100644",
+      "blob": "b5f053fc3b685d7a9e86d6d95ea3086f7e7c229d",
+      "sha256": "af91d3e0d46e8b356e5582d707f87c88255a38c320f06835623c41bedec4d1ba"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/folder.svg",
+      "mode": "100644",
+      "blob": "97ce6dd6b82020bd881014964d093c2616e5e1c4",
+      "sha256": "effcd83de4dfa8a69bcbcbf9244d5a30073ae3dea781db0133edfcc3759ef29c"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/folder_add.svg",
+      "mode": "100644",
+      "blob": "d638ee4a6b51a7115aaf522993f581434a900040",
+      "sha256": "2aefc7aea295121ca78a36336046fb020ec31b88b946e0876e5c99b6c1dc2cc2"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/legend.svg",
+      "mode": "100644",
+      "blob": "53faedf34b6ce10aedeae0a5b9d8143e95295097",
+      "sha256": "e6518482b1c20eb96fc8cc58d29ce23abfea4e2b3f1c24af033c331e4522955c"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/list_music.svg",
+      "mode": "100644",
+      "blob": "501fa482006e6b43daa44e7e53a25e508eb60755",
+      "sha256": "188a7b896555927dfdc3131eca2ae0617d8e5302d0a4291093e27fa10aaac48c"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/metadata_edit.svg",
+      "mode": "100644",
+      "blob": "f83dbc76f449a6a0ab94c63212a7bb01bcd7118f",
+      "sha256": "9458464ab865fb9fc929a8374f9aa269f181dbe5304f2b6be16d601393a9a6cd"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/music_note.svg",
+      "mode": "100644",
+      "blob": "ccd5ead0630210f9aed70fc568a1a0269ddfb4c0",
+      "sha256": "268a04073d18fd0feeedcf109bcd78e0e6e0c2e1465380f20406b557ca812f54"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/next.svg",
+      "mode": "100644",
+      "blob": "0f1cbbdd790f713f2aff777d55bb79a36c2aab79",
+      "sha256": "e003489be86c2f2613f399db377e912a5a2d98ff53e3189b9c5da152e48229f3"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/no_cover.svg",
+      "mode": "100644",
+      "blob": "fd4784b4e22a88c8d57660fd8d97fb2bfef876c5",
+      "sha256": "79fa85672a75f9e6ea82bab9299e8153ecf814f45625a4bd2474e4bbc1c7846f"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/no_year.svg",
+      "mode": "100644",
+      "blob": "39cc94155ee4db1da1f9421e0f5225b67d0bf716",
+      "sha256": "a26932f4655984e9f558ab6923af0d94ac4ee093b8d4a8f046a30542baa0b80d"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/play.svg",
+      "mode": "100644",
+      "blob": "1ea13aeef98b59a1dcb687adca53929a68cfe801",
+      "sha256": "96838f827b3a12b2e8545e0da995435c37f611f68bdd9ff25d767b9ed2598089"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/playlist.svg",
+      "mode": "100644",
+      "blob": "93515d52d679813586fe0161e2288ca1003a0c45",
+      "sha256": "c5ce9575b8585c78466fe0e8845fb6d46a4006478634274e3aac05b5aefc74ed"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/ready.svg",
+      "mode": "100644",
+      "blob": "c735bc0c4c6f772fa2580179aca2f241790dca45",
+      "sha256": "6281886e7ccdadd5b35438360a57c1c8892038dc096433b27e967531b1224c46"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/reset.svg",
+      "mode": "100644",
+      "blob": "5e37b998ea614facd24a1b50f30ba6888960692a",
+      "sha256": "1b0795097b6919940d91f09409b1977d65d86ed71a5fc74a5d3a4267c0d06e7b"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/review.svg",
+      "mode": "100644",
+      "blob": "f58fd73c7161a43cc3cfb6e4eed68ffa0908e60a",
+      "sha256": "490723c400b857c622f40a033fe5354934de960a4d0d7e2e95328baf040e757f"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/status_problem.svg",
+      "mode": "100644",
+      "blob": "b0d5298d373e547e53614ec9a816d14c5cad7e76",
+      "sha256": "9862bb2653f3e0abda47200b20f7058acfda0d2db7a058c423e570d2e1424f5d"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/status_ready.svg",
+      "mode": "100644",
+      "blob": "f646e6a2ccbb5ca316bc4ff5a777e25f016a092a",
+      "sha256": "67c0696bba45a1cc6af3997e59e4e9bb274b32259c0798d0de20e4bd43e820a6"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/status_review.svg",
+      "mode": "100644",
+      "blob": "054efec61c2f1dbf2813c98c6b054ab75ee337a2",
+      "sha256": "f780c9e655f3a3d02472af753d49176c4b78e4d0f25e4f875fa08a7542c73934"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/tag.svg",
+      "mode": "100644",
+      "blob": "f9a16598bc681f591bed332473c3eb7cba59f7d9",
+      "sha256": "a22a4a5faeb15b7f060763699ec10d9be44923621ca45b828fbc8215a12ae89e"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/unselected.svg",
+      "mode": "100644",
+      "blob": "74b2fb21e239dd6c5e8a79d1c72e08acbfa1156e",
+      "sha256": "b452d7fb59bd3106e7008c71461170ef4848d2169fa5f102e5746f092c36f12b"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/library_a/waveform.svg",
+      "mode": "100644",
+      "blob": "f6095abcc81ad2461b93d56468e1490ccf6b5b1b",
+      "sha256": "af0281355f8857c66395957006df88f790d678c19b565082cbdc60da31559c7e"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/cancel.svg",
+      "mode": "100644",
+      "blob": "40c0aa70f4f5924ec26b62311f512f5f5b016912",
+      "sha256": "e0a8963dabf9ca644de210a52f816ad6413ce28b35853d1b70304d323fc69378"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/check_circle.svg",
+      "mode": "100644",
+      "blob": "f0a2f8e07a29f139a3707eb95cf286d98ce0e1de",
+      "sha256": "2a55422294fb26192572810f652a46a06922e7137f71753c37a20dcfb87122cd"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/cloud.svg",
+      "mode": "100644",
+      "blob": "bf30919f347684c5299c86e52daa294ebc801a62",
+      "sha256": "5782f8bb67846f5988221d9ce8e73fff3ac07aaef845f97e6566ecee85b6e931"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/cover.svg",
+      "mode": "100644",
+      "blob": "4baed4e30e895fae4fa943a979e48c37a6a611ef",
+      "sha256": "894aeefcb074a3a49a1700503f3eea72c32b0deada19e4b2fba425a577fecaf8"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/database.svg",
+      "mode": "100644",
+      "blob": "774e788529630159e498587072fc511b6b3443b4",
+      "sha256": "beafa6b921c08e02423008e39b10184418bb1f9114100472d179c716c6d420c8"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/disk.svg",
+      "mode": "100644",
+      "blob": "8bb2a636863ea0945ca78205a52c71e8a23bf822",
+      "sha256": "59cbe9242e76879083c19b7e5b1915ad3f1ebe6c38a07346529538d6c6be1392"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/document_warning.svg",
+      "mode": "100644",
+      "blob": "295d42d6c8f103a8df113bb432ffbd0f056ca2c3",
+      "sha256": "f95738eadb92c9ed75bdae13c1d622ebc74b6d0497f74ab94f6203c8a4999d58"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/document_x.svg",
+      "mode": "100644",
+      "blob": "e74f70f1ae0f2b2b9739abd01c314676f1746a3a",
+      "sha256": "81b2d22e121252654197b384f9d9842f25b66814851bfeea5a733bc6d7cd062a"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/duplicates.svg",
+      "mode": "100644",
+      "blob": "fc96bd9de6f431727a1bcd0a5b873eabba8af59d",
+      "sha256": "674a8d31706910c099309d6c1e3549f9f65752aab65476ff8ab30a9b0ca2053e"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/export.svg",
+      "mode": "100644",
+      "blob": "baff386e510a2f994ca3f9101da860db9625617d",
+      "sha256": "56a6c0584c3c982f7f2d561b66bb188e60886cfb7a2d728127790826d2d4e389"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/folder.svg",
+      "mode": "100644",
+      "blob": "4648b445ac9fea47095f0569f4052c92db71fb79",
+      "sha256": "f284e0348f1fe9fcbaed9910ba682338cae127278481d658e06e0547bf783273"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/folder_check.svg",
+      "mode": "100644",
+      "blob": "a8c4f045860c9e5f8a9e863df8314449ac249761",
+      "sha256": "5dbd61c8cc9a68a9faad006c85fe5924b73e930c835333bb9eb3afbb65dc84c8"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/folder_report.svg",
+      "mode": "100644",
+      "blob": "baa5ef6bb013eb55599358b215248d5766b9eff4",
+      "sha256": "4234fd4e01ac6a13a86be90f9a314ea52c9ea070cf02134d086bddd01a9326fc"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/folder_root.svg",
+      "mode": "100644",
+      "blob": "33b0cafac45da2739b06d48215c156e241dcab41",
+      "sha256": "93eb7f058cb0952755b94f1c2f54db886f44ac6cc4a51f25db1188e5335b91a9"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/folder_selected.svg",
+      "mode": "100644",
+      "blob": "af5bc447aabf4e1d17a56a1b2007155fe54b8ee8",
+      "sha256": "c9c4bd74445ec525de33d7a697b4866877d2e8f309d798bb0501916f50b80b67"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/folder_warning.svg",
+      "mode": "100644",
+      "blob": "42c554672a6300ea7423fef6130f95e1131cc462",
+      "sha256": "f3daa11be1a3cc87c91a585e93620a7b12369d919300cb7c9d2e3b6ec808e3b6"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/folder_x.svg",
+      "mode": "100644",
+      "blob": "9ebb540359a5ac23f3f7c4a2ef66eb9536cb1bd6",
+      "sha256": "e78805b3130f6a8b0134d61912981e3e3c59c9ec73d813042947ae7d10eb46de"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/music_note.svg",
+      "mode": "100644",
+      "blob": "1b4f4e4b576b60164d4941c44358bb3295c95ca9",
+      "sha256": "f3d228567c7a8e456f653756606cbba3369edbcd6b837d8f2a6c38444dadff29"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/nav_duplicates.svg",
+      "mode": "100644",
+      "blob": "fc96bd9de6f431727a1bcd0a5b873eabba8af59d",
+      "sha256": "674a8d31706910c099309d6c1e3549f9f65752aab65476ff8ab30a9b0ca2053e"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/nav_folders.svg",
+      "mode": "100644",
+      "blob": "4648b445ac9fea47095f0569f4052c92db71fb79",
+      "sha256": "f284e0348f1fe9fcbaed9910ba682338cae127278481d658e06e0547bf783273"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/nav_help.svg",
+      "mode": "100644",
+      "blob": "c5192fb0b3482b066db954514b3667e7baa4a9f8",
+      "sha256": "d988158226d9e214dbc9a5e1720c8dff29eb0a650cd71cd3be4103d8451a68dd"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/nav_library.svg",
+      "mode": "100644",
+      "blob": "2c6526bbd250f25cdd7a1247d0dd918428515e72",
+      "sha256": "0ae916ad22c5a0d1f1f6521e798dd81a973fa0bc285069f232d65ea018ead5d6"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/nav_settings.svg",
+      "mode": "100644",
+      "blob": "14bd4599c9930aa0d51790998c1ef94a11f972b6",
+      "sha256": "2c82b87b500a26a7a592b49bee8a06e78a9bf8f00de4d9971a688118ab3aa2cc"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/nav_start.svg",
+      "mode": "100644",
+      "blob": "7cbbb566b6eca3a6e0edb28ce050e0fca1f2b621",
+      "sha256": "9beb88d3073725ec8a3775555de51c4874c13c6a659599195cd2caf9b47c55e9"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/plus.svg",
+      "mode": "100644",
+      "blob": "a3bf92912768e986a359ba975146acb5973f1060",
+      "sha256": "e1cc304d70acf6403df62b37d0b6fd379e7b43e4dc6f7a87b227e611fde6712e"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/recognize.svg",
+      "mode": "100644",
+      "blob": "6b66997ea3720d34982aec2f8b5f207dddd9e556",
+      "sha256": "ab80e68416cefe72901c0cc23677b94c17bd84bd2590a475de6df559ad6e7008"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/report.svg",
+      "mode": "100644",
+      "blob": "baff386e510a2f994ca3f9101da860db9625617d",
+      "sha256": "56a6c0584c3c982f7f2d561b66bb188e60886cfb7a2d728127790826d2d4e389"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/review.svg",
+      "mode": "100644",
+      "blob": "43bc3abf771d6b7f5d8c41cb45033483f60fce72",
+      "sha256": "5e938090185fd2a5961db3f1159af9bb5a55979ea7a6fd2830fc5193a381930d"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/scan.svg",
+      "mode": "100644",
+      "blob": "b133cd415554744b07c802769ce18be9ba125c3f",
+      "sha256": "32d7edcd2851ade8f9dfab674c5ce5e37437d10440a71453c1fcc4e3b7ec38ca"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/spinner.svg",
+      "mode": "100644",
+      "blob": "060408038a40674de15c8c99a58889c495777285",
+      "sha256": "849df4922c942f6b69bb810a82050844903608633747e706f19388a9e2e8bcf5"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/status_ring.svg",
+      "mode": "100644",
+      "blob": "4b959317130fe86db9592bfbba2116ec8a5b2243",
+      "sha256": "91514bb4639a3096192d8cb297005425013361fbf3c6e6dd31f8a1b7d8b6eaf7"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/icons/start_c/warning.svg",
+      "mode": "100644",
+      "blob": "db994ad55dd7517094c3bb3585b240e2d79b3074",
+      "sha256": "facaf085a4ed7b1b544874d5784d092b1a860c36717c14c51b83ca97fd2edd0d"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/no_cover.png",
+      "mode": "100644",
+      "blob": "8f2abdcddb537a5228cb7256c804f6d7501d1cef",
+      "sha256": "914240e1e5132d7636d5809626df1118f5cfd192c03e672b5c51833fd12d641b"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/no_cover_en.png",
+      "mode": "100644",
+      "blob": "01746c2dac7c4f46fbfbc9fef374069fbbee1717",
+      "sha256": "de9f04f476139f894c18f0b194114ee48e8a23838e2fec8b3da0b78b8c0cb587"
+    },
+    {
+      "path": "src/audio_library_organizer/assets/start_studio.png",
+      "mode": "100644",
+      "blob": "8cc21b5176e531f178d9d5a7bd46b1736091e370",
+      "sha256": "bfd80c98cb01b13883e7a74ce246be8118fb8897f7d5606ffa4fd9d4ec48cdec"
+    },
+    {
+      "path": "src/audio_library_organizer/audio/__init__.py",
+      "mode": "100644",
+      "blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src/audio_library_organizer/audio/bpm.py",
+      "mode": "100644",
+      "blob": "98693d2a7c744b060d63e021961088bedce8ef62",
+      "sha256": "219e34d0ab13c0afff5424e04ec9ddaa8b18a17baf621c16cab461703c8d7a57"
+    },
+    {
+      "path": "src/audio_library_organizer/audio/fingerprint.py",
+      "mode": "100644",
+      "blob": "8e320dc8281552031aa6f2e4402bc8e8fbbc5769",
+      "sha256": "bae77a8ecfd997dec8b8fb18c6af10dd046509a4e8028ec53eba7da0bd851b6f"
+    },
+    {
+      "path": "src/audio_library_organizer/audio/identity.py",
+      "mode": "100644",
+      "blob": "ee6546491f9e855162391e49d4b99098c4a38f2f",
+      "sha256": "0d75c9fe0430477784e140f9d49d28b59e74993f92b327c23733cfd138ef94b9"
+    },
+    {
+      "path": "src/audio_library_organizer/audio/probe.py",
+      "mode": "100644",
+      "blob": "0efbfde5169244a6fba2060f7d6e05d62f9249c3",
+      "sha256": "a7bb14a5041c7991db8c8a3ab030942c50bde10331fa4a86c601ce7089822d13"
+    },
+    {
+      "path": "src/audio_library_organizer/audio/waveform_worker.py",
+      "mode": "100644",
+      "blob": "d088d8b027affac2569239b8f960c2dcbd28f859",
+      "sha256": "8d91bb7779babf8d0b54e6b47c0da021643695ba67b0ce2e25fee090fcbb3045"
+    },
+    {
+      "path": "src/audio_library_organizer/crash_debug.py",
+      "mode": "100644",
+      "blob": "fd4e3366277c150004182a6cfb6481a8fe445e77",
+      "sha256": "f1acdf21b3c4de992a9b15ddca12dabc4695107078636fe8b528f27077a637d5"
+    },
+    {
+      "path": "src/audio_library_organizer/domain/__init__.py",
+      "mode": "100644",
+      "blob": "0283bbac71d796b07d276357dc36323031f5efa0",
+      "sha256": "d95ccfb4f2acec844528f22fffb67601b995b699001594c99a0900996a048e68"
+    },
+    {
+      "path": "src/audio_library_organizer/domain/candidates.py",
+      "mode": "100644",
+      "blob": "882f50f9f0706bee924cbd9c11e4fb0c118d7461",
+      "sha256": "9998afbb23f063b179319adfc4f28f9c72f5aef15dcc38f10dd72cef42493e38"
+    },
+    {
+      "path": "src/audio_library_organizer/domain/file_state.py",
+      "mode": "100644",
+      "blob": "95e1e944624c2115c6f6b85c4f88cb35400570da",
+      "sha256": "5979fd3e264280318e9218c20e2a51682e6fe28fd262a063280a226529d943ab"
+    },
+    {
+      "path": "src/audio_library_organizer/domain/genres.py",
+      "mode": "100644",
+      "blob": "6c3868d72e16020dad55b54fa304051acc1257ca",
+      "sha256": "95a5478ccf32462d7cf6d2db3fd47deb899981a07a87bb7a8e3fc9cd801278a2"
+    },
+    {
+      "path": "src/audio_library_organizer/domain/models.py",
+      "mode": "100644",
+      "blob": "b7e7d9fa3d71d566df2bc8aa6028b916469a70bf",
+      "sha256": "fd1bed18351be718288c98778b0603f2131ce93191fe14de43f6b221a8ac9cdb"
+    },
+    {
+      "path": "src/audio_library_organizer/domain/output_spec.py",
+      "mode": "100644",
+      "blob": "743296896b3925e6b05a695abf95dd65f9621c19",
+      "sha256": "6c7ff568d2cf150116512de34d583962f8ed116e0029cbddd13fb2ffe6ab45f9"
+    },
+    {
+      "path": "src/audio_library_organizer/domain/preferences.py",
+      "mode": "100644",
+      "blob": "c0ad337647756926b794d3d168a3f51023754992",
+      "sha256": "0452a8db744a33f3c0103c458b544b755ea07c951356147e5b59170d87698807"
+    },
+    {
+      "path": "src/audio_library_organizer/domain/provider_settings.py",
+      "mode": "100644",
+      "blob": "99493659f5fa0a510140162232faddc6dc212d3f",
+      "sha256": "aadf126d97b2b4f7377f18c5f6c09ed61e27142884ec99b57ef4d47154a51d76"
+    },
+    {
+      "path": "src/audio_library_organizer/domain/settings.py",
+      "mode": "100644",
+      "blob": "c03467084e4f8269b78b90fbf8340e4def6a30e5",
+      "sha256": "ac78b8fda3821453f2b06ffa8b9b343a8f53b7094ddadb719b9780cd9e8cf02a"
+    },
+    {
+      "path": "src/audio_library_organizer/duplicates/__init__.py",
+      "mode": "100644",
+      "blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src/audio_library_organizer/duplicates/comparator.py",
+      "mode": "100644",
+      "blob": "00fba44a5316cb75af06e934143a0340871b959d",
+      "sha256": "b0b21008a7774686a0390fd6587cf9303bc2338fe93d5c49717fa8bfc12d9c76"
+    },
+    {
+      "path": "src/audio_library_organizer/duplicates/families.py",
+      "mode": "100644",
+      "blob": "eac864e68e806e986f4bcad7ec1354e411960715",
+      "sha256": "b432b06820fd76c43d145a76eeec63d4dc0a4fd34e5c404fe99999b050898b1e"
+    },
+    {
+      "path": "src/audio_library_organizer/duplicates/grouper.py",
+      "mode": "100644",
+      "blob": "4ef228f0bab6d7f6d2090de830a39418b0151f5a",
+      "sha256": "d160d2ac64e83ccccafd0f5db7e7c2c113684d5d828345b7a6ef7b794c05736d"
+    },
+    {
+      "path": "src/audio_library_organizer/help_content.py",
+      "mode": "100644",
+      "blob": "5a8950ebf63fa287406206e8bc7726a07362d168",
+      "sha256": "887af4461cbfe1c025529ac857eaaa0320e3a6b56171a6cbe0c3da383645fdcf"
+    },
+    {
+      "path": "src/audio_library_organizer/help_content_en.py",
+      "mode": "100644",
+      "blob": "5802653616ec11b31a2659a1d142023caa3bc401",
+      "sha256": "fa84e15635b694373e521aab67b3681f270af0e8ef82c831ed93b01a7027585b"
+    },
+    {
+      "path": "src/audio_library_organizer/jobs/__init__.py",
+      "mode": "100644",
+      "blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src/audio_library_organizer/jobs/adopted_output.py",
+      "mode": "100644",
+      "blob": "bb4d176d462c2f3464d8e1d297802574625128eb",
+      "sha256": "8e39307150aa7b2a2440bed0d80b1416b608729cdc91af1deb3b7f30aa29a291"
+    },
+    {
+      "path": "src/audio_library_organizer/jobs/audio_identification.py",
+      "mode": "100644",
+      "blob": "f027dd811193900b8abf7062738de38c5f1afc50",
+      "sha256": "ab37728720ae91724a2b70a58482f43ad5aaca3ad62c12eb44ab76c95af9777d"
+    },
+    {
+      "path": "src/audio_library_organizer/jobs/backup.py",
+      "mode": "100644",
+      "blob": "8805ad313906654dd48032e71cddc5a3c9c07d3c",
+      "sha256": "c7e76cf32fcb6a5aa879f128b3d3980ab432bc4608dd0e39d3fec52bfafa429a"
+    },
+    {
+      "path": "src/audio_library_organizer/jobs/collections.py",
+      "mode": "100644",
+      "blob": "b6a88810175429f8223961199c7055bf36091fb1",
+      "sha256": "eb51f3c65523bcfa22cce034d68ae1ff2d3ee017f3bc97d94eb93c7a1590a22a"
+    },
+    {
+      "path": "src/audio_library_organizer/jobs/context_menu.py",
+      "mode": "100644",
+      "blob": "3779025d7b1b41f8100f68d384c369cbe5843930",
+      "sha256": "765edf3ef5d9e806684b29a37ce3f1900991a82433800c5d37c18378742b5e97"
+    },
+    {
+      "path": "src/audio_library_organizer/jobs/exporter.py",
+      "mode": "100644",
+      "blob": "16fadf4d554f570416fab17c85b26a3f83d77be2",
+      "sha256": "e42522a3755dafa8e1eda21c53bd8316d63d603bfbff65460c906cc424242e41"
+    },
+    {
+      "path": "src/audio_library_organizer/jobs/file_health.py",
+      "mode": "100644",
+      "blob": "a2e5db99272e7d0df514ad60d7790e2db24cf91d",
+      "sha256": "d8418c07caac36980275aeb8504f46f5d8ef57e90a65472abd85418d7bfb7c58"
+    },
+    {
+      "path": "src/audio_library_organizer/jobs/file_reconciliation.py",
+      "mode": "100644",
+      "blob": "47a493c3f3629be534ad07dcc2302e57004217e7",
+      "sha256": "0f3cb8ced4f7593081d139fc330393c40b7f9ad5bc459c1c96fa3fd7d4ad8bd5"
+    },
+    {
+      "path": "src/audio_library_organizer/jobs/identifier.py",
+      "mode": "100644",
+      "blob": "555cab65aafa57c7900fea40107f9105267236df",
+      "sha256": "a6a7aa071b55d308d8fc5e87e6cf824d7afd72c74b38601b9fbf0a593658755a"
+    },
+    {
+      "path": "src/audio_library_organizer/jobs/legacy_adoption.py",
+      "mode": "100644",
+      "blob": "6e65a9531ae14d6172d83d29ec0e5e2fcbeb9a92",
+      "sha256": "e8be33e2bbfb092dfdaa214cbfd662709cb9e666c50d293801a5b65f2aa37805"
+    },
+    {
+      "path": "src/audio_library_organizer/jobs/library_service.py",
+      "mode": "100644",
+      "blob": "4197ffd22875f27ccf9cc3009251ad0288c58133",
+      "sha256": "632eb5527c4b117500549e44552c162b85547e4a8e2498fbe37a5fde4518b248"
+    },
+    {
+      "path": "src/audio_library_organizer/jobs/managed_files.py",
+      "mode": "100644",
+      "blob": "9201b784c7ca62794eb6bb8cd50175a1b74a4d0e",
+      "sha256": "c31868ed8ac375ea8b0b1a8b5a1adf84a7fe4b0c76fafbabb4858ed564a7c4a9"
+    },
+    {
+      "path": "src/audio_library_organizer/jobs/output_session.py",
+      "mode": "100644",
+      "blob": "2de690ff407473bcfe40ae1223797c2ee83e5ed2",
+      "sha256": "9f7c2c485f8b6a9d962b55d6d385861e6a34c77664c79f824be8efafc8fbc05b"
+    },
+    {
+      "path": "src/audio_library_organizer/jobs/playlists.py",
+      "mode": "100644",
+      "blob": "f1b47bde96cf829d0d5e76f3e7cdf8984f1711ae",
+      "sha256": "6617ecc2f3b1150a34ca7102e1ad3533e68b6bbb40bbea7c6fe85a1419bd00c1"
+    },
+    {
+      "path": "src/audio_library_organizer/jobs/reporting.py",
+      "mode": "100644",
+      "blob": "040fb521aca25d277bb8210613bf4956fa6bd454",
+      "sha256": "91dade5ab6a12480535349b4db0e5675ba15c2c392ce97abf381a72bf8843f31"
+    },
+    {
+      "path": "src/audio_library_organizer/jobs/reset.py",
+      "mode": "100644",
+      "blob": "3904afcb7176bd5e03595462e3d39cec482416fd",
+      "sha256": "010e03a1ca12dff242f62731cd52af446bf7fa246791be122b35b7bee387a036"
+    },
+    {
+      "path": "src/audio_library_organizer/jobs/scanner.py",
+      "mode": "100644",
+      "blob": "d867a136c37e129c39a3fb78e257c010ba17350d",
+      "sha256": "542c356f25b1ff1f0e37ece0aa2dd2f73c8d4977ce7fc99c7203038b24d0f8c5"
+    },
+    {
+      "path": "src/audio_library_organizer/jobs/shell_reveal.py",
+      "mode": "100644",
+      "blob": "c9ef595da3a8641904664e8fa50c30b5272b84ab",
+      "sha256": "cfdad8f9c2aa25d2cf18686d773791dde4015ed325ea3a066e52ddab94e6d5c7"
+    },
+    {
+      "path": "src/audio_library_organizer/main.py",
+      "mode": "100644",
+      "blob": "34d90c0c0864f41a4be6747edc515aea0163b180",
+      "sha256": "3f3de320933f704219b3e5db9dd8fe92cc722e41ec0f9235a90549781505b8ea"
+    },
+    {
+      "path": "src/audio_library_organizer/matching/__init__.py",
+      "mode": "100644",
+      "blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src/audio_library_organizer/matching/resolver.py",
+      "mode": "100644",
+      "blob": "5f9f14f2406aa3024fbc39d5570414f4ed19ad89",
+      "sha256": "4e4a7764f20e798248faa846e0f461095200ce0f70f7df3e4e7a600a4c7c1907"
+    },
+    {
+      "path": "src/audio_library_organizer/matching/scorer.py",
+      "mode": "100644",
+      "blob": "09b269e73b970586dc49a31353dd1869cc104146",
+      "sha256": "a80b82f2a06e4a348b485107e0f78733b371ede8dff3bf2eadaafc98f5f51af9"
+    },
+    {
+      "path": "src/audio_library_organizer/metadata/__init__.py",
+      "mode": "100644",
+      "blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src/audio_library_organizer/metadata/artwork.py",
+      "mode": "100644",
+      "blob": "e2f9b89809cc720191c19bebbba03c3e46bae9e9",
+      "sha256": "5182893e7fe820c56704ab548b3b77a53fc199539b7f2ae9cef4cc1d8b6aa974"
+    },
+    {
+      "path": "src/audio_library_organizer/metadata/change_history.py",
+      "mode": "100644",
+      "blob": "262526aac7eff566fa7647dfb91a5e86460de97b",
+      "sha256": "345fe4d1393272aa3754815588d028a0b1dd4bb8569d71aa0f88be7e2ca00416"
+    },
+    {
+      "path": "src/audio_library_organizer/metadata/completeness.py",
+      "mode": "100644",
+      "blob": "1e6c5b27b35109c68ee0d1c0783ffb98831dcf37",
+      "sha256": "03f8cbf116d831ba22fbb328e87a7986bdba2c1e6c116070d236bfaa40c34811"
+    },
+    {
+      "path": "src/audio_library_organizer/metadata/filename_hints.py",
+      "mode": "100644",
+      "blob": "28c805cabe80a32fee36c37c5ec024aad555c84a",
+      "sha256": "b389ba6a3cb4c13874a2a729b3a900fbac07ffe511499c2dcc7ef8d435298ea2"
+    },
+    {
+      "path": "src/audio_library_organizer/metadata/genre.py",
+      "mode": "100644",
+      "blob": "82610d09d1600c250ad12fcdfe8e79d441fdf852",
+      "sha256": "9669034d65c3c7d9eb73dc3f320344a7434e73ce6f72c19dc34398172a0f3fa2"
+    },
+    {
+      "path": "src/audio_library_organizer/metadata/manual_edits.py",
+      "mode": "100644",
+      "blob": "ed9ce09fc67d216257349473083a794598277d6a",
+      "sha256": "4b2631f874e79c1642c3b29eb8a328c4aaf62f6a1239426233a83cbcce764320"
+    },
+    {
+      "path": "src/audio_library_organizer/metadata/mp3_output.py",
+      "mode": "100644",
+      "blob": "43c735d053c08d9d37ab2f6f10b864684d6e1bfd",
+      "sha256": "92f2dc976e41cd1424c765e0e5613351628c4d493fcca58ff749d5efb5c643d0"
+    },
+    {
+      "path": "src/audio_library_organizer/metadata/naming.py",
+      "mode": "100644",
+      "blob": "0d8fd2f1325420e2d1ad071327a83bc9366b969e",
+      "sha256": "f2f4a4676bf3d482c7950a3b5894c17f336a30b13868d3c53ba475abcab85902"
+    },
+    {
+      "path": "src/audio_library_organizer/metadata/normalization.py",
+      "mode": "100644",
+      "blob": "0c2694f873f1238ccede0dc872dd247664ef223f",
+      "sha256": "ac9f84eb2745fa3b05a337f3d849b3fd51ae9f974ace56a9bdc276dd9aa88568"
+    },
+    {
+      "path": "src/audio_library_organizer/metadata/online_lock.py",
+      "mode": "100644",
+      "blob": "9be26017cbb85f4e1b23cc9385dd7977442bfc15",
+      "sha256": "f9a3f0708d980a17c808cdd4645544f996e5eac5816b40c3b274594a75922e53"
+    },
+    {
+      "path": "src/audio_library_organizer/metadata/provenance.py",
+      "mode": "100644",
+      "blob": "ee03b959fee751f847aa904b140da9c4a57040f1",
+      "sha256": "0a4fb7483bd922472cac42d2cbcc85250168db37b5d6f9bc23cc6761b993979c"
+    },
+    {
+      "path": "src/audio_library_organizer/metadata/tag_writer.py",
+      "mode": "100644",
+      "blob": "6846286c96b53c427f48e612744688d56d4e08b9",
+      "sha256": "ab494c1d7a45d41507e90eef53824b2d83ec1d467bd24f9f71c0e11c8162a476"
+    },
+    {
+      "path": "src/audio_library_organizer/metadata/tags.py",
+      "mode": "100644",
+      "blob": "a0708c2c4fca2c1459ac8f2ad9b94dc97b992adc",
+      "sha256": "3388a9d9accec86051694294aa1ab5c70599ad700e867367bb935dca40e58c3f"
+    },
+    {
+      "path": "src/audio_library_organizer/providers/__init__.py",
+      "mode": "100644",
+      "blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src/audio_library_organizer/providers/acoustid.py",
+      "mode": "100644",
+      "blob": "0391c3a597d1f64faeb9d7ca6840524adde0f887",
+      "sha256": "b1da1896659cbdd7160307ad814a1ad70d0d93b77f07f601d5ac720be8763c74"
+    },
+    {
+      "path": "src/audio_library_organizer/providers/common.py",
+      "mode": "100644",
+      "blob": "afcc363d49471cee49a94d6897b39498dc8aac48",
+      "sha256": "93805c2285747f1e9d6467ac9c389e20cd02d3194ede6cb1080d8563d961b1fa"
+    },
+    {
+      "path": "src/audio_library_organizer/providers/discogs.py",
+      "mode": "100644",
+      "blob": "d5217853f57cbbaaf27b6d534978187b7929ac07",
+      "sha256": "2caf6d8d2c2939cd4fdc5abacac4924fbbbfe1414503c7123252878bcfca043a"
+    },
+    {
+      "path": "src/audio_library_organizer/providers/itunes.py",
+      "mode": "100644",
+      "blob": "c5eeb2a6b08e787abb26c9ef8579103b40a49fb5",
+      "sha256": "2c39b16f46f16fd48ff58b01ef1679ea9de4c1d06255ebbe193e6d023648a4c9"
+    },
+    {
+      "path": "src/audio_library_organizer/providers/musicbrainz.py",
+      "mode": "100644",
+      "blob": "b074f3c6eda8ddaf5558663c0524e7e7988581b0",
+      "sha256": "e6ce27efadb9649de3a75e14e2b4b075604b55ec67c2320c5e237c1e5eacccd5"
+    },
+    {
+      "path": "src/audio_library_organizer/safety/__init__.py",
+      "mode": "100644",
+      "blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src/audio_library_organizer/safety/copy_pipeline.py",
+      "mode": "100644",
+      "blob": "289907179849b191a8d1dedbb185ae4c750b123c",
+      "sha256": "abf3391afbdc7d9d721130a0e77dd95623cba11f580f7ffe3a37430d9648f312"
+    },
+    {
+      "path": "src/audio_library_organizer/safety/windows_file_identity.py",
+      "mode": "100644",
+      "blob": "648e558699992e8c4bd25518c2d357c9cc506208",
+      "sha256": "6cf69ca84c33fb6c07fe437ce17108b9a122775695d4f29e1719a2777d280898"
+    },
+    {
+      "path": "src/audio_library_organizer/storage/__init__.py",
+      "mode": "100644",
+      "blob": "9c2a1bc95a4d23d5a1db8a903fa479b7cd687f2d",
+      "sha256": "685d0c2c70632b242ff389dc37811353fb9bf6dc3eda52338cfd98f6579ba7f7"
+    },
+    {
+      "path": "src/audio_library_organizer/storage/database.py",
+      "mode": "100644",
+      "blob": "d91c3516fe803e1ef57282f43ed032c3dca3ee24",
+      "sha256": "191bb5382f31249e55a9c84271471213c457b01bdf5fac266dfd5d6b21e951d1"
+    },
+    {
+      "path": "src/audio_library_organizer/storage/file_state_cache.py",
+      "mode": "100644",
+      "blob": "80529cea4e6e6ea66606c679f017b96a7766be6e",
+      "sha256": "7a69db41e7e6009e02c4c2d2cf93991e95c1c3f1414fd98d25b2773cc285051e"
+    },
+    {
+      "path": "src/audio_library_organizer/storage/library_profiles.py",
+      "mode": "100644",
+      "blob": "972746e38ed7ee9d8367d895825b959b8351a98b",
+      "sha256": "4812fe351c18a31c062e59ce983c046b303187eb8daead7529f43a040e90cfac"
+    },
+    {
+      "path": "src/audio_library_organizer/storage/managed_bindings.py",
+      "mode": "100644",
+      "blob": "690db2ed2827cfb19d5440f864e997aed69429ec",
+      "sha256": "438209c9ba2633748991d11b49fc9337c4d6216920af85d76b456f9863dc3b67"
+    },
+    {
+      "path": "src/audio_library_organizer/storage/migrations.py",
+      "mode": "100644",
+      "blob": "4b0917550ebf9fc2714cf4fdf87303052cb8e204",
+      "sha256": "ffefa3948f4b90a20b913d0186ea6e3a6023393eb8e7e6315c72a98313026283"
+    },
+    {
+      "path": "src/audio_library_organizer/storage/repository.py",
+      "mode": "100644",
+      "blob": "0fb037b2fa1b2874b2b1f464cf03ac47c6c86049",
+      "sha256": "e1173d3b7709b0139654572e1bf7fbe1e10a5913678f318265827c518134e91f"
+    },
+    {
+      "path": "src/audio_library_organizer/storage/scan_merge.py",
+      "mode": "100644",
+      "blob": "d0963ad593d86534b0f49d81f0782e51facfa66b",
+      "sha256": "d4fc63874a11233f7d2acd3b3c293e67a5875b027691ca8ed1db9a5027b26985"
+    },
+    {
+      "path": "src/audio_library_organizer/storage/session.py",
+      "mode": "100644",
+      "blob": "3c083920ad91382f9524f760c9291fdd76af5972",
+      "sha256": "d9233dd31b83409a85ffbbf89cc3aaa82fab5de45c01f99ef5d529bf2c6ac305"
+    },
+    {
+      "path": "src/audio_library_organizer/storage/source_registry.py",
+      "mode": "100644",
+      "blob": "dcef90e5db485918060d6131c6125689068a8cef",
+      "sha256": "48c2d2956624edb7a04c81fe95202aabf0a1d3290521c396c6e35f7f111f84e6"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/__init__.py",
+      "mode": "100644",
+      "blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/adoption_dialog.py",
+      "mode": "100644",
+      "blob": "aa38f57de1b6ca797f82c1ce44a425b81f90619b",
+      "sha256": "2fd92179e3637298dcdd06839dc0f81790ea8c4d008c7471de0af468b962a079"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/assets.py",
+      "mode": "100644",
+      "blob": "4a2ff113628dc97d1ba6f43d1ef397475f3b2b98",
+      "sha256": "3bc84007e40700180152bde24c4187abdb61c2118be2e62844ecf07ee4514684"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/collections_page.py",
+      "mode": "100644",
+      "blob": "474ab6a747b516e68be37f9e94305d9580ed7dab",
+      "sha256": "4d4bcc8b5a2d60d8b70bebd580d271e2958f1d87a65ebfca9cf74903da55651c"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/confidence.py",
+      "mode": "100644",
+      "blob": "845c4bb7d74b09e864446e8e1f4dc035af007997",
+      "sha256": "76b4bf02eb3f1f76bda3024f7355785ec785d47224a7d3bcecce0861fce710ca"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/confirmations.py",
+      "mode": "100644",
+      "blob": "b0c0da4753b094b14fbe37361c289bddf092951b",
+      "sha256": "25f586e5bfd6a6ddb414c97bfdcec0099e2eb450b7f4aca9f04826bc1c941bc7"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/context_tasks.py",
+      "mode": "100644",
+      "blob": "88cb1a247b2e504c171acae2a236a29fefe2efaa",
+      "sha256": "db948056a4c13d7f131aebad4ea2bcd87e4bf37938ca50696a302bc700665a0e"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/creation_dialogs.py",
+      "mode": "100644",
+      "blob": "62e03c97251db78fb3c1324180b52c0fce7fb66b",
+      "sha256": "a7542a05249aee6f4b0537e4100b2b246b45d2ff83d99cb6464b060b12ac5123"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/dashboard_page.py",
+      "mode": "100644",
+      "blob": "088709639e5d297d043f6ba547eff01a8ceccc18",
+      "sha256": "7d7b5e5f0c5eb831e606c93792d46fc00ad2e58fcf4df3344b2d46750aae6a16"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/dialog_style.py",
+      "mode": "100644",
+      "blob": "e3e1893ac56febad6bee2f27201da6e64613b95b",
+      "sha256": "87277ea8c7a70dd19f192d6cf5a533cb5b3383e202bb544f4e0fa72247b20092"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/duplicates_page.py",
+      "mode": "100644",
+      "blob": "6445f1cb86bb920f217f539d96b866cab4aa1362",
+      "sha256": "fe4d907a10bb03a9659801c9621d839af4790f451384b829e3405f22ea53906c"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/export_dialogs.py",
+      "mode": "100644",
+      "blob": "bced4c16c23cf1ac0e26fda5a80bf0ea163af12a",
+      "sha256": "fd283b6c20e7e9633b85e5d1f40531957ec28c9c210ffb4f96ad37f38615badd"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/first_run.py",
+      "mode": "100644",
+      "blob": "daebca961922a3db33a79fd530e59d269b1f52cb",
+      "sha256": "62290d5c90e0cf9d100615aa36328523ddc16969e88d861c269fca915b44fa3b"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/genre_input.py",
+      "mode": "100644",
+      "blob": "0e4ccf528802c73983602f3f938fc8ca2177838e",
+      "sha256": "b8fd6d469d9a7d74f423590bcf1c84402aea32131ee1fb0e3e4ee439744ba888"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/genre_settings.py",
+      "mode": "100644",
+      "blob": "e2fdfbc581e21ef98fde33739567e2b3d3dbf296",
+      "sha256": "72e33d05822ee545d253c51d2fdd93153fb87ec10a588b5be7ba74f4a651d30a"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/help_center.py",
+      "mode": "100644",
+      "blob": "c4f05afa5d8f628594238fe470a2c7ce0b9d9a2a",
+      "sha256": "61b7e51920855b16b983c753072ccc9251069091eaae65a3d98d236f6e6b585a"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/i18n.py",
+      "mode": "100644",
+      "blob": "0a0ad7717065c9c9b6e20536dce346a1970c0d6b",
+      "sha256": "32cbf684efdbcb2f34f9fb8b2f37253356500bd868663ec5c3a043f6054c3af3"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/icons.py",
+      "mode": "100644",
+      "blob": "04b5e9645c26a6abf2952b3c126da982f8774151",
+      "sha256": "2ec973225df04702fb35fc66a2a919b0e84d28e61b1ea47f0d2fd54caf23fd7a"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/library_controls.py",
+      "mode": "100644",
+      "blob": "2e8a37113732529f04ae9078dc2df8cd9e264c13",
+      "sha256": "dcd814a28b967dd97fc5b2702a756f461257002ba5e2ffe414150503e8bda5d4"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/library_file_state.py",
+      "mode": "100644",
+      "blob": "f98171a9138cf172c3fad7f7131867c8c29aa179",
+      "sha256": "f83a92e25760adc940a5d7d44a0ee0e13de0bc4fff27e540fdec959f4fcaa9fa"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/library_manager.py",
+      "mode": "100644",
+      "blob": "be1e0a778055358a62bb927b636f75bb1509699e",
+      "sha256": "ae85711999cd4deb125b83a37b12dc1222b76de1ffe2f5592e861f608f8be3a3"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/library_page.py",
+      "mode": "100644",
+      "blob": "0ac4588ec127eab29fb0ae62e46ac777d0d8ef13",
+      "sha256": "dc32ccfc712809d531e8dc8cce28db58d3941f6b98407f6c092ee3f1ac1a2b4f"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/library_status_legend.py",
+      "mode": "100644",
+      "blob": "8bbaf229804466d84c93a977f2c4f6c38bdd9da5",
+      "sha256": "5bf3a7551fd89d4d9fa860c75fe3031d04703e076df94d2802b0d77658dc6d2e"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/main_window.py",
+      "mode": "100644",
+      "blob": "ab6b231fffdb6c7ba377b5e9df72cedfa46a59df",
+      "sha256": "a7d8cd8967a698052f986038d09ced754c1ee395652ea50672ab5fa63f27c875"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/metadata_editor.py",
+      "mode": "100644",
+      "blob": "7bfe5ba89a15c3257a67513a92da4979660062f4",
+      "sha256": "1aef8aef340ee91ce405ff2277301c8fd555372ca3c003b4b37df2fa8813f8df"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/playback_sync.py",
+      "mode": "100644",
+      "blob": "3a9340eedbbf402a791343dcc0885e9a7541ec68",
+      "sha256": "89a9c9c7fa2607d5ca4f0fb8f5de90fcbcc8d0c44de69e393e1aa1e5d7a36de5"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/player.py",
+      "mode": "100644",
+      "blob": "e93f1b1234394684c0474a955ed6d97f15112d8e",
+      "sha256": "6a36e33a1ae2cfc76606e63c06e7c9b6f2ae9d6e7cd296681dbe03a7fdae0a7c"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/scan_sources.py",
+      "mode": "100644",
+      "blob": "bb3aeed6238a86d378788aefdf2c7d1e09d230c3",
+      "sha256": "35a003fbdadfede5d24c0655beedec92abc3af21f276820081975c9d93fabd3a"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/state.py",
+      "mode": "100644",
+      "blob": "3d5374b9800aaf32408f0e6e3a04ea89ecf3fb10",
+      "sha256": "69824f6a4eb37023fff3a1501248206fa5112ce2650d3a4e38bc0c4a59018a1c"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/theme.py",
+      "mode": "100644",
+      "blob": "585618311cf5d8a2d5c0ba324c1a97830d5c1516",
+      "sha256": "7fd0bc057ba324815eea595733feb4e0a50f20e2fba65d1b445627135d6fed5b"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/v0411_theme.py",
+      "mode": "100644",
+      "blob": "d95b152b66d9f7f5e26e86626aa988029cdea1cb",
+      "sha256": "9ab23ff41d7ba17ceec9dad213184f2344772813284b2bcbb0f5d9f4c9625c0a"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/waveform.py",
+      "mode": "100644",
+      "blob": "ef800804a8c161736d6838b667638469574ab197",
+      "sha256": "c16710505366a9feadd108dc61c7556c966cde6b0ded696d59e7b45fc8858c31"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/widgets.py",
+      "mode": "100644",
+      "blob": "d8bff062cabf9019861657aa97186f0779e79cde",
+      "sha256": "886cf1a401e557b58616eaee7794d26a1f4b6b4c5ae3012ff61874705398bf72"
+    },
+    {
+      "path": "src/audio_library_organizer/ui/workers.py",
+      "mode": "100644",
+      "blob": "e88a2b890965a72f228609ca0622a5d14c07a285",
+      "sha256": "207f1cb05909bb6cfd0b7bb7bc0e72d7455dc33a9e86f0f0a39527d43debf6df"
+    },
+    {
+      "path": "tests/audio_adoption_fixtures.py",
+      "mode": "100644",
+      "blob": "741c1befeacffc7c6b0e9f99b02133dd19db55a9",
+      "sha256": "0440e544aad9c126b24183d3ca2de4f81a6980fa643765af1d283020003221f8"
+    },
+    {
+      "path": "tests/conftest.py",
+      "mode": "100644",
+      "blob": "eeebe13b831eb7363363ab6dc8ac2ce097c62c4e",
+      "sha256": "e3318970859c06c81b97dfb3e636ce1a010ac2220457f4e0d0e9eb9180415f8b"
+    },
+    {
+      "path": "tests/test_adopted_output_spec_v0427.py",
+      "mode": "100644",
+      "blob": "595ca34099e1a03295ec6d0d4c16662b37c9723e",
+      "sha256": "ac8bc4f7537c8daff30f428bd8a43efa15529757bf0e5f7e7aa57fdf4e7800ac"
+    },
+    {
+      "path": "tests/test_adoption_integration_v0427.py",
+      "mode": "100644",
+      "blob": "3dd9dc927a687072d9ce00fe055ff664a93234d8",
+      "sha256": "beac8995c2230aa9406e23ddf9a1d10f2d6efa4b9906e740b1d5bc95f2c96f33"
+    },
+    {
+      "path": "tests/test_adoption_review_v0427.py",
+      "mode": "100644",
+      "blob": "3ee3190c1ec9977aafba6c9ea69472ff58a6e73d",
+      "sha256": "7acfb6b1e48b04a0a98198737639ce46e1d12800d49c8e596be9785b09375b10"
+    },
+    {
+      "path": "tests/test_adoption_storage_v0427.py",
+      "mode": "100644",
+      "blob": "13959ba522a0fd9dfcd79ab4d3db139c57c72198",
+      "sha256": "0b2fe43a6a110e1e9d0ed575311138c38e2f01d97dbfeeac2136125f60595c0f"
+    },
+    {
+      "path": "tests/test_approved_icons_v0425.py",
+      "mode": "100644",
+      "blob": "75ef93ed477a0f8dbfa1aeee176cc1a78bbc149d",
+      "sha256": "5cb46b0acad1bb8db56e3c49b97b24b46758811c5f5732b38f66f71cc1ab2a02"
+    },
+    {
+      "path": "tests/test_artwork.py",
+      "mode": "100644",
+      "blob": "8120ec4de794ced85962ae6fe27eec31750f8db9",
+      "sha256": "df6184712bbe23e4cb0e64224039fd437f0ffef87238a5f1b6ff0dec4f5eccc6"
+    },
+    {
+      "path": "tests/test_audio_analysis.py",
+      "mode": "100644",
+      "blob": "a64cb70c8b27fe93837729bb099dd4bbd999786b",
+      "sha256": "ff09ef4b4533b8407fa526c2afefd857ddad52789db40093995bc08e4a9a8f76"
+    },
+    {
+      "path": "tests/test_audio_identification_editor_v0425.py",
+      "mode": "100644",
+      "blob": "1862e1787928a2924bfe20739911c9d4c0b83a57",
+      "sha256": "8d30056042ecb32e84fd651e3e4940dc7ead78df5f9c0a78c3239e224ff907b8"
+    },
+    {
+      "path": "tests/test_audio_identification_v0425.py",
+      "mode": "100644",
+      "blob": "c76e5ad2765a96125733ab99a7b31961c262f9b9",
+      "sha256": "a4566ff462b0fe94ab675101bc23972a38593147e84a1ce8c0ac60e51b05386b"
+    },
+    {
+      "path": "tests/test_audio_identity_v0427.py",
+      "mode": "100644",
+      "blob": "f7689647d801c96efb8c9b032bfc586a70b6c159",
+      "sha256": "b508448b4295d58e5dd66867e3695c0787e2d989c4a192555cbd2e6ce8151f59"
+    },
+    {
+      "path": "tests/test_change_history.py",
+      "mode": "100644",
+      "blob": "e12be122a09034081a9a9cbe2f10a702ffb8be17",
+      "sha256": "c9aa9db8938ac52470a9055f894f530db92613590f5ea77659fd3b8d990985a0"
+    },
+    {
+      "path": "tests/test_collections.py",
+      "mode": "100644",
+      "blob": "b9e404b3b056e1649be9241614c638a33147c8a1",
+      "sha256": "f546753228c7b06746f0d69532df26edfc7c1e3fca1dba77bdb2991d9aed197a"
+    },
+    {
+      "path": "tests/test_confidence.py",
+      "mode": "100644",
+      "blob": "aee261352eb70955b365cd38b735679c89bbadcb",
+      "sha256": "1d8325dcd55b56f64897d2e38adf850f360a2f342fcd6df91c0397f46957aee0"
+    },
+    {
+      "path": "tests/test_context_menu_jobs_v0427.py",
+      "mode": "100644",
+      "blob": "4ad46df825c571d23ed152230339f7a79bbdf9e4",
+      "sha256": "65af68f1755cdbb594a595dcbf3c6245841bd660ec914da21783e01a3c3bd113"
+    },
+    {
+      "path": "tests/test_controlled_genres_dpi_v0425.py",
+      "mode": "100644",
+      "blob": "de9012a46f3408ada3213726dc87f5dfdf208863",
+      "sha256": "a6db64bf231f512da6c291a5158cd5175531751f1b98898a4a6a2586002b3809"
+    },
+    {
+      "path": "tests/test_controlled_genres_v0425.py",
+      "mode": "100644",
+      "blob": "eb8f1916406d351df93423b4a73c07e7fb9d5118",
+      "sha256": "06f468d279c00884f320c4cdc45c8b36b8ac3aabd62b22b2cf812f9e7b714ed0"
+    },
+    {
+      "path": "tests/test_cover_gallery_capacity_v0425.py",
+      "mode": "100644",
+      "blob": "0b654acc47fc6c8de30de0384678158a2d2f5ab6",
+      "sha256": "38a47ae173faf6c59d5c98ce4f2bb989d5047f675aecebed741ef9b97804aa3f"
+    },
+    {
+      "path": "tests/test_crash_diagnostics.py",
+      "mode": "100644",
+      "blob": "848e2e8da57eecc82f72b176f058f96927dac492",
+      "sha256": "cd25287a16e9f830787479e82b3d705532f7f8854a99b49c9a1f76f2994c97a3"
+    },
+    {
+      "path": "tests/test_creation_dialogs_v0427.py",
+      "mode": "100644",
+      "blob": "f4b94353f238d1e4331f61eb6fe0947586d52cb7",
+      "sha256": "da9126909dcecbab7d88bf9297d26c890b1993f4e554766534e90254a9031f61"
+    },
+    {
+      "path": "tests/test_current_polish_batch.py",
+      "mode": "100644",
+      "blob": "18b670a137108a4d73f6119bad67825da9a46cc3",
+      "sha256": "c61406227e153bc886b379be863feb7c31e49b023b8ffc2e34f63c93f511df1e"
+    },
+    {
+      "path": "tests/test_dialog_polish_v0427.py",
+      "mode": "100644",
+      "blob": "86210a9d2bc02b622972c166a340396ff07841f5",
+      "sha256": "910fc168151ed317d8538b2bb6ecbbef47530679e7d375f197dd63d17d9b9ec9"
+    },
+    {
+      "path": "tests/test_duplicate_grouping_scaling.py",
+      "mode": "100644",
+      "blob": "88287cf4a89452416b83e619a1fe9b0615af41d7",
+      "sha256": "8ddb4f1484f3d02b718926cd71cc0c88177cf7ee0bf571ea5dea37e7c6fcd8b6"
+    },
+    {
+      "path": "tests/test_duplicates.py",
+      "mode": "100644",
+      "blob": "66feb8c0f6ae7c33c50823636100187afae979c5",
+      "sha256": "de4184edb0d5e37cb62fb3125756f4fffa9c06b99cdb8f9dbadbd6b6b1805582"
+    },
+    {
+      "path": "tests/test_editor_continuation.py",
+      "mode": "100644",
+      "blob": "94c0d1158f4a783fb17f726f80430d5c1636234b",
+      "sha256": "9c4e46704a7b557fd5617ba1cfe25a62d8ffd9efbc99fea9e64e426dc9079af1"
+    },
+    {
+      "path": "tests/test_editor_final_round.py",
+      "mode": "100644",
+      "blob": "e5da576a54d305eca402925215796e93ab7f5e84",
+      "sha256": "2af09abd2d1da306ce8609097500034018a017acdeafcaab07cd451941821f28"
+    },
+    {
+      "path": "tests/test_editor_gallery_final_cosmetics_v0425.py",
+      "mode": "100644",
+      "blob": "edfbec7038eadc0f3ec249aaa2ec1ec2f44cfc09",
+      "sha256": "3d3fdc125be790726b58afb92a20764b385b101f2d656400d3bff0f66f226a0c"
+    },
+    {
+      "path": "tests/test_editor_reference_round2.py",
+      "mode": "100644",
+      "blob": "0af2e0202fadaffad50c4289c84ed650aa1dfeea",
+      "sha256": "76ab3e2955c412a04b4938b1ab92c2ae3b988e4998099e7163e5d69d4cde6618"
+    },
+    {
+      "path": "tests/test_english_v0424.py",
+      "mode": "100644",
+      "blob": "f1dd435aa34ef5e1b597ffe7c7a6f35f95d77712",
+      "sha256": "d338aa685981615cedd546dbc0866937bb41d5436d179abede2d6400c025934e"
+    },
+    {
+      "path": "tests/test_export_audit_v0427.py",
+      "mode": "100644",
+      "blob": "127e459d0a26274eb8f51c28e19eb9c1c39e6775",
+      "sha256": "067f410d10fafc5f8ba2362baef7b9db17f36aa2eb19bc206f6bbc256267fdce"
+    },
+    {
+      "path": "tests/test_export_dialogs_v0427.py",
+      "mode": "100644",
+      "blob": "d22cf212f8172e7024336c3bc42898a0fbcedea4",
+      "sha256": "44a33464f2dbd889bf431ce72ec12aff91e5f184e1e4d0e3e0b0aa0de0c767c4"
+    },
+    {
+      "path": "tests/test_export_lifecycle_v0427.py",
+      "mode": "100644",
+      "blob": "c71e2ae20b56aa1e6bee6b52bfed8b31c9066fb0",
+      "sha256": "203c96c2d523e9c822db4f483f861ae295dae64c2b502c2fd11a6d3b96556769"
+    },
+    {
+      "path": "tests/test_export_permissions_v0427.py",
+      "mode": "100644",
+      "blob": "58aabb317ef61fea6ef2ac558823901629d70d92",
+      "sha256": "92b312a5003499a9df59e4ea9c7ea36f837f0f3741b98fa9a32c87d05ed49cb8"
+    },
+    {
+      "path": "tests/test_export_preflight_v0427.py",
+      "mode": "100644",
+      "blob": "ea1571ae9f6315b7e338b4a92f2924bc26f27004",
+      "sha256": "3233e7e1f1ab97c9f5c50262c906208bd7f21f8a03e2f4dd08536f53395787ba"
+    },
+    {
+      "path": "tests/test_export_preview_v045.py",
+      "mode": "100644",
+      "blob": "51c813c2e79fe2790197ae3ce538553e513dc6e0",
+      "sha256": "db2553260687b537e83e5d7ff860af745836f4100942826b1b9a70557a7d1b54"
+    },
+    {
+      "path": "tests/test_export_readonly_v0427.py",
+      "mode": "100644",
+      "blob": "01db767c738a9461348d6f182bf774b254958a00",
+      "sha256": "253fe8e3f53c74c1ae030328b2d97250f8d9b121a2cb8581b3bf6f80ee6bdf20"
+    },
+    {
+      "path": "tests/test_export_variant_b_v0427.py",
+      "mode": "100644",
+      "blob": "d4973e53ed8c131430bb974d76f3c858e9d8507a",
+      "sha256": "cff96a8a9a96e2f1aef0b95735078ac7e149c008b45803262ab9b142a8fdb059"
+    },
+    {
+      "path": "tests/test_export_window_v0427.py",
+      "mode": "100644",
+      "blob": "3a4d3f475212a0dfd58fafd92227917c4824ee45",
+      "sha256": "3bae032a91e0cc7952ce35ebfda2aedb47c443687a6376ad146edcdab2b9cde3"
+    },
+    {
+      "path": "tests/test_exporter.py",
+      "mode": "100644",
+      "blob": "ba1f144ca381edcc64b3b07519b97545eea13940",
+      "sha256": "2ef62fd82a0c00904cd2abf68ef122cf0accd067d4643e1ceaed27e7039eeb20"
+    },
+    {
+      "path": "tests/test_file_state_v0427.py",
+      "mode": "100644",
+      "blob": "d6c8dd5ba29f7961a7f5bec0fed3c15debe60229",
+      "sha256": "162c1eaa4ce0c82a40790a6808f84d01bdbf2b88d1abf55bd36189b5eaea2c00"
+    },
+    {
+      "path": "tests/test_filename_hints.py",
+      "mode": "100644",
+      "blob": "da735c48b2227c01114a192b4cb40decd427f315",
+      "sha256": "6c26a6ad588185755b371c9520289e3c5d2cb81864c97a75f9bb4ba941b2b23c"
+    },
+    {
+      "path": "tests/test_final_icon_resources_v0425.py",
+      "mode": "100644",
+      "blob": "0ef32bafb597a71f42e0a523f0b6b26f764c372f",
+      "sha256": "c7ffc0e4f10fdc01d8dcf6915cddbe5c73daa8f02ee9f6eafe51ad29def643bc"
+    },
+    {
+      "path": "tests/test_genre_suggestions_sanitation_v0425.py",
+      "mode": "100644",
+      "blob": "b4bf940707364dd87cc5420b3315e268c049c18c",
+      "sha256": "837e4fc796f6109bae20cf5a33e5ef338149fc5f6e83d82a027a989d7b42ba12"
+    },
+    {
+      "path": "tests/test_help_content.py",
+      "mode": "100644",
+      "blob": "3e0760d6e4b1cac69bb482bf3c9831b8dc792045",
+      "sha256": "f11bac548fce1382b12605db15bbfc28369aca1bbbf075704a509dbc82630c93"
+    },
+    {
+      "path": "tests/test_i18n_v042.py",
+      "mode": "100644",
+      "blob": "d2cb9389bbc50b6278404b2fafb6a1249477e6da",
+      "sha256": "8064cbd59bd1176eb161bd78816e587d21011e531614486ba3e20bf3b34d9ce1"
+    },
+    {
+      "path": "tests/test_i18n_v045.py",
+      "mode": "100644",
+      "blob": "4effb97a51c5adba55a14a2d3de966e2d82d9f4a",
+      "sha256": "01842eceb5833cfee07f6fcd76e9b1a19168ba7deee514ee23625c46398900c9"
+    },
+    {
+      "path": "tests/test_identification_qt_lifecycle_v0427.py",
+      "mode": "100644",
+      "blob": "836a060a68f472356ba246ff0bfb1cb7c33b67cd",
+      "sha256": "5432d41f1d297888ca976090ae52a9fedf559dc65da972bcc419e7adbd8cdbaf"
+    },
+    {
+      "path": "tests/test_identifier_job.py",
+      "mode": "100644",
+      "blob": "5fba14a8f41988bea7eedc789b557b503bdd451b",
+      "sha256": "dc808c4bebb682625ae2887b5fbb3eab59d13637a43b09f19873a3176d58a9cd"
+    },
+    {
+      "path": "tests/test_incremental_scan_v0427.py",
+      "mode": "100644",
+      "blob": "d10d43964f4dff9adb7edd8632e4d12004c24fa6",
+      "sha256": "fd15103c3a9c31a39b973430aadc7b474581781d1caa5cc09d850695460e8f8f"
+    },
+    {
+      "path": "tests/test_integration_v040.py",
+      "mode": "100644",
+      "blob": "b2ffd35c45841f30879852f1aff7b2de5f0384dd",
+      "sha256": "33855529aaf750c33ed78a8b1a1c2ce4c2cd5adce8122cb3413809c3623e3904"
+    },
+    {
+      "path": "tests/test_itunes_provider_v0416.py",
+      "mode": "100644",
+      "blob": "e75405b55eddf3746ee9d73be334bbada15ba1fc",
+      "sha256": "96d3c755377ea761dc485ee02d9007cbdbfb8f96e17e2623d3254e25557f13f1"
+    },
+    {
+      "path": "tests/test_legacy_adoption_v0427.py",
+      "mode": "100644",
+      "blob": "05bdcb3d5f89908c2b42c4358d8ff6b5974e4a4f",
+      "sha256": "ba9e8d5ce465fbf6c16d68ca95fb59cb205a5c3cfb23657dc2fa5a82382a0600"
+    },
+    {
+      "path": "tests/test_library_completeness_v0426.py",
+      "mode": "100644",
+      "blob": "03f35afe6bae5008092cad528801de765ca42082",
+      "sha256": "883018335f0de5943c60de62aac429e805d7f3998993c0aec0a14bc7e6fa65bb"
+    },
+    {
+      "path": "tests/test_library_controls_v0425.py",
+      "mode": "100644",
+      "blob": "10f48d3586423e3f22f35b16f81ea5b4c99a5501",
+      "sha256": "62d5830df72c7208e5b607b170ce61b558782db12a57390976ef568f6aacf7ed"
+    },
+    {
+      "path": "tests/test_library_details_table_v0426.py",
+      "mode": "100644",
+      "blob": "63bbef5ad226a744e2abc447b468648ea10bbad0",
+      "sha256": "5fee70a7a06ded7b6ee029b42999c7b5665e6b19a6b09c065a535e050cc7e940"
+    },
+    {
+      "path": "tests/test_library_file_ui_v0427.py",
+      "mode": "100644",
+      "blob": "c75d9884ec40884d1e1df2aa4552d1f078a2021c",
+      "sha256": "c962563aa5dbef2eb8de35f4b9fe19be352c61f9861dbb1fb9610a2fdaec2ca2"
+    },
+    {
+      "path": "tests/test_library_final_details_v0425.py",
+      "mode": "100644",
+      "blob": "5e13e2c0ec750af0f7017d67444da905422a0007",
+      "sha256": "bfe403260545ba187ad71115ec4dfc712383aa7b5d510869c34f415acab1f2bb"
+    },
+    {
+      "path": "tests/test_library_legend_filters_v0427.py",
+      "mode": "100644",
+      "blob": "8d2a1e562226b2ca2bad9f01d1a9160c937be768",
+      "sha256": "3a40526cfdd2d0700055b356b9e503dd424cb1c01bb565df5d07158527befb90"
+    },
+    {
+      "path": "tests/test_library_legend_focus_v0427.py",
+      "mode": "100644",
+      "blob": "6da7e12ad59c8b2ab450ce958c3544d2f6989405",
+      "sha256": "93a7ff8c2a54909b0a93e02c3d0c7990203759e44be03f61c9915787498587fd"
+    },
+    {
+      "path": "tests/test_library_manager_v042.py",
+      "mode": "100644",
+      "blob": "4015be53ac2e1b03bd9b139c502509b1a7a18d76",
+      "sha256": "4242d6acd518c662422ebfacbfe4bef433e7b3976fa11369c8211725c5ada12e"
+    },
+    {
+      "path": "tests/test_library_migration_v0427.py",
+      "mode": "100644",
+      "blob": "6f847f3b19357e5472162847265a797c73171b33",
+      "sha256": "8c054eb27c0e565110855e91a75264d42f34a77225b16e31cf812dd5274aace3"
+    },
+    {
+      "path": "tests/test_library_playing_state.py",
+      "mode": "100644",
+      "blob": "1cc5e14587894ad247c774ae3dd8cd50ed1e3f8d",
+      "sha256": "0e541baa38b2db77114f75c87efc9b183ae6b3a1c5fab89b01e1f23fd2ba7d8d"
+    },
+    {
+      "path": "tests/test_library_profiles_v040.py",
+      "mode": "100644",
+      "blob": "43726ea08f69ecc43ec69be4149d895cf44850f8",
+      "sha256": "4c1873071fb5dcf1a7576be67fa9aaa3fd7d11dec07f71f3b93295cfd32d5f46"
+    },
+    {
+      "path": "tests/test_library_profiles_v042.py",
+      "mode": "100644",
+      "blob": "598dbae85a2284556578f835721b8b15b9aaf7ea",
+      "sha256": "b2a1cfaee6e3e8b864dd934684632ccf19e0a9b622c705c53acd6964e1c3555f"
+    },
+    {
+      "path": "tests/test_library_profiles_v045.py",
+      "mode": "100644",
+      "blob": "29f040afad9328a6b6a9d5c5457e82a7beae60fd",
+      "sha256": "9b48d73391c71f18aacd9920cd650a6a82c21234966dfd3c87c151a60ddabe7e"
+    },
+    {
+      "path": "tests/test_library_reconciliation_v0427.py",
+      "mode": "100644",
+      "blob": "73030d006647b1e2b165c9514ae37bcdbb1507a2",
+      "sha256": "c07fe7ae1790e4616fdccbc79ac9288978fb022cca5666d7df54aaa2c307cf1d"
+    },
+    {
+      "path": "tests/test_library_refinement_v0427.py",
+      "mode": "100644",
+      "blob": "e0b636af98382d70097f55f2929f70059bec6e65",
+      "sha256": "671da320ce02e904fdd5487572ef0307d0dd99afe98295f0fcfc582be9251e2c"
+    },
+    {
+      "path": "tests/test_library_service.py",
+      "mode": "100644",
+      "blob": "190d56cccbd653c0a57bfcb21067f8c26da6427a",
+      "sha256": "e421c4482ccc4c81135dc83ffeaf4b5f6cd68c5a96d73c95104b3f6106f0e978"
+    },
+    {
+      "path": "tests/test_library_status_icons_v0425.py",
+      "mode": "100644",
+      "blob": "f855171b974ee7025756dbf86447447b9a3b002a",
+      "sha256": "2b5cec5ba0914d45a3eb904028b92fa82e0370519029ffafa6ac117462fd3904"
+    },
+    {
+      "path": "tests/test_library_technical_states_v0427.py",
+      "mode": "100644",
+      "blob": "5aa6d554a0ffc7115127492a1ae4c81edca5d633",
+      "sha256": "3c48f63a9cc443af1cb265d4ab70f15336d4c5d040fba05eddfa1d703ca15584"
+    },
+    {
+      "path": "tests/test_library_toolbar_polish_v0425.py",
+      "mode": "100644",
+      "blob": "d85ffc6ae3f59684be13fe84b9dcd671033f2188",
+      "sha256": "23c458b673e8110e7d826117e053ea76b5a14105a628554a5125dc35c2517503"
+    },
+    {
+      "path": "tests/test_library_waveform_switching.py",
+      "mode": "100644",
+      "blob": "8ab10fb2dd2fead5d903b0827f1202ab0d6ef18a",
+      "sha256": "6c9ef1a5d36154fdc861b7ff9486d87a3f9bab0d3f8bf019d8a16ab63176f610"
+    },
+    {
+      "path": "tests/test_main_startup.py",
+      "mode": "100644",
+      "blob": "b5db990aeb1fd5bc6a29ebf6a4579efefabcb895",
+      "sha256": "6319e5a7ec49ca2e8e843149ebb3959023828ffdc0f312e9fd38b63728526001"
+    },
+    {
+      "path": "tests/test_managed_playback_v0427.py",
+      "mode": "100644",
+      "blob": "6d7fe38b4501bf6ba1a3eb3fd7c44c847467f933",
+      "sha256": "2f6dace2aa6e805e49cb35422b3d42964fa6efe8b3a053d8a181d857f1f2d4e0"
+    },
+    {
+      "path": "tests/test_manual_edits.py",
+      "mode": "100644",
+      "blob": "42327d5ac9c4883405e92491ee216f2bbaa6bfbc",
+      "sha256": "71de0473190dc7eab2907653553e79704d9ea5f632bdae9d5489211840292afd"
+    },
+    {
+      "path": "tests/test_metadata_editor_balance_v0425.py",
+      "mode": "100644",
+      "blob": "6dade0e3d4d9fb60f4a1961799fa50dc617388f2",
+      "sha256": "8819d627b5f7a44234f705dae93612c971ea09f0876abfb8cdc49d558d11440d"
+    },
+    {
+      "path": "tests/test_metadata_editor_compact_navigation_v0425.py",
+      "mode": "100644",
+      "blob": "ebe2d1cd2687ea658083feb6b5e3bac60459bd1f",
+      "sha256": "b0867d745edfb2a3c4007e92eb3978cc9d04205ccb380fa70af91214f178ea56"
+    },
+    {
+      "path": "tests/test_metadata_editor_details_popup_v0425.py",
+      "mode": "100644",
+      "blob": "a156c7e78f8be56418c7b78e3eb3152f0b1f219a",
+      "sha256": "805392dfbcefd5c39e18978fc10a06bd3a1085dde9c56e103aced54012c1b3ae"
+    },
+    {
+      "path": "tests/test_metadata_editor_final_ui_v0425.py",
+      "mode": "100644",
+      "blob": "69f00398c3b516ca6c403a137822f3a0c9035d63",
+      "sha256": "a2fa1f92ea09eb40f2915ac5194c3b2b83128e2192d2cd240102c9c35a44a5ce"
+    },
+    {
+      "path": "tests/test_metadata_editor_panel_states_v0425.py",
+      "mode": "100644",
+      "blob": "bf366a77fab840f035305c1b7717f12ccf30af4f",
+      "sha256": "fe85cffc3f9cb7fbc6cfabf63ca57eba7fa81ffcefb4c4d24cc0cfcf549ad23a"
+    },
+    {
+      "path": "tests/test_metadata_editor_refinements_v0425.py",
+      "mode": "100644",
+      "blob": "be1ad784db55b38a68848186c9c12f2b35e221a3",
+      "sha256": "7b8da975f423465177294712ab538d98a5905a0bc0ac956505c278fdf8ea2a49"
+    },
+    {
+      "path": "tests/test_metadata_editor_saved_notice_v0427.py",
+      "mode": "100644",
+      "blob": "0796ea2e6bef80dc9a36e165b68af71fb753d653",
+      "sha256": "5bfe02ce4ba757e47ecf780d1f673dc28e7b05d7b0d8b8c97cfcc59aee1d0e55"
+    },
+    {
+      "path": "tests/test_metadata_editor_states_v0425.py",
+      "mode": "100644",
+      "blob": "101463b32c65e8d8ccfa367ce2a8fe03144e67e1",
+      "sha256": "0e9022b018daf54d561766998944369c5d7f427ba25e10f3edf1f4d063b55b13"
+    },
+    {
+      "path": "tests/test_metadata_editor_summary_actions_v0425.py",
+      "mode": "100644",
+      "blob": "cebc4a380c03f9275485717eece4975aab93eb98",
+      "sha256": "991a431441a753e99124b43760d351f4b27704b2069f46ed9830f3cfc58c4f8b"
+    },
+    {
+      "path": "tests/test_metadata_editor_windows_flash_v0425.py",
+      "mode": "100644",
+      "blob": "8441c499406b7989aa5ef1d41a32a55fbb8ad9d2",
+      "sha256": "df1a418f2e60d9654c6bb95119342fca9c43eac13404e4055b0a2073cc0e85f5"
+    },
+    {
+      "path": "tests/test_metadata_source_expander_v0425.py",
+      "mode": "100644",
+      "blob": "8930c5d9f8bfe03a0d9a6feac94cb650493cf024",
+      "sha256": "4b4ccde2ddc7002a1ff42b6cd872636afee08e15f0e29e359611f6e11c19f950"
+    },
+    {
+      "path": "tests/test_metadata_ui_v042.py",
+      "mode": "100644",
+      "blob": "a54b25127a767aa09d20ab215f9f1ef28ff87a7c",
+      "sha256": "415d162386bbd605c7d3561d921053e792dec7d14b891662267e9d37cdd7942f"
+    },
+    {
+      "path": "tests/test_naming_copy.py",
+      "mode": "100644",
+      "blob": "f20c1f66fab5a6e1b11aac41bc943981f2b42e52",
+      "sha256": "097be44173457674963d5fa9d0a1e0fce4f9e202a8524b68ef525505296ea13c"
+    },
+    {
+      "path": "tests/test_normalization_ui_v042.py",
+      "mode": "100644",
+      "blob": "70eecfa3e352fbb66ccde5d3563a1ac26f3f42b8",
+      "sha256": "29d1d733aee2bf0059d778893af10fa8a387120b72d737bcf09cef4610fcf61e"
+    },
+    {
+      "path": "tests/test_normalization_v040.py",
+      "mode": "100644",
+      "blob": "5bc7a23d02fea4ffd59e62bb9082f8067a877875",
+      "sha256": "cb34a2b4368e5cea9b4f75945e787b5f3fcc8fc4f61bdced1a6fbbf4048a2152"
+    },
+    {
+      "path": "tests/test_online_lock_v047.py",
+      "mode": "100644",
+      "blob": "ff5070bf13aac926310eab0d44e1b61ea9d84674",
+      "sha256": "04672db1bb889814f3af099c95cbfeb0b6bfd85cd1650a0c6a51bfc9f7d4d475"
+    },
+    {
+      "path": "tests/test_output_reconciliation_v0427.py",
+      "mode": "100644",
+      "blob": "9bdada4161f7b7f6e302e15b2ba8baee1ba5f20f",
+      "sha256": "9096718b8c5d2a66c0a140208155c41775206fbe7c6b9f0a8dc8fc02d339fcea"
+    },
+    {
+      "path": "tests/test_output_session_ui_v0427.py",
+      "mode": "100644",
+      "blob": "3fdc5b06f20762e1dbe197f3c0037d2ea6ac8ef1",
+      "sha256": "985bd27f4b3c09eb8b905bcc21f29de2cd74d9df64f0a107db65055062bf6e10"
+    },
+    {
+      "path": "tests/test_output_spec_v0427.py",
+      "mode": "100644",
+      "blob": "abd41a73001a3cac8ceb1fd2e07b7cf993a5df86",
+      "sha256": "9186ebb0da343cb6267cbf5437e68c59c813f4e6085cfa334f9cc260b3bf9c50"
+    },
+    {
+      "path": "tests/test_player_ab_sync.py",
+      "mode": "100644",
+      "blob": "91e30d2b44eaf274d9c7f3fe7d7d9ae08a2258ef",
+      "sha256": "e328eab8a8108008d6f2ac612a286e272eafcfb43b933e9272458e08e61ddef3"
+    },
+    {
+      "path": "tests/test_player_reference_followup.py",
+      "mode": "100644",
+      "blob": "a8e9fd3d230d726c5d2324d4998398ddab1ece69",
+      "sha256": "0d1e7d5de1d08b679b84c2585f8d53608c96449e4dc0d7cc16bfee681d80efc1"
+    },
+    {
+      "path": "tests/test_preferences_v040.py",
+      "mode": "100644",
+      "blob": "d3c59191911b8b89d955beaee270cb624715469c",
+      "sha256": "82c5cb23aa5091ac77b687b3f489a43032d3e38ba6a7e209f712cf2719ba8a7c"
+    },
+    {
+      "path": "tests/test_provider_parsing.py",
+      "mode": "100644",
+      "blob": "c141b811cb9afbc25e935945149fea6e1a325734",
+      "sha256": "b49b7cc94141cd9a37b107f480263beff9a8896dea2b731a844e984c146bbf2c"
+    },
+    {
+      "path": "tests/test_provider_settings.py",
+      "mode": "100644",
+      "blob": "9f278c87bb49fd0e59d816c4537197c5fa7052d4",
+      "sha256": "9a14bb161714f4120890a6f4579f7b1e091f34fd1d67cc537c65b1390907a0a9"
+    },
+    {
+      "path": "tests/test_qt_api_compat.py",
+      "mode": "100644",
+      "blob": "9c547a5768eb4f12f3c33bf2d60528c0602913ed",
+      "sha256": "4bab04f7e67bad8241d8f8557d45b83ae25cfbdb49629c1b332c8bd302025472"
+    },
+    {
+      "path": "tests/test_repository.py",
+      "mode": "100644",
+      "blob": "40f7c9dc619b954e21080610374e7a3a9e7930da",
+      "sha256": "7e4a5547ccebae92b6d64561bf284c81e1eb38307d02c8b507adeae07defb9b3"
+    },
+    {
+      "path": "tests/test_reset_v043.py",
+      "mode": "100644",
+      "blob": "4e3e0c9de0afd27c72ecef1f3a66de6214a8bd5c",
+      "sha256": "2a0d3d62c5ead067fb4ae75426e6656727369a576b5aed916452af11e965493c"
+    },
+    {
+      "path": "tests/test_resolver.py",
+      "mode": "100644",
+      "blob": "12189b0c35e6f6c00883a01dea909fd14cf532ea",
+      "sha256": "0255f9553eb9c0e2397a259d045ce05420ed908a6acafdd8511d0aa05c6d68da"
+    },
+    {
+      "path": "tests/test_restart_workflow_v0427.py",
+      "mode": "100644",
+      "blob": "02236a77a232d0f167144335da9756dfd1490cc4",
+      "sha256": "61bea0921ded8b4d1267981d3c4305b442c6dcec8f040ea04fd56ed84f9f5ec6"
+    },
+    {
+      "path": "tests/test_scanner_probe_tags.py",
+      "mode": "100644",
+      "blob": "fd110b05fce483b9d0a52e07ead416e2b26d6716",
+      "sha256": "f092a9e94daf4fa4fc4945ed280c4d08b51fe77ab84bd176718839fdc564f0f6"
+    },
+    {
+      "path": "tests/test_session_report.py",
+      "mode": "100644",
+      "blob": "c43f8bc2a69214cc08d0bdf8dff29faf7922d810",
+      "sha256": "5bc1927d8433aecdbe8d9bfffa01662f1e5eb6f255fd34bb1a6c87dd025fdbfb"
+    },
+    {
+      "path": "tests/test_settings.py",
+      "mode": "100644",
+      "blob": "5dabeeb375bb842ddefbd58cba087afa83487f90",
+      "sha256": "17a417a381af08f7c6046c94e3adffe443f8a55d2b4d4d2eb66920b09d391f95"
+    },
+    {
+      "path": "tests/test_settings_paths.py",
+      "mode": "100644",
+      "blob": "257bba847185a5c44b269777769ed6364e14f6a8",
+      "sha256": "9c8e564fcaa2fbd5d715661c3f0df1a01508383622052b65267c35d1963bb515"
+    },
+    {
+      "path": "tests/test_settings_v042.py",
+      "mode": "100644",
+      "blob": "6aed8265587a1e605bad7f62dfd849ff0d223c9c",
+      "sha256": "8fd228ba600821fd0f3a0c4e526d0881ce345b23e3e34e016ce84b90fca355d1"
+    },
+    {
+      "path": "tests/test_shell_reveal_v0427.py",
+      "mode": "100644",
+      "blob": "b608c5c0bd321bc5bbe0d1653baecb9a17dc3473",
+      "sha256": "b296c261d1822356305365677866cd1baa72752b7e3735f38e7a7a1961f8dedd"
+    },
+    {
+      "path": "tests/test_start_dashboard_v0414.py",
+      "mode": "100644",
+      "blob": "4d71ca8183107d63d7135c7dccb84f229c117ef8",
+      "sha256": "bb2fd450acb2fdb3c049cd51d657a70c095432357ceec0e1fb4192a7a99c2142"
+    },
+    {
+      "path": "tests/test_start_final_polish.py",
+      "mode": "100644",
+      "blob": "af8665b6c662c069ef36b918fea4e542dfd75baf",
+      "sha256": "4967931134d66e31938f31dbc4d4419308221191169c19d2ae0e464d9e50fd2f"
+    },
+    {
+      "path": "tests/test_start_library_panels_v0425.py",
+      "mode": "100644",
+      "blob": "5be35476c66d88e03cebd7ba827eb13827cc1a0a",
+      "sha256": "4942c2848134056efd777aac4a8dbfeffd905132fb4030b0c7ea214d8224c282"
+    },
+    {
+      "path": "tests/test_start_refresh.py",
+      "mode": "100644",
+      "blob": "351c89866c94609c2e6403f97a1e25f36ed43f34",
+      "sha256": "fe0c4458b4ff7cb0f6bb2ea6d3ecf960b3ad26cfd5fdc87a1464378a2b86dde9"
+    },
+    {
+      "path": "tests/test_start_scan_sources_v0425.py",
+      "mode": "100644",
+      "blob": "56a6571b017f52b325c7a2900a4addc982624331",
+      "sha256": "e99141673d53fa5c3c89ff098b618b4a545439121eab46b5a3996462e4739590"
+    },
+    {
+      "path": "tests/test_start_status_checkpoint_v0425.py",
+      "mode": "100644",
+      "blob": "65f5c581f517f15e701e85828d2a797b019b8ac6",
+      "sha256": "fdba8a4c6512440ec445cdb71ff0dfc4399baa60a57de6429b733147bcb1f427"
+    },
+    {
+      "path": "tests/test_start_studio_redesign.py",
+      "mode": "100644",
+      "blob": "ae75d2375615791b911b9a8fe065ff77bbdc22d4",
+      "sha256": "e8547965c7f3ea3314b914e5f0846e7d6f6b8ec1d214c908221ee0fd749a239d"
+    },
+    {
+      "path": "tests/test_startup_language_v043.py",
+      "mode": "100644",
+      "blob": "6f4c9860e92fc74815a293b9e4db7af78459b1a9",
+      "sha256": "cbb0b882f9f66689cfeafba52d29a4b52e2f7ab4582f21532f218a94be664915"
+    },
+    {
+      "path": "tests/test_startup_loading_feedback.py",
+      "mode": "100644",
+      "blob": "90c3e15a65173b18c7da243c7f6991aeaf70c796",
+      "sha256": "d8c7d1e473b0b3bc7c6865a04a83c92d2d1fd8d17ab9573ce1b4976388cc550e"
+    },
+    {
+      "path": "tests/test_stat_compat_python311_v0427.py",
+      "mode": "100644",
+      "blob": "ef3331ad7058bfc25d36d562a08e2e134dd87108",
+      "sha256": "82bd2174078b939dac5a92d4e2816e5ea2cc50179cbf2e6aeef2f0a5280decfa"
+    },
+    {
+      "path": "tests/test_stat_consumers_windows_v0427.py",
+      "mode": "100644",
+      "blob": "faaa6e4197b4784a6029fd4cb2700c5a90501023",
+      "sha256": "3803c655a04332740250869038ed3f1aa8c77d52ac758d3d647fb7f6eb66cf29"
+    },
+    {
+      "path": "tests/test_tag_writer.py",
+      "mode": "100644",
+      "blob": "2fd82d00275b9db6f256c943b845f59b775775d9",
+      "sha256": "c0a36d6d75495d40fcafefcb045c8c7d7008956f70a2680245344d4f6d89bc74"
+    },
+    {
+      "path": "tests/test_theme_import.py",
+      "mode": "100644",
+      "blob": "1c371e80d4766d7b46831b9017c00a5d2373acf6",
+      "sha256": "f20d96f393e9c320b1e27202507b4e6cd85f32c465d4380c0d75e18651bb2318"
+    },
+    {
+      "path": "tests/test_theme_runtime_parsing.py",
+      "mode": "100644",
+      "blob": "9d3879a3f5e1f2d2038a6823f68d6c6544bbec9f",
+      "sha256": "9472a6937437c5559ed9d70532a4fe3ae296b78ecae60f845c3f55ab1dff4d3a"
+    },
+    {
+      "path": "tests/test_theme_v040.py",
+      "mode": "100644",
+      "blob": "4c9d71691636176b1a8beca59a996282cc7ece35",
+      "sha256": "32faf448f83c94725cabbf61d858fd1a3217a136f2bfa07b3abea0a7f2116ccc"
+    },
+    {
+      "path": "tests/test_tools_v040.py",
+      "mode": "100644",
+      "blob": "f9cddc35c793146b132b4de910484cf1c4014c60",
+      "sha256": "a360286fd3e8ffcc5f473f3cf8179b6c214034c109a7bb2f701e708eb4e2f094"
+    },
+    {
+      "path": "tests/test_track_switch_stress.py",
+      "mode": "100644",
+      "blob": "45122646f19148915035c40ca34fd8c5df8e354a",
+      "sha256": "0a5e29259e553c958d11456bee4384f37cba8d073b1be261f96d77ca1a550aab"
+    },
+    {
+      "path": "tests/test_ui_layout_contract.py",
+      "mode": "100644",
+      "blob": "2648f45cf83a05afa5b96d2fb001781aeca327f5",
+      "sha256": "2a36393e184eb7f8a21cfeb44599135404fd8a69fddc05bce277676845e4b17b"
+    },
+    {
+      "path": "tests/test_ui_state.py",
+      "mode": "100644",
+      "blob": "81aa1622ce1a4fc6c3ba0986f33b82ff5ce5cec3",
+      "sha256": "d868b4984c169df389331fa72dc600a19e97fa8ac698eb4b343089d6b80e3de5"
+    },
+    {
+      "path": "tests/test_ui_v040.py",
+      "mode": "100644",
+      "blob": "e3326992dd250ea8c80074a8ab62e1b572c17093",
+      "sha256": "2dc812887facee3059ccce09aecae155579268dd01026c84ddbce5a760c2ba97"
+    },
+    {
+      "path": "tests/test_v021_contract.py",
+      "mode": "100644",
+      "blob": "4ebc1d95357eea8f68f6b4b2eb99bb183b463819",
+      "sha256": "085acb485c3a8f9342fcaf1cdaba77be20fb8018ca126aa273922c9492edca55"
+    },
+    {
+      "path": "tests/test_v022_contract.py",
+      "mode": "100644",
+      "blob": "a44b9b2c2c977fb8ef677ced08eed6c880c5ff4d",
+      "sha256": "71dddc64800497840daaf076d0253a49d39ef2e36160c371322af80ba787beab"
+    },
+    {
+      "path": "tests/test_v023_contract.py",
+      "mode": "100644",
+      "blob": "834680ff5586ca5a334570fbc69b6cc9a4edbc60",
+      "sha256": "45a12d0bdd618331129cfad7b9dce4a5289b854db5b42fe06114d251ac093b6b"
+    },
+    {
+      "path": "tests/test_v030_contract.py",
+      "mode": "100644",
+      "blob": "e6aebc2ee91fe6c41f57d209c52f2efc0e23ca48",
+      "sha256": "92215faa802ce85f98d7a179d8bf6452ddbe5c95c9ef36b79642979064fdedcc"
+    },
+    {
+      "path": "tests/test_v0410_contract.py",
+      "mode": "100644",
+      "blob": "80ea8c9501dd2fc61aecfd84b2efdefb0bf5cb77",
+      "sha256": "c0eae47da6a9b47b1356fcf7b0a19e838fa2c248da2c39f2d9f591370355536c"
+    },
+    {
+      "path": "tests/test_v0410_duplicate_visibility_legend.py",
+      "mode": "100644",
+      "blob": "c23bacdea82e9141a8738edc43b8ae4a9a1d75e9",
+      "sha256": "bca4f4922124ff1cc39a25cffa60dd996c37390cf028b0a82d51746bcc0def6d"
+    },
+    {
+      "path": "tests/test_v0411_contract.py",
+      "mode": "100644",
+      "blob": "dd90bbc6f6faa3694a247ea48a24010ec36c04b4",
+      "sha256": "ad7faa044f245ed7ed09686b6ef00ed5a2108ecd4eaf2e16187e4df956964928"
+    },
+    {
+      "path": "tests/test_v0413_regressions.py",
+      "mode": "100644",
+      "blob": "3c7027292cfb7a183d0e8df9a3888629496344a4",
+      "sha256": "6342855eaf20a7e48729504c5f4c8da12f918ffcb414dcf3d3b7c689726869e3"
+    },
+    {
+      "path": "tests/test_v0416_runtime.py",
+      "mode": "100644",
+      "blob": "ebd6de908e3f849872696bf5ca672d8e637df2f1",
+      "sha256": "1e80e65a28f018940a69cecf58c28c218fb3efa54064fbf4efdaa0420119a2ea"
+    },
+    {
+      "path": "tests/test_v0418_ui.py",
+      "mode": "100644",
+      "blob": "acf25bd22ad1370cf8b47847d09633b101f3846a",
+      "sha256": "06b9d72266491f9ae94cefeb51d54a9477b0ee7d0b2cb240dc04f46240c6d63e"
+    },
+    {
+      "path": "tests/test_v0419_reference_ui.py",
+      "mode": "100644",
+      "blob": "d6833ec0121e0de9e4415bf3071036ae03711456",
+      "sha256": "1f8a7c153cf8dda066c442652f0317468bee70ff9909a753543ccc7cdeb98aaa"
+    },
+    {
+      "path": "tests/test_v0421_editor_convenience.py",
+      "mode": "100644",
+      "blob": "cc2b0504225b34126d11c99d2bb76751302aca0d",
+      "sha256": "2e9ed77cb7fcec96e27175bb525f580a1053f9447f50a6cfaeda7a41afa6af58"
+    },
+    {
+      "path": "tests/test_v0421_followup.py",
+      "mode": "100644",
+      "blob": "1c976d9b1537fb2bfb1fac9d64e42346ee3c0d28",
+      "sha256": "082373c5175550e4891e201d7585d0aa94bfbe09c754daafaf8ddfc8068f7122"
+    },
+    {
+      "path": "tests/test_v0422_contract.py",
+      "mode": "100644",
+      "blob": "bafd6468c0ee8cb5241e72b282bd02569610cf4f",
+      "sha256": "f86bc52f7fcc7f347ad38141a27b314e13d620b75d428958abbd0f7493dae807"
+    },
+    {
+      "path": "tests/test_v0422_repairs.py",
+      "mode": "100644",
+      "blob": "8ad64278e130f97b1f9c9599a4d1f1f9b96ad2a6",
+      "sha256": "3e1d673b189940b5ea5902bc1ac1367f551ba7afadc59252a6592e7c830558f1"
+    },
+    {
+      "path": "tests/test_v0422_windows_polish.py",
+      "mode": "100644",
+      "blob": "08810804a675893bc3fa7ac863704ba8c0120a5a",
+      "sha256": "0c3e1cfac9e73e981ef1fda1d178df9e6fff95e74bf3a42e146b346674ac6f65"
+    },
+    {
+      "path": "tests/test_v0423_settings_and_copying.py",
+      "mode": "100644",
+      "blob": "5bb17fa73e7101b4f7ee2da9430e00af582d77df",
+      "sha256": "700af644d293147f0733eac774e942cc97b1c899fbe8bc022ce2934ac69e42e2"
+    },
+    {
+      "path": "tests/test_v044_contract.py",
+      "mode": "100644",
+      "blob": "372165258c7900f28899da333d17069a1784357d",
+      "sha256": "158ea0a010eb92cf027231603df77e79ce4b27dbd6785eff865557579023c602"
+    },
+    {
+      "path": "tests/test_v045_contract.py",
+      "mode": "100644",
+      "blob": "90be1d80532d15c9383b274637f8e9f28508ccc6",
+      "sha256": "9e4ea882419a835882835ab0ce17ac8b630cbb447fe1f37fa2cfac7db7a165aa"
+    },
+    {
+      "path": "tests/test_v046_contract.py",
+      "mode": "100644",
+      "blob": "b6b181d9e8de3c23a269707ce7391dacece889bf",
+      "sha256": "d564fcb4fc9b28a1344c5b8a4eb16d8234be51952eb5f6e692f1938d465ef1af"
+    },
+    {
+      "path": "tests/test_v047_contract.py",
+      "mode": "100644",
+      "blob": "7e8853c56d02745d8d74e7bc3dc3bdc08c5f93b1",
+      "sha256": "e3b45a4050465e6e6304c35d17f0088d5660021999d2176678399994954e51a3"
+    },
+    {
+      "path": "tests/test_v048_contract.py",
+      "mode": "100644",
+      "blob": "2142122d5e96e977136333a3ac3bc824b134bf71",
+      "sha256": "2dc682ba9b273cf228175816ab254b897434cb53a9818b1d8726625406a0959a"
+    },
+    {
+      "path": "tests/test_v049_contract.py",
+      "mode": "100644",
+      "blob": "d728c9f0e176ae4816bbe512a35f8f04c6d0b5b9",
+      "sha256": "73367415671598bcb32e4134688ae478e5944fb89fc221b9a2bab7e712e0ee15"
+    },
+    {
+      "path": "tests/test_variant_d_player_sources_v0425.py",
+      "mode": "100644",
+      "blob": "de693813fbfea272c6eab491ceddcf240f3655ca",
+      "sha256": "892886bd82e87e5cc3bc183d7251e98c4aceb4377b26e195714326bff397bffc"
+    },
+    {
+      "path": "tests/test_version_families_v045.py",
+      "mode": "100644",
+      "blob": "4f32f073ea78f19f04e038722f125fe205c74fd5",
+      "sha256": "d452b550c0c30ad40e6d7f5592f53db31e4794d66238e8b1fbefddf993047989"
+    },
+    {
+      "path": "tests/test_version_info.py",
+      "mode": "100644",
+      "blob": "ed128bfc48048e5e8b90a41e90a2c127e470115b",
+      "sha256": "b3811a184b5e14f05c6ef24422cbaf1156a01a54550b0e1f96642f2f51a0df5a"
+    },
+    {
+      "path": "tests/test_waveform_process_safety.py",
+      "mode": "100644",
+      "blob": "efde10da3266c844a3ebe3fbc6ea460d8e39e435",
+      "sha256": "35bec0cd637f3eccb63d0e5dac519ef2a3f7d7ef95a8aa31dcf40c8ba6746131"
+    },
+    {
+      "path": "tests/test_waveform_signals_lifecycle.py",
+      "mode": "100644",
+      "blob": "96d578dcf1287ba7e96b7705e55d2723194cec90",
+      "sha256": "da4c8925f6364b6510178e8fc1b397494cc2a303ce536601edbf48327acb175e"
+    },
+    {
+      "path": "tests/test_waveform_submission.py",
+      "mode": "100644",
+      "blob": "4ea347d9506362587d0b3fcad7631983389dc4cf",
+      "sha256": "23f5a70c5f3a68b1bb560be1f814f5a17308c45486aee85f29568ff9ca453b41"
+    },
+    {
+      "path": "tests/test_window_geometry_v0410.py",
+      "mode": "100644",
+      "blob": "be79195c3a2b76ef9a49f8d656170a223635ddb3",
+      "sha256": "2b9d5720d3585a37c04b996fe335b1aa6255c7dbbcc5f1e47f882f9b4c50fa42"
+    },
+    {
+      "path": "tests/test_windows_output_identity_v0427.py",
+      "mode": "100644",
+      "blob": "88efdd6eda6488ac2e3b5532b94067d0f2f02ace",
+      "sha256": "661c5e5a5351486186eb2b7533606a1ac7ee0f98735b17aad1e212c1e6226502"
+    },
+    {
+      "path": "tests/test_windows_output_native_v0427.py",
+      "mode": "100644",
+      "blob": "e4edf198223843d743e6425d9297f46a85a77907",
+      "sha256": "bcccc254141de7fb1955f109d82d92abb1a8d8bd79498d877def7c6fcad35fff"
+    },
+    {
+      "path": "tests/test_windows_packaging.py",
+      "mode": "100644",
+      "blob": "bcffb05b7834142391ae45c08525d4d2bc163610",
+      "sha256": "ae48bbc933d1091033a9a624a2828a18dc066c2d4402ee6604f7e9aa9d01af74"
+    },
+    {
+      "path": "tests/test_workflow_toolbar_v042.py",
+      "mode": "100644",
+      "blob": "e75da697bc841926986d77535e088ae1021011cd",
+      "sha256": "eb501c20aad1725a6afa7990be3b745497daf86bfb6ebc86cffbfb61f1fba5d7"
+    }
+  ],
+  "full_patch_sha256": "40c2bc4f8ed54e9959a6f50c6c09c5c98c6749b9b04e7c72028478e0dad388a9",
+  "delta_sha256": "6b0a7dc8a0cb389526433404290913f7d65576595c13eb498e83bf8ffaf5161a",
+  "status": " M START_ALO.bat\n M run_audio_library_organizer.bat\n M scripts/bootstrap_windows.ps1\n M scripts/build_release_windows.ps1\n M scripts/build_windows.ps1\n M src/audio_library_organizer/domain/file_state.py\n M src/audio_library_organizer/jobs/file_reconciliation.py\n M src/audio_library_organizer/jobs/legacy_adoption.py\n M src/audio_library_organizer/metadata/tag_writer.py\n M src/audio_library_organizer/storage/repository.py\n M src/audio_library_organizer/ui/main_window.py\n M src/audio_library_organizer/ui/workers.py\n?? src/audio_library_organizer/domain/output_spec.py\n?? src/audio_library_organizer/jobs/adopted_output.py\n?? src/audio_library_organizer/jobs/output_session.py\n?? src/audio_library_organizer/metadata/mp3_output.py\n?? src/audio_library_organizer/safety/windows_file_identity.py\n?? tests/test_adopted_output_spec_v0427.py\n?? tests/test_output_reconciliation_v0427.py\n?? tests/test_output_session_ui_v0427.py\n?? tests/test_output_spec_v0427.py\n?? tests/test_windows_output_identity_v0427.py\n?? tests/test_windows_output_native_v0427.py\n",
+  "delta_paths": [
+    "src/audio_library_organizer/jobs/adopted_output.py",
+    "src/audio_library_organizer/jobs/output_session.py",
+    "src/audio_library_organizer/safety/windows_file_identity.py",
+    "tests/test_windows_output_identity_v0427.py",
+    "tests/test_windows_output_native_v0427.py"
+  ]
+}
