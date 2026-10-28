@@ -80,9 +80,12 @@ def signatures(files):
     for p in files:
         literal=str(p).replace("'","''")
         lines.append("$p='"+literal+"';$s=Get-AuthenticodeSignature -LiteralPath $p; $v=(Get-Item -LiteralPath $p).VersionInfo; [pscustomobject]@{path=$p;status=[string]$s.Status;signer=[string]$s.SignerCertificate.Subject;company=$v.CompanyName;version=$v.FileVersion;original=$v.OriginalFilename}")
-    command="$ErrorActionPreference='Stop'; @("+';'.join(lines)+') | ConvertTo-Json -Depth 4'
-    powershell=Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'
-    data=json.loads(subprocess.check_output([powershell,'-NoProfile','-NonInteractive','-Command',command],text=True,encoding='utf-8-sig'))
+    powershell=Path(os.environ['ProgramFiles'])/'PowerShell/7/pwsh.exe'
+    module=powershell.parent/'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1'
+    if not powershell.is_file() or not module.is_file():raise ValueError('Official runner PowerShell7 signature module unavailable')
+    module_literal=str(module).replace("'","''")
+    command="$ErrorActionPreference='Stop'; Import-Module -Name '"+module_literal+"' -ErrorAction Stop; @("+';'.join(lines)+') | ConvertTo-Json -Depth 4'
+    data=json.loads(subprocess.check_output([powershell,'-NoProfile','-NonInteractive','-Command',command],text=True,encoding='utf-8-sig',env=dict(os.environ,PSModulePath=str(powershell.parent/'Modules'))))
     if isinstance(data,dict):data=[data]
     for row in data:
         if row['status']!='Valid':raise ValueError('Invalid native signature: '+row['path'])
