@@ -1,5 +1,5 @@
-name: ALO 6.2D same-size native diagnosis
-run-name: ALO 6.2D SAME-SIZE / Windows Server 2022 / ${{ github.sha }}
+name: ALO 6.2D HANDLE feasibility
+run-name: ALO 6.2D HANDLE / Windows Server 2022 / ${{ github.sha }}
 
 on:
   push:
@@ -66,16 +66,16 @@ jobs:
           python -I .ci/62d/ci.py prepare
           if ($LASTEXITCODE -ne 0) { throw 'Environment/preflight failed; no application PASS' }
 
-      - name: Run bounded original cases and separate native probes
+      - name: Run detached native handle feasibility gate
         run: |
-          python -I .ci/62d/fix_diagnostic.py run
-          if ($LASTEXITCODE -ne 0) { throw 'Diagnostic run contains a non-PASS original assertion or infrastructure STOP; preserve evidence' }
+          python -I .ci/62d/handle_probe.py run
+          if ($LASTEXITCODE -ne 0) { throw 'Handle feasibility not established or infrastructure STOP; preserve evidence' }
 
       - name: Preserve and summarize all available results
         if: always()
         run: |
           if (Test-Path '.ci/62d/ci.py') {
-            python -I .ci/62d/fix_diagnostic.py finish
+            python -I .ci/62d/handle_probe.py finish
             if ($LASTEXITCODE -ne 0) { throw 'Evidence finalization failed; raw files remain for artifact upload' }
           }
 
@@ -83,21 +83,17 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: ALO-62D-SAME-SIZE-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ALO-62D-HANDLE-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            ${{ runner.temp }}/alo-62d-evidence/ALO-62D-SAME-SIZE-evidence.zip
-            ${{ runner.temp }}/alo-62d-evidence/ALO-62D-SAME-SIZE-evidence.zip.sha256.txt
+            ${{ runner.temp }}/alo-62d-evidence/ALO-62D-HANDLE-evidence.zip
+            ${{ runner.temp }}/alo-62d-evidence/ALO-62D-HANDLE-evidence.zip.sha256.txt
             ${{ runner.temp }}/alo-62d-evidence/environment.json
             ${{ runner.temp }}/alo-62d-evidence/*.json
             ${{ runner.temp }}/alo-62d-evidence/*.log
             ${{ runner.temp }}/alo-62d-evidence/*.exit.txt
-            ${{ runner.temp }}/alo-62d-evidence/same-size-fix/*.json
-            ${{ runner.temp }}/alo-62d-evidence/same-size-fix/*.log
-            ${{ runner.temp }}/alo-62d-evidence/same-size-fix/*.txt
-            ${{ runner.temp }}/alo-62d-evidence/same-size-fix/*-original/*.xml
-            ${{ runner.temp }}/alo-62d-evidence/same-size-fix/*-original/*.log
-            ${{ runner.temp }}/alo-62d-evidence/same-size-fix/*-original/*.jsonl
-            ${{ runner.temp }}/alo-62d-evidence/same-size-fix/*-original/exit.txt
+            ${{ runner.temp }}/alo-62d-evidence/handle-feasibility/*.json
+            ${{ runner.temp }}/alo-62d-evidence/handle-feasibility/*.log
+            ${{ runner.temp }}/alo-62d-evidence/handle-feasibility/*.txt
           if-no-files-found: warn
           retention-days: 30
           compression-level: 6
