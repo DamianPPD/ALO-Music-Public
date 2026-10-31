@@ -1,5 +1,5 @@
-name: ALO 6.2D protected observation contract
-run-name: ALO 6.2D protected observation contract / Windows Server 2022 / ${{ github.sha }}
+name: ALO 6.2D N1 handle accounting
+run-name: ALO 6.2D N1 handle accounting / Windows Server 2022 / ${{ github.sha }}
 
 on:
   push:
@@ -66,16 +66,39 @@ jobs:
           python -I .ci/62d/ci.py prepare
           if ($LASTEXITCODE -ne 0) { throw 'Environment/preflight failed; no application PASS' }
 
-      - name: Run selected native guard and real MainWindow contract cases
+      - name: Reproduce original case023 unchanged; preserve equality FAIL
         run: |
-          python -I .ci/62d/contract_run.py run
-          if ($LASTEXITCODE -ne 0) { throw 'Contract FAIL or infrastructure STOP; preserve all original outcomes' }
+          python -I .ci/62d/n1_run.py original
+          if ($LASTEXITCODE -ne 0) { throw 'Unexpected original error; STOP before diagnostics' }
+
+      - name: Compile self-process PSS observer with installed Microsoft SDK
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (!$vs) { throw 'Microsoft C++ tools unavailable; no native diagnostic claim' }
+          $dev = Join-Path $vs 'Common7/Tools/VsDevCmd.bat'
+          $out = Join-Path $env:RUNNER_TEMP 'alo-62d-evidence'
+          $source = Join-Path $env:GITHUB_WORKSPACE '.ci/62d/n1_pss.c'
+          $dll = Join-Path $out 'n1_pss.dll'
+          $obj = Join-Path $out 'n1_pss.obj'
+          $cmd = 'call "' + $dev + '" -arch=x64 -host_arch=x64 && cl.exe /nologo /Bv /LD /W4 /WX /MT /O2 /Fo"' + $obj + '" "' + $source + '" /link kernel32.lib /OUT:"' + $dll + '"'
+          & $env:ComSpec /d /s /c $cmd *> (Join-Path $out 'n1-compile.log')
+          $code = $LASTEXITCODE
+          $code | Set-Content (Join-Path $out 'n1-compile.exit.txt')
+          if ($code -ne 0) { Get-Content (Join-Path $out 'n1-compile.log'); throw 'PSS helper compile failed' }
+          [ordered]@{ source_sha256 = (Get-FileHash $source).Hash; dll_sha256 = (Get-FileHash $dll).Hash; vs_path = $vs; command = $cmd; scope = 'Compiled own read-only PSS observer; current process only' } | ConvertTo-Json | Set-Content (Join-Path $out 'n1-compiler.json')
+
+      - name: Observe per-cycle resources and test owned leak detection; N1 only
+        run: |
+          python -I .ci/62d/n1_run.py probe
+          if ($LASTEXITCODE -ne 0) { throw 'N1 diagnostic STOP; preserve all original outcomes' }
 
       - name: Preserve and summarize all available results
         if: always()
         run: |
           if (Test-Path '.ci/62d/ci.py') {
-            python -I .ci/62d/contract_run.py finish
+            python -I .ci/62d/n1_run.py finish
             if ($LASTEXITCODE -ne 0) { throw 'Evidence finalization failed; raw files remain for artifact upload' }
           }
 
@@ -83,7 +106,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: ALO-62D-CONTRACT-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ALO-62D-N1-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/alo-62d-evidence/ALO-62D-CONTRACT-evidence.zip
             ${{ runner.temp }}/alo-62d-evidence/ALO-62D-CONTRACT-evidence.zip.sha256.txt
