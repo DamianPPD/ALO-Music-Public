@@ -1,5 +1,6 @@
 """Observations only. Original case023 is run separately without these hooks."""
 from pathlib import Path
+from contextlib import contextmanager
 from collections import Counter
 import ctypes as C
 import hashlib,json,os,threading,weakref
@@ -40,7 +41,8 @@ class Monitor:
             d={'role':role,'id':id(obj),'type':type(obj).__module__+'.'+type(obj).__qualname__}
             if isinstance(obj,OWNER_TYPE):
                 d.update(owned_count=obj.owned_count,active=obj.active,lock=id(obj._lock),event=id(obj._done),
-                    file_handles=list(obj._handles),event_is_set=obj._done.is_set())
+                    file_handles=list(obj._handles),event_is_set=obj._done.is_set(),
+                    condition=id(obj._done._cond),condition_lock=id(obj._done._cond._lock))
             live.append(d)
         event={'phase':phase,'count_before_snapshot':before,'count_after_snapshot':after,
             'collector_delta':after-before,'live':live,'detail':detail,
@@ -144,3 +146,117 @@ def test_deliberate_owned_event_is_detected(pair,monitor):
         if not close(handle):raise C.WinError(C.get_last_error())
     after=monitor.take('deliberate-owned-event-closed')['count_after_snapshot']
     strict_equal(before,after)
+
+
+NATIVE_API=native._WinAPI
+class ObservedAPI(NATIVE_API):
+    def __init__(self):
+        super().__init__();self.opened=[];self.closed=[];self.query_fault=False
+    def open(self,*args,**kwargs):
+        handle=super().open(*args,**kwargs);self.opened.append(handle);return handle
+    def close(self,handle):
+        super().close(handle);self.closed.append(handle)
+    def query(self,handle):
+        if self.query_fault:raise C.WinError(5) # Explicit injected query fault, actual handle already owned.
+        return super().query(handle)
+
+
+@contextmanager
+def fixed_helpers(pair,count,monkeypatch):
+    paths=tuple(str(native._lexical(str(p))) for p in pair)
+    api=ObservedAPI();owners=[OWNER_TYPE(paths,api) for _ in range(count)]
+    available=iter(owners);used=[]
+    def new_owner(actual_paths,actual_api):
+        owner=next(available)
+        assert tuple(actual_paths)==owner.paths and actual_api is owner._api is api
+        assert type(owner) is OWNER_TYPE and not owner._close_attempted and owner.owned_count==0
+        assert owner.material==() and not owner._active
+        used.append(id(owner));return owner
+    with monkeypatch.context() as patch:
+        patch.setattr(native,'_WinAPI',lambda:api)
+        patch.setattr(leases,'WindowsOutputLease',new_owner)
+        try:yield owners,api,used
+        finally:
+            # Normal exceptional-test cleanup; no forced GC or helper destruction.
+            for owner in owners:
+                if not owner._close_attempted:owner.close()
+
+
+def verify_file_closes(owners,api,used):
+    assert len(used)==len(set(used))==len(owners)
+    assert all(o.owned_count==0 and not o.active for o in owners)
+    assert api.opened and Counter(api.opened)==Counter(api.closed)
+
+
+@pytest.mark.parametrize('cycles',[1,8,32,64])
+def test_fixed_live_helpers_success(pair,monkeypatch,monitor,cycles):
+    with fixed_helpers(pair,cycles,monkeypatch) as (owners,api,used):
+        identities=exact_helper_ids(owners,api)
+        before=monitor.take('fixed-before',[(f'owner-{i}',o) for i,o in enumerate(owners)],cycles=cycles)
+        for i in range(cycles):
+            monitor.take('cycle-before',cycle=i)
+            owner=leases.acquire_output_lease(*map(str,pair))
+            assert owner is owners[i] and owner.active
+            monitor.take('cycle-acquired',[(f'owner-{i}',owner)],cycle=i)
+            owner.close()
+            closed=monitor.take('cycle-closed',cycle=i,opened=len(api.opened),closed=len(api.closed),owned=owner.owned_count)
+            strict_equal(before['count_after_snapshot'],closed['count_after_snapshot'])
+        verify_file_closes(owners,api,used)
+        assert exact_helper_ids(owners,api)==identities
+        after=monitor.take('fixed-after',[(f'owner-{i}',o) for i,o in enumerate(owners)],cycles=cycles)
+        strict_equal(before['count_after_snapshot'],after['count_after_snapshot'])
+
+
+@pytest.mark.parametrize('mode',['refusal','query-fault','cancel','timeout-zero'])
+def test_fixed_live_helpers_failure_or_end(pair,monkeypatch,monitor,mode):
+    with fixed_helpers(pair,1,monkeypatch) as (owners,api,used):
+        # A real prior writer is present on both sides of the refusal measurement.
+        writer=pair[1].open('r+b',buffering=0) if mode=='refusal' else None
+        api.query_fault=(mode=='query-fault')
+        try:
+            before=monitor.take('end-path-before',[('owner',owners[0])],mode=mode,writer_alive=writer is not None)
+            if mode in ('refusal','query-fault'):
+                with pytest.raises(OSError) as error:leases.acquire_output_lease(*map(str,pair))
+                assert error.value.winerror==(32 if mode=='refusal' else 5)
+            else:
+                owner=leases.acquire_output_lease(*map(str,pair))
+                assert owner is owners[0] and owner.active
+                if mode=='cancel':owner.revoke('N1_OWNER_THREAD_CANCEL');owner.close()
+                else:assert owner.wait_for_delivery(timeout=0) is False
+            verify_file_closes(owners,api,used)
+            after=monitor.take('end-path-after',[('owner',owners[0])],mode=mode,
+                writer_alive=writer is not None,opened=len(api.opened),closed=len(api.closed),
+                query_fault_injected=(mode=='query-fault'),cancel_same_owner_thread=(mode=='cancel'),
+                timeout_seconds=0 if mode=='timeout-zero' else None)
+            strict_equal(before['count_after_snapshot'],after['count_after_snapshot'])
+        finally:
+            if writer is not None:writer.close()
+
+
+def exact_helper_ids(owners,api):
+    return (id(api),id(api.k),tuple((id(o),id(o._lock),id(o._done),
+        id(o._done._cond),id(o._done._cond._lock)) for o in owners))
+
+
+@pytest.mark.parametrize('cycles',[1,32,64])
+def test_constructor_churn_equal_helper_types(pair,monkeypatch,monitor,cycles):
+    api=ObservedAPI();monkeypatch.setattr(native,'_WinAPI',lambda:api)
+    warm=leases.acquire_output_lease(*map(str,pair));warm.close()
+    owner=leases.acquire_output_lease(*map(str,pair));owner.close()
+    def kinds(current):
+        return tuple(type(x) for x in (warm,current,warm._lock,current._lock,
+            warm._done,current._done,warm._done._cond._lock,current._done._cond._lock,api,api.k))
+    types_before=kinds(owner)
+    before=monitor.take('constructor-before',[('warm',warm),('owner',owner)],cycles=cycles,preparation_cycles=2)
+    for i in range(cycles):
+        owner=leases.acquire_output_lease(*map(str,pair))
+        monitor.take('constructor-acquired',[('warm',warm),('owner',owner)],cycle=i)
+        owner.close();assert owner.owned_count==0
+        after=monitor.take('constructor-closed',[('warm',warm),('owner',owner)],cycle=i,
+            opened=len(api.opened),closed=len(api.closed))
+        strict_equal(before['count_after_snapshot'],after['count_after_snapshot'])
+    assert kinds(owner)==types_before
+    assert api.opened and Counter(api.opened)==Counter(api.closed)
+    after=monitor.take('constructor-after',[('warm',warm),('owner',owner)],cycles=cycles,
+        opened=len(api.opened),closed=len(api.closed))
+    strict_equal(before['count_after_snapshot'],after['count_after_snapshot'])

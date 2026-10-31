@@ -7,7 +7,13 @@ base=importlib.util.module_from_spec(_spec);_spec.loader.exec_module(base)
 CASE='tests/test_output_contract_windows_v0427.py::test_native_owner_has_zero_process_handle_delta_after_complete_close'
 PROBES=[str(base.HERE/'n1_cases.py')+'::'+name for name in (
     'test_trace_original_eight_cycles','test_attribute_lock_event_and_owner','test_deliberate_owned_event_is_detected')]
-base.CASES=[CASE]+PROBES
+GREEN_CASES=[CASE]+[str(base.HERE/'n1_cases.py')+'::'+node for node in (
+    *[f'test_fixed_live_helpers_success[{n}]' for n in (1,8,32,64)],
+    *[f'test_constructor_churn_equal_helper_types[{n}]' for n in (1,32,64)],
+    *[f'test_fixed_live_helpers_failure_or_end[{mode}]' for mode in ('refusal','query-fault','cancel','timeout-zero')],
+    'test_deliberate_owned_event_is_detected')]
+base.CASES=list(dict.fromkeys([CASE]+PROBES+GREEN_CASES))
+
 
 
 def execute(case,index):
@@ -66,10 +72,28 @@ def probe():
         base.write(base.OUT/'n1-run.json',report);base.write(base.OUT/'run.json',report)
     return 0
 
+def green():
+    assert len(GREEN_CASES)==13 and len(set(GREEN_CASES))==13
+    report={'scope':'N1 only; no N2/MainWindow','candidate_tree':base.ci.TREE,
+        'gate':'OFF','status':'INCOMPLETE','original_red_run':41237840474,'planned':len(GREEN_CASES),'cases':[]}
+    try:
+        for i,case in enumerate(GREEN_CASES,1):
+            folder,code,outcome=execute(case,i)
+            report['cases'].append({'case':case,'exit':code,'outcome':outcome})
+            base.write(base.OUT/'run.json',report)
+            if outcome!='PASS':raise RuntimeError('N1 GREEN STOP '+case+' / '+outcome)
+            base.audit_synthetic(folder)
+        report['status']='N1_SCOPE_PASS_NOT_N2_OR_PRODUCT_ACCEPTANCE'
+    except BaseException as exc:
+        report.update(status='STOP',error=repr(exc));raise
+    finally:
+        base.write(base.OUT/'n1-green.json',report);base.write(base.OUT/'run.json',report)
+    return 0
+
 if __name__=='__main__':
     try:
         if sys.argv[1]=='pytest-wait':code=base.child(sys.argv[2],Path(sys.argv[3]))
-        else:code={'original':original,'probe':probe,'finish':base.finish}[sys.argv[1]]()
+        else:code={'original':original,'probe':probe,'green':green,'finish':base.finish}[sys.argv[1]]()
     except BaseException:
         (base.OUT/'n1-exception.log').write_text(traceback.format_exc());raise
     sys.exit(code)

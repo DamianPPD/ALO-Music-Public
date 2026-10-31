@@ -1,8 +1,8 @@
 {
   "head": "ea20be0f6db1788f0a2a834fcdba355f2d828ddb",
   "base_tree": "de616e0fe890353463181b9c785ba9152189f842",
-  "input_tree": "42d7476ff4a740008ddbda3fbb82440ddae163ef",
-  "tree": "13bd813e15ef85925e6b5da5cccde6edaf0807b8",
+  "input_tree": "13bd813e15ef85925e6b5da5cccde6edaf0807b8",
+  "tree": "3563267d6d94b9b6692276b74901dbc2d5deb23c",
   "files": [
     {
       "path": ".gitattributes",
@@ -2101,8 +2101,8 @@
     {
       "path": "tests/test_output_contract_windows_v0427.py",
       "mode": "100644",
-      "blob": "c05dede88b98e17f93774abd49d54a87c3673b61",
-      "sha256": "efd6b01064f8713e236735d6998934805941ea8a99a8c663b443ed4f508b47ef"
+      "blob": "264fe93ec0d9f433a9f0dd4e955a06fecf326a19",
+      "sha256": "4d42eaf265632dd8d07da242f38c07039cc3a17f9479b1f71e3e7b59ea46f978"
     },
     {
       "path": "tests/test_output_protection_boundary_v0427.py",
@@ -2555,22 +2555,11 @@
       "sha256": "eb501c20aad1725a6afa7990be3b745497daf86bfb6ebc86cffbfb61f1fba5d7"
     }
   ],
-  "full_patch_sha256": "84b2c94dc1ed6f0bac64319699d863fe90764587e1dad7ba8eb98c5ebfb38985",
-  "delta_sha256": "3777842de55dd29c146716900ca8a371dcb5fcf9ed09c6911c864dea500871cd",
+  "full_patch_sha256": "094a33cb83569faccbfe310666d647d5f7798e66dd93e4b14efb7cfc5a438fc8",
+  "delta_sha256": "e0ccfdd717bed836815ffce2a7089443650a032eb27f9f39a550ee99f80b2118",
   "delta_paths": [
-    "src/audio_library_organizer/jobs/file_reconciliation.py",
-    "src/audio_library_organizer/jobs/output_session.py",
-    "src/audio_library_organizer/safety/windows_file_identity.py",
-    "src/audio_library_organizer/safety/windows_output_lease.py",
-    "src/audio_library_organizer/ui/main_window.py",
-    "src/audio_library_organizer/ui/workers.py",
-    "tests/test_output_contract_windows_v0427.py",
-    "tests/test_output_protection_boundary_v0427.py",
-    "tests/test_output_session_ui_v0427.py",
-    "tests/test_windows_output_identity_v0427.py",
-    "tests/test_windows_output_lease_v0427.py",
-    "tests/test_windows_output_native_v0427.py"
+    "tests/test_output_contract_windows_v0427.py"
   ],
   "windows_gate": false,
-  "local_git": "N/A: isolated artifact sources, no branch/index/commit created"
+  "scope": "N1 test methodology only; production unchanged"
 }

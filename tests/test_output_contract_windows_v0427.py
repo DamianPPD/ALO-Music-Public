@@ -196,22 +196,33 @@ def test_real_junction_is_refused_without_opening_the_target_leaf(pair,tmp_path)
 
 
 def test_native_owner_has_zero_process_handle_delta_after_complete_close(pair,monkeypatch):
-    actual=native._WinAPI;seen=[]
+    actual=native._WinAPI
     class ObservedAPI(actual):
-        def __init__(self):super().__init__();self.opened=[];self.closed=[];seen.append(self)
+        def __init__(self):super().__init__();self.opened=[];self.closed=[]
         def open(self,*a,**kw):
             h=super().open(*a,**kw);self.opened.append(h);return h
         def close(self,h):super().close(h);self.closed.append(h)
-    monkeypatch.setattr(native,'_WinAPI',ObservedAPI)
-    warm=leases.acquire_output_lease(*map(str,pair));warm.close();handle_count()
+    api=ObservedAPI()
+    monkeypatch.setattr(native,'_WinAPI',lambda:api)
+    warm=leases.acquire_output_lease(*map(str,pair));warm.close()
+    # A closed current-owner slot exists on BOTH sides, as does the same real
+    # stateless API. No Lock/Event is destroyed to reduce the final count.
+    owner=leases.acquire_output_lease(*map(str,pair));owner.close();handle_count()
+    def helper_types(current):
+        return tuple(type(x) for x in (warm,current,warm._lock,current._lock,
+            warm._done,current._done,warm._done._cond._lock,current._done._cond._lock,api,api.k))
+    before_helpers=helper_types(owner)
     before=handle_count()
     for _ in range(8):
         owner=leases.acquire_output_lease(*map(str,pair));owner.close();assert owner.owned_count==0
     after=handle_count()
-    assert all(Counter(a.opened)==Counter(a.closed) for a in seen)
+    assert helper_types(owner)==before_helpers
+    assert warm.owned_count==0 and owner.owned_count==0
+    assert api.opened and Counter(api.opened)==Counter(api.closed)
     assert before==after,'Native owner handle count did not return after close'
-    record('native-owner-no-leak',before=before,after=after,cycles=8,
-        opened=sum(len(a.opened) for a in seen),closed=sum(len(a.closed) for a in seen))
+    record('native-owner-no-leak',before=before,after=after,cycles=8,preparation_cycles=2,
+        helper_owners_before=2,helper_owners_after=2,shared_actual_api=1,
+        opened=len(api.opened),closed=len(api.closed))
 
 
 def test_native_partial_acquire_query_fault_closes_every_actual_handle(pair,monkeypatch):

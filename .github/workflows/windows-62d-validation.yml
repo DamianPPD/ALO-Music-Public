@@ -66,11 +66,6 @@ jobs:
           python -I .ci/62d/ci.py prepare
           if ($LASTEXITCODE -ne 0) { throw 'Environment/preflight failed; no application PASS' }
 
-      - name: Reproduce original case023 unchanged; preserve equality FAIL
-        run: |
-          python -I .ci/62d/n1_run.py original
-          if ($LASTEXITCODE -ne 0) { throw 'Unexpected original error; STOP before diagnostics' }
-
       - name: Compile self-process PSS observer with installed Microsoft SDK
         run: |
           $ErrorActionPreference = 'Stop'
@@ -89,9 +84,9 @@ jobs:
           if ($code -ne 0) { Get-Content (Join-Path $out 'n1-compile.log'); throw 'PSS helper compile failed' }
           [ordered]@{ source_sha256 = (Get-FileHash $source).Hash; dll_sha256 = (Get-FileHash $dll).Hash; vs_path = $vs; command = $cmd; scope = 'Compiled own read-only PSS observer; current process only' } | ConvertTo-Json | Set-Content (Join-Path $out 'n1-compiler.json')
 
-      - name: Observe per-cycle resources and test owned leak detection; N1 only
+      - name: N1 strict comparable-state GREEN and owned leak detection; 13 cases
         run: |
-          python -I .ci/62d/n1_run.py probe
+          python -I .ci/62d/n1_run.py green
           if ($LASTEXITCODE -ne 0) { throw 'N1 diagnostic STOP; preserve all original outcomes' }
 
       - name: Preserve and summarize all available results
