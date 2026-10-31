@@ -141,9 +141,19 @@ def test_delivery_revalidates_native_proof_and_never_falls_back_to_stat(library,
     op=session.OutputCheckOperation(repo.library_id,str(uuid4()),1,'policy-v1',track.track_id)
     r=op.choose(repo.list_managed_bindings())
     result=check_library(repo,library_root=root,operation_id=r.operation_id,output_request=r,current_output_request=op.current_request)
-    d=session.prepare_delivery(repo,root,result.pending_output_assessment,r)
+    assert session.prepare_delivery(repo,root,result.pending_output_assessment,r) is None
+    class ModelLease:
+        # Portable protocol model only, not evidence of native protection.
+        active=True
+        def active_for(self,paths,material):
+            return self.active and paths==(str(track.path),str(output)) and material==(native,native)
+    lease=ModelLease()
+    d=session.prepare_delivery(repo,root,result.pending_output_assessment,r,windows_lease=lease)
     assert d is not None and d.windows_material==(native,native) and d.windows_database==native
     assert session.material_matches(d) and session.database_safe(d)
+    lease.active=False
+    assert not session.material_matches(d),'Metadata equality cannot replace released protection'
+    lease.active=True
     field='change_time' if kind=='material' else 'file_id'
     value=999 if kind=='material' else b'other-db-id-1234'
     current[0]=replace(native,leaf=replace(native.leaf,**{field:value}))

@@ -160,7 +160,8 @@ def require_native_delivery(monkeypatch):
             worker.finished.connect(lambda result:packets.append(result.output_delivery),Qt.ConnectionType.DirectConnection)
         local_patch.setattr(FileReconciliationWorker,'__init__',init)
         yield local_patch
-        assert packets and all(d is not None and len(d.windows_material)==2 and d.windows_database is not None for d in packets)
+        assert packets and all(d is not None and len(d.windows_material)==2 and d.windows_database is not None
+            and d.windows_lease is not None and not d.windows_lease.active and d.windows_lease.owned_count==0 for d in packets)
 
 
 @pytest.mark.parametrize('language',['pl','en'])
@@ -192,14 +193,16 @@ def test_diagnostic_same_size_restored_mtime_in_the_qt_queue_is_refused(diagnost
         def change(result):
             assert result.output_delivery is not None
             before=native.capture(path);st=path.stat();raw=bytearray(path.read_bytes());raw[-1]^=1
-            path.write_bytes(raw);os.utime(path,ns=(st.st_atime_ns,st.st_mtime_ns))
+            with pytest.raises(OSError):path.write_bytes(raw)
             after=native.capture(path);observed.append((before,after))
         worker.finished.connect(change,Qt.ConnectionType.DirectConnection)
     monkeypatch.setattr(FileReconciliationWorker,'__init__',init)
     ui.run_check(window)
-    assert observed and not native.same_material(*observed[0])
+    assert observed and native.same_material(*observed[0])
+    assert window.last_reconciliation_result.output_delivery.windows_lease.accepted
+    assert track.track_id in window._output_history
     assert not ui.presentation(window,track).confirmed
-    record('queued-restored-mtime',material=which,before=asdict(observed[0][0]),after=asdict(observed[0][1]))
+    record('queued-restored-mtime-write-blocked-under-lease',material=which,before=asdict(observed[0][0]),after=asdict(observed[0][1]))
 
 
 @pytest.mark.parametrize('field,value',[('artist','Changed artist'),('title','Changed title'),('album','Changed album'),('bpm',131.0)])
@@ -226,15 +229,15 @@ def test_diagnostic_missing_watch_refuses_positive_delivery(diagnostic_window,mo
     window,lib,_=diagnostic_window
     monkeypatch.setattr(window._output_watcher,'addPaths',lambda paths:list(paths))
     ui.run_check(window)
-    assert not ui.presentation(window,lib[2]).confirmed
+    ui.assert_no_output_confirmation(window,lib[2])
 
 
 def test_diagnostic_ordinary_wal_cache_write_does_not_invalidate_context(diagnostic_window):
     window,lib,_=diagnostic_window;repo,_,track,_=lib
-    ui.run_check(window);assert ui.presentation(window,track).confirmed
+    ui.run_check(window);ui.assert_completed_observation(window,track)
     # Real cache row write via normal check; identity/context must remain same.
     from audio_library_organizer.jobs.file_reconciliation import check_library
     check_library(repo,library_root=lib[1])
     from PySide6.QtWidgets import QApplication
     QApplication.processEvents();window._output_watch_changed(str(repo.database_path)+'-wal')
-    assert ui.presentation(window,track).confirmed
+    ui.assert_completed_observation(window,track)

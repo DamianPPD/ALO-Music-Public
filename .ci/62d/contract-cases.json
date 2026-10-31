@@ -1,0 +1,139 @@
+{
+  "selected": [
+    "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[write-0]",
+    "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[write-1]",
+    "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[same-size-0]",
+    "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[same-size-1]",
+    "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[restored-mtime-0]",
+    "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[restored-mtime-1]",
+    "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[delete-0]",
+    "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[delete-1]",
+    "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[rename-0]",
+    "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[rename-1]",
+    "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[replace-0]",
+    "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[replace-1]",
+    "tests/test_output_contract_windows_v0427.py::test_real_existing_writer_refuses_entire_pair[0]",
+    "tests/test_output_contract_windows_v0427.py::test_real_existing_writer_refuses_entire_pair[1]",
+    "tests/test_output_contract_windows_v0427.py::test_real_writable_mapping_refuses_entire_pair[section-only-0]",
+    "tests/test_output_contract_windows_v0427.py::test_real_writable_mapping_refuses_entire_pair[section-only-1]",
+    "tests/test_output_contract_windows_v0427.py::test_real_writable_mapping_refuses_entire_pair[view-and-section-0]",
+    "tests/test_output_contract_windows_v0427.py::test_real_writable_mapping_refuses_entire_pair[view-and-section-1]",
+    "tests/test_output_contract_windows_v0427.py::test_real_writable_mapping_refuses_entire_pair[view-only-0]",
+    "tests/test_output_contract_windows_v0427.py::test_real_writable_mapping_refuses_entire_pair[view-only-1]",
+    "tests/test_output_contract_windows_v0427.py::test_real_hardlink_is_refused_without_modifying_either_alias",
+    "tests/test_output_contract_windows_v0427.py::test_real_junction_is_refused_without_opening_the_target_leaf",
+    "tests/test_output_contract_windows_v0427.py::test_native_owner_has_zero_process_handle_delta_after_complete_close",
+    "tests/test_output_contract_windows_v0427.py::test_native_partial_acquire_query_fault_closes_every_actual_handle",
+    "tests/test_output_contract_windows_v0427.py::test_history_is_useful_non_authoritative_and_new_check_is_async[pl]",
+    "tests/test_output_contract_windows_v0427.py::test_history_is_useful_non_authoritative_and_new_check_is_async[en]",
+    "tests/test_output_contract_windows_v0427.py::test_failed_recheck_removes_old_history_and_uses_fallback[source]",
+    "tests/test_output_contract_windows_v0427.py::test_failed_recheck_removes_old_history_and_uses_fallback[managed]",
+    "tests/test_output_contract_windows_v0427.py::test_true_postrelease_same_size_restored_mtime_never_renews_authority[source]",
+    "tests/test_output_contract_windows_v0427.py::test_true_postrelease_same_size_restored_mtime_never_renews_authority[managed]",
+    "tests/test_output_contract_windows_v0427.py::test_two_bindings_only_assess_the_selected_record",
+    "tests/test_output_contract_windows_v0427.py::test_abandoned_receiver_times_out_then_rejects_late_packet",
+    "tests/test_output_contract_windows_v0427.py::test_worker_exception_closes_pair_and_never_publishes_history",
+    "tests/test_output_contract_windows_v0427.py::test_close_while_delivery_is_active_revokes_and_finishes_thread",
+    "tests/test_output_contract_windows_v0427.py::test_receiver_destruction_or_real_quit_releases_protection[destroy]",
+    "tests/test_output_contract_windows_v0427.py::test_receiver_destruction_or_real_quit_releases_protection[quit]",
+    "tests/test_windows_output_native_v0427.py::test_release_gate_is_off_on_the_actual_windows_runtime",
+    "tests/test_windows_output_native_v0427.py::test_unc_is_refused_before_opening_any_network_object",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_real_mp3_worker_mainwindow_column_filter_sort[pl]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_real_mp3_worker_mainwindow_column_filter_sort[en]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[artist]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[title]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[album]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[bpm]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[cover]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[binding]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[source]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[policy]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[generation]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[cancel]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[output-bytes]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_same_size_restored_mtime_in_the_qt_queue_is_refused[source]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_same_size_restored_mtime_in_the_qt_queue_is_refused[managed]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_edit_and_recheck[artist-Changed artist]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_edit_and_recheck[title-Changed title]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_edit_and_recheck[album-Changed album]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_edit_and_recheck[bpm-131.0]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_existing_session_safety[partial]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_existing_session_safety[late]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_existing_session_safety[foreign-library]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_existing_session_safety[restart-scope]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_existing_session_safety[watch]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_existing_session_safety[wal-context]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_existing_session_safety[busy-db]",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_missing_watch_refuses_positive_delivery",
+    "tests/test_windows_output_native_v0427.py::test_diagnostic_ordinary_wal_cache_write_does_not_invalidate_context",
+    "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_ack_does_not_make_a_closed_lease_current_again",
+    "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_ack_revokes_before_owner_close_and_preserves_accepted_history",
+    "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_cancel_revokes_and_wakes_without_closing_in_a_foreign_thread",
+    "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_close_is_idempotent_and_never_retries_a_failed_close_blindly",
+    "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_delivery_deadline_cannot_be_missing_infinite_or_extended",
+    "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_duplicate_delivery_cannot_claim_twice",
+    "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_entire_selected_operation_has_a_cooperative_budget",
+    "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_late_ack_cannot_turn_an_expired_budget_into_delivery",
+    "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_material_or_path_mismatch_never_claims",
+    "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_only_acquiring_thread_may_close_native_handles",
+    "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_pair_retains_every_handle_until_owner_finishes",
+    "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_partial_acquire_closes_first_object_and_all_ancestors",
+    "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_partial_query_failure_keeps_failed_close_under_explicit_ownership",
+    "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_query_failure_closes_even_the_failing_handle",
+    "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_timeout_revokes_and_closes_without_any_receiver",
+    "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_uncertain_cleanup_quarantines_future_public_acquisition",
+    "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_unsupported_objects_are_not_partial_positive_proofs"
+  ],
+  "not_scheduled": [
+    {
+      "nodeid": "tests/test_windows_output_native_v0427.py::test_native_material_identity[unchanged]",
+      "reason": "Historical point-in-time metadata/API primitive scope; preserved, not re-run as proof of the new retained-lease contract."
+    },
+    {
+      "nodeid": "tests/test_windows_output_native_v0427.py::test_native_material_identity[same-size]",
+      "reason": "Historical point-in-time metadata/API primitive scope; preserved, not re-run as proof of the new retained-lease contract."
+    },
+    {
+      "nodeid": "tests/test_windows_output_native_v0427.py::test_native_material_identity[restored-mtime]",
+      "reason": "Historical point-in-time metadata/API primitive scope; preserved, not re-run as proof of the new retained-lease contract."
+    },
+    {
+      "nodeid": "tests/test_windows_output_native_v0427.py::test_native_material_identity[replace]",
+      "reason": "Historical point-in-time metadata/API primitive scope; preserved, not re-run as proof of the new retained-lease contract."
+    },
+    {
+      "nodeid": "tests/test_windows_output_native_v0427.py::test_native_material_identity[rename-replace]",
+      "reason": "Historical point-in-time metadata/API primitive scope; preserved, not re-run as proof of the new retained-lease contract."
+    },
+    {
+      "nodeid": "tests/test_windows_output_native_v0427.py::test_native_material_identity[hardlink]",
+      "reason": "Historical point-in-time metadata/API primitive scope; preserved, not re-run as proof of the new retained-lease contract."
+    },
+    {
+      "nodeid": "tests/test_windows_output_native_v0427.py::test_native_material_identity[missing]",
+      "reason": "Historical point-in-time metadata/API primitive scope; preserved, not re-run as proof of the new retained-lease contract."
+    },
+    {
+      "nodeid": "tests/test_windows_output_native_v0427.py::test_native_parent_replacement_changes_the_proof",
+      "reason": "Historical point-in-time metadata/API primitive scope; preserved, not re-run as proof of the new retained-lease contract."
+    },
+    {
+      "nodeid": "tests/test_windows_output_native_v0427.py::test_native_sharing_denies_an_existing_ordinary_writer",
+      "reason": "Historical point-in-time metadata/API primitive scope; preserved, not re-run as proof of the new retained-lease contract."
+    },
+    {
+      "nodeid": "tests/test_windows_output_native_v0427.py::test_native_open_music_handle_denies_new_writer_and_parent_handle_denies_rename",
+      "reason": "Historical point-in-time metadata/API primitive scope; preserved, not re-run as proof of the new retained-lease contract."
+    },
+    {
+      "nodeid": "tests/test_windows_output_native_v0427.py::test_native_junction_is_refused_without_traversal",
+      "reason": "Historical point-in-time metadata/API primitive scope; preserved, not re-run as proof of the new retained-lease contract."
+    },
+    {
+      "nodeid": "tests/test_windows_output_native_v0427.py::test_native_symlink_is_refused_if_the_host_can_create_it",
+      "reason": "Historical point-in-time metadata/API primitive scope; preserved, not re-run as proof of the new retained-lease contract."
+    }
+  ],
+  "count": 83,
+  "scope": "17 protocol model cases + selected native guard/MainWindow cases, separate child processes"
+}

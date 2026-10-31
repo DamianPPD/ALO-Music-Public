@@ -11,7 +11,7 @@ import sqlite3
 from uuid import uuid4
 from functools import partial
 
-from PySide6.QtCore import Qt, QThread, QSettings, Signal, Slot, QUrl, QTimer, QSize, QVariantAnimation, QFileSystemWatcher
+from PySide6.QtCore import Qt, QThread, QSettings, Signal, Slot, QUrl, QTimer, QSize, QVariantAnimation, QFileSystemWatcher, QObject
 from PySide6.QtGui import QPixmap, QDesktopServices, QIcon, QColor
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -881,6 +881,7 @@ class MainWindow(QMainWindow):
         self._file_check_closing = False
         self._output_operation = None
         self._output_session = {}
+        self._output_history = {}
         self._output_baseline_evals = {}
         self._output_watcher = QFileSystemWatcher(self)
         self._output_watcher.fileChanged.connect(self._output_watch_changed)
@@ -1600,6 +1601,15 @@ class MainWindow(QMainWindow):
         # quit() is thread-safe; shutdown must not depend on GUI event dispatch.
         worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
         worker.failed.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        from audio_library_organizer.safety import windows_file_identity as windows_identity
+        if windows_identity.on_windows():
+            # QObject emits destroyed before deleting its children. Revoke and
+            # join the existing worker before its parent-owned QThread dies.
+            # No GUI delivery is needed to wake the worker's bounded owner.
+            def stop_before_children(*_):
+                worker.cancel();thread.quit();thread.wait()
+            destruction_connection=self.destroyed.connect(stop_before_children,Qt.ConnectionType.DirectConnection)
+            thread.finished.connect(partial(QObject.disconnect,destruction_connection),Qt.ConnectionType.DirectConnection)
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(self._file_check_thread_done)
         thread.finished.connect(thread.deleteLater)
@@ -1621,6 +1631,27 @@ class MainWindow(QMainWindow):
 
     @Slot(object)
     def _file_check_finished(self, result):
+        delivery=getattr(result,'output_delivery',None)
+        matched=self._file_check_matches(result.library_id,result.operation_id)
+        consumed=False
+        try:
+            self._consume_file_check_result(result)
+            consumed=True
+        finally:
+            lease=getattr(delivery,'windows_lease',None)
+            if lease is not None:
+                try:
+                    if matched:
+                        tid=delivery.pending.request.track_id
+                        history=self._output_history.get(tid)
+                        if (history is not None and history.operation_id==result.operation_id
+                                and (not consumed or not lease.active or self._output_operation is None
+                                     or not self._output_operation.owns_windows_lease(lease))):
+                            self._output_history.pop(tid)
+                            self._refresh_output_display()
+                finally:lease.acknowledge()
+
+    def _consume_file_check_result(self, result):
         if not self._file_check_matches(result.library_id, result.operation_id):
             return
         self.last_reconciliation_result = result
@@ -1650,6 +1681,7 @@ class MainWindow(QMainWindow):
 
     def _invalidate_output_states(self, track_id=None):
         """Revoke only new session evidence; leave independent baseline states."""
+        from audio_library_organizer.domain.file_state import FileState
         operation = self._output_operation
         request = operation.current_request() if operation is not None else None
         if operation is not None and (track_id is None or request is None or request.track_id == track_id):
@@ -1657,19 +1689,43 @@ class MainWindow(QMainWindow):
         for tid in tuple(self._output_session):
             if track_id is None or tid == track_id:
                 self._output_session.pop(tid)
-        if not self._output_session:
+        for tid in tuple(self._output_history):
+            if track_id is None or tid==track_id:self._output_history.pop(tid)
+        if not self._output_session and not self._output_history:
             paths = self._output_watcher.files() + self._output_watcher.directories()
             if paths:
                 self._output_watcher.removePaths(paths)
+        self._refresh_output_display()
+
+    def _refresh_output_display(self):
+        """Paint cached context only; refusal/cleanup must never reopen SQLite."""
+        from audio_library_organizer.domain.file_state import FileState
         if hasattr(self, 'library') and self._read_context is not None:
             merged = dict(self._output_baseline_evals)
             merged.update({tid: d.pending.evaluation for tid, d in self._output_session.items()})
+            for tid,history in self._output_history.items():
+                baseline=merged.get(tid)
+                if baseline is None or baseline.state not in (FileState.CONFLICT,FileState.MANAGED_FILE_MISSING):
+                    merged[tid]=history.evaluation
             self.library.set_file_state_evaluations(self._read_context.library_id, merged)
             self.library.refresh(preserve_order=True)
 
     @Slot(str)
     def _output_watch_changed(self, path):
         # Additional invalidation, NEVER the acceptance-time identity proof.
+        from audio_library_organizer.jobs.output_session import history_matches, output_policy
+        for tid,history in tuple(self._output_history.items()):
+            material=(history.source_locator,history.managed_locator,
+                str(Path(history.source_locator).parent),str(Path(history.managed_locator).parent))
+            if path in material:
+                self._invalidate_output_states(tid)
+            elif path in history.watch_paths or path in tuple(history.database_locator+s for s in ('-wal','-journal')):
+                try:
+                    snapshot=self.repository.adopted_assessment_snapshot(tid,timeout=0.0)
+                    if history_matches(history,snapshot,self.app_settings.library.root,
+                            output_policy(ProviderSettings.from_store(self.qt_settings))):continue
+                except (sqlite3.Error,OSError,ValueError,RuntimeError):pass
+                self._invalidate_output_states(tid)
         for tid, delivery in tuple(self._output_session.items()):
             material_paths = (delivery.source_locator, delivery.managed_locator,
                 str(Path(delivery.source_locator).parent), str(Path(delivery.managed_locator).parent))
@@ -1703,7 +1759,8 @@ class MainWindow(QMainWindow):
                 self._invalidate_output_states(tid)
 
     def _accept_output_delivery(self, result):
-        from audio_library_organizer.jobs.output_session import context_matches, material_matches, output_policy, database_safe
+        from audio_library_organizer.jobs.output_session import context_matches, material_matches, output_policy, database_safe, history_from_delivery
+        from audio_library_organizer.safety import windows_file_identity as windows_identity
         delivery = result.output_delivery
         operation = self._output_operation
         if (delivery is None or operation is None or result.cancelled
@@ -1729,18 +1786,32 @@ class MainWindow(QMainWindow):
             current = self.repository.adopted_assessment_snapshot(request.track_id, timeout=0.0)
             if not context_matches(delivery, current, request) or not material_matches(delivery):
                 return
-            self._output_session[request.track_id] = delivery
-            self.refresh_data()
+            if windows_identity.on_windows():
+                lease=delivery.windows_lease
+                if (lease is None or not operation.owns_windows_lease(lease)
+                        or not lease.claim(delivery.windows_material)):return
+                # P is consumed here, not cached as a GUI confirmation. Only
+                # copied H is painted, so timeout/release cannot leave stale P
+                # in the view or active map. There is no flashing positive row.
+                selected=[f for f in result.files if f.track_id==request.track_id]
+                if len(selected)!=1:return
+                self._output_baseline_evals[request.track_id]=selected[0].evaluation
+                self._output_history[request.track_id]=history_from_delivery(delivery)
+                self._refresh_output_display()
+            else:
+                self._output_session[request.track_id] = delivery
+                self.refresh_data()
         except (sqlite3.Error, OSError, ValueError, RuntimeError):
             self._output_session.pop(request.track_id, None)
+            self._output_history.pop(request.track_id,None)
         finally:
-            if not self._output_session:
+            if not self._output_session and not self._output_history:
                 watches = self._output_watcher.files() + self._output_watcher.directories()
                 if watches:
                     self._output_watcher.removePaths(watches)
 
     def _output_evaluations(self, snapshot):
-        from audio_library_organizer.jobs.output_session import context_matches, material_matches, output_policy, database_safe
+        from audio_library_organizer.jobs.output_session import context_matches, material_matches, output_policy, database_safe, history_matches
         from audio_library_organizer.storage.repository import AdoptedAssessmentSnapshot
         from audio_library_organizer.domain.file_state import FileState
         merged = dict(self._output_baseline_evals)
@@ -1748,6 +1819,13 @@ class MainWindow(QMainWindow):
         policy = output_policy(ProviderSettings.from_store(self.qt_settings))
         operation = self._output_operation
         request = operation.current_request() if operation is not None else None
+        for tid,history in tuple(self._output_history.items()):
+            current=AdoptedAssessmentSnapshot(snapshot.library_id,tracks.get(tid),snapshot.sources,snapshot.managed_bindings)
+            baseline=merged.get(tid)
+            if (not history_matches(history,current,self.app_settings.library.root,policy)
+                    or (baseline is not None and baseline.state in (FileState.CONFLICT,FileState.MANAGED_FILE_MISSING))):
+                self._output_history.pop(tid)
+            else:merged[tid]=history.evaluation
         for tid, delivery in tuple(self._output_session.items()):
             current = AdoptedAssessmentSnapshot(snapshot.library_id, tracks.get(tid),
                 snapshot.sources, snapshot.managed_bindings)
@@ -1759,6 +1837,9 @@ class MainWindow(QMainWindow):
             baseline = merged.get(tid)
             if baseline is None or baseline.state not in (FileState.CONFLICT, FileState.MANAGED_FILE_MISSING):
                 merged[tid] = delivery.pending.evaluation
+        if not self._output_session and not self._output_history:
+            paths=self._output_watcher.files()+self._output_watcher.directories()
+            if paths:self._output_watcher.removePaths(paths)
         return merged
 
     def _open_legacy_adoption(self):
@@ -1828,6 +1909,7 @@ class MainWindow(QMainWindow):
     @Slot(str, str, str)
     def _file_check_failed(self, library_id, operation_id, message):
         if self._file_check_matches(library_id, operation_id):
+            self._invalidate_output_states()
             self._show_operation(message)
             if self._adoption_dialog is not None:
                 self._adoption_dialog.operation_failed(message)
@@ -2632,4 +2714,7 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
         self.library.cancel_context_actions(closing=True)
+        operation=self._output_operation
+        if operation is not None:operation.invalidate()
+        self._output_session.clear();self._output_history.clear()
         super().closeEvent(event)

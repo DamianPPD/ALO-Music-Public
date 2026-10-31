@@ -368,7 +368,7 @@ def check_library(repository, *, library_id=None, operation_id=None, checked_at=
                   cancelled=None, progress=None, managed_roots=(), prepared_facts=(),
                   prepared_library_id=None, library_root=None, known_libraries=(),
                   include_adoption=False, output_request=None,
-                  current_output_request=None) -> ReconciliationResult:
+                  current_output_request=None, before_output_check=None) -> ReconciliationResult:
     """Check active registry scope and return candidates without accepting them.
 
     ``prepared_facts`` is an explicit current evidence boundary, never a cache
@@ -382,6 +382,8 @@ def check_library(repository, *, library_id=None, operation_id=None, checked_at=
     FileFacts('check-context', at)
     operation_id = operation_id or str(uuid4())
     snapshot = repository.file_check_snapshot()
+    if before_output_check is not None and (output_request is None or not callable(before_output_check)):
+        raise ValueError('Output protection requires an explicit pinned request and callable boundary.')
     if library_id is not None and library_id != snapshot.library_id:
         raise ValueError('Library identity does not match check context.')
     if output_request is not None:
@@ -631,8 +633,12 @@ def check_library(repository, *, library_id=None, operation_id=None, checked_at=
         was_cancelled = was_cancelled or adoption.cancelled
     pending = None
     if output_request is not None and not was_cancelled:
-        pending = _pending_output_check(repository, library_root, snapshot, files, output_request,
-            current_output_request, is_cancelled, 'CACHE_WRITE_REJECTED' in reason_codes)
+        # Full reconciliation/cache/inventory is finished. A Windows worker
+        # acquires its short pair guard here, only for the selected assessment
+        # and delivery, never for unrelated library-wide traversal.
+        if before_output_check is None or before_output_check():
+            pending = _pending_output_check(repository, library_root, snapshot, files, output_request,
+                current_output_request, is_cancelled, 'CACHE_WRITE_REJECTED' in reason_codes)
         was_cancelled = was_cancelled or is_cancelled()
         if was_cancelled:
             pending = None

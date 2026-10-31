@@ -97,8 +97,8 @@ def _lexical(path):
     return PureWindowsPath(raw)
 
 
-def _capture(path, api, *, mutable=False):
-    """Dependency seam for contract tests; public capture never injects an API.
+def _open_path(path, api, *, mutable=False, owner=None):
+    """Return a validated proof and explicit ownership of its open handles.
 
     Hold all ancestors without share-delete until the entire observation is
     complete. Music handles also deny share-write: ordinary unclosed writers
@@ -110,6 +110,7 @@ def _capture(path, api, *, mutable=False):
         for index,node_path in enumerate(paths):
             is_leaf=index==len(paths)-1
             h=api.open(str(node_path),mutable=(not is_leaf or mutable));handles.append(h)
+            if owner is not None:owner._adopt_handle(h)
             n=api.query(h)
             if (n.filesystem!='NTFS' or n.drive_type!=3 or not n.volume_guid
                     or not n.volume_serial or len(n.file_id)!=16 or not any(n.file_id)
@@ -124,16 +125,32 @@ def _capture(path, api, *, mutable=False):
             current=(n.volume_guid,n.volume_serial)
             if volume is None:volume=current
             if current!=volume:raise ValueError('WINDOWS_VOLUME_BOUNDARY')
-            if is_leaf:return NativePathProof(str(p),tuple(ancestors),n)
+            if is_leaf:return NativePathProof(str(p),tuple(ancestors),n),tuple(handles)
             ancestors.append(AncestorIdentity(str(node_path),n.volume_guid,n.volume_serial,n.file_id,n.creation_time))
         raise ValueError('WINDOWS_FILE_REQUIRED')
-    finally:
+    except BaseException:
+        # A lease owns each successful CreateFile immediately, including the
+        # handle whose following query/validation failed. It performs cleanup
+        # and preserves uncertain failures; no handles disappear in this frame.
+        if owner is not None:raise
         # Close every acquired handle even if another CloseHandle fails.
         failure=None
         for h in reversed(handles):
             try:api.close(h)
             except OSError as exc:failure=exc
         if failure is not None:raise failure
+        raise
+
+
+def _capture(path, api, *, mutable=False):
+    """Point-in-time observation; never retains handles after returning."""
+    proof,handles=_open_path(path,api,mutable=mutable)
+    failure=None
+    for h in reversed(handles):
+        try:api.close(h)
+        except OSError as exc:failure=exc
+    if failure is not None:raise failure
+    return proof
 
 
 def same_material(before, after):

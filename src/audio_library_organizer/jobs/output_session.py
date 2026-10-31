@@ -32,9 +32,28 @@ class OutputCheckOperation:
         self.library_id,self.operation_id,self.generation=library_id,operation_id,generation
         self.policy_revision,self.track_id=policy_revision,track_id
         self._cancelled=Event();self._lock=Lock();self._request=None
+        self._windows_lease=None
 
     def invalidate(self):
         self._cancelled.set()
+        with self._lock:lease=self._windows_lease
+        if lease is not None:lease.revoke('OPERATION_INVALIDATED')
+
+    def attach_windows_lease(self, lease):
+        with self._lock:
+            if self._cancelled.is_set() or self._windows_lease is not None:
+                lease.revoke('OPERATION_INVALIDATED')
+                return False
+            self._windows_lease=lease
+            return True
+
+    def owns_windows_lease(self, lease):
+        with self._lock:
+            return not self._cancelled.is_set() and self._windows_lease is lease
+
+    def detach_windows_lease(self, lease):
+        with self._lock:
+            if self._windows_lease is lease:self._windows_lease=None
 
     def choose(self, bindings):
         # Deliberately bounded. With several bindings require one selected row.
@@ -87,6 +106,7 @@ class OutputDelivery:
     database_identity: tuple
     windows_material: tuple = ()
     windows_database: object = None
+    windows_lease: object = None
 
     @property
     def watch_paths(self):
@@ -124,7 +144,9 @@ def material_matches(delivery):
     """Metadata only on known local paths. No MP3 open/read/hash/decode."""
     try:
         if windows_identity.on_windows():
-            return (windows_identity.positive_acceptance_enabled() and len(delivery.windows_material)==2
+            return (windows_identity.positive_acceptance_enabled() and delivery.windows_lease is not None
+                and delivery.windows_lease.active_for((delivery.source_locator,delivery.managed_locator),delivery.windows_material)
+                and len(delivery.windows_material)==2
                 and all(windows_identity.same_material(old,windows_identity.capture(path))
                     for old,path in zip(delivery.windows_material,(delivery.source_locator,delivery.managed_locator))))
         if delivery.windows_material:return False
@@ -148,13 +170,13 @@ def database_safe(delivery):
     except (OSError,ValueError,RuntimeError):return False
 
 
-def prepare_delivery(repository, root, pending, request):
+def prepare_delivery(repository, root, pending, request, *, windows_lease=None):
     """Worker-only capability preparation after the ordinary reconciliation."""
     if (pending is None or not pending.evaluation.is_confirmed
             or pending.evaluation.state!=FileState.NEEDS_UPDATE or pending.assessment.guard is None):
         return None
     is_windows=windows_identity.on_windows()
-    if is_windows and not windows_identity.positive_acceptance_enabled():return None
+    if is_windows and (not windows_identity.positive_acceptance_enabled() or windows_lease is None):return None
     snapshot=repository.adopted_assessment_snapshot(pending.request.track_id)
     t=snapshot.track
     if t is None:return None
@@ -181,5 +203,56 @@ def prepare_delivery(repository, root, pending, request):
         caps=tuple(local_filesystem(p) for p in metadata_paths)
     if not all(caps):return None
     d=OutputDelivery(pending,str(root),roots[0],*paths[:2],guard.source_identity,binding.stat_identity,caps,
-        paths[2],database_stamp[:2],guard.windows_material,native_database)
+        paths[2],database_stamp[:2],guard.windows_material,native_database,windows_lease)
     return d if context_matches(d,snapshot,request) and material_matches(d) else None
+
+
+@dataclass(frozen=True, slots=True)
+class OutputHistory:
+    """Non-authoritative display observation; never contains a delivery/lease."""
+    evaluation: object
+    library_id: str
+    track_id: str
+    binding_id: str
+    operation_id: str
+    policy_revision: str
+    metadata_revision: str
+    binding_revision: str
+    owners_revision: str
+    source_context: str
+    root: str
+    source_locator: str
+    managed_locator: str
+    database_locator: str
+
+    @property
+    def watch_paths(self):
+        return tuple(dict.fromkeys((self.source_locator,self.managed_locator,
+            str(Path(self.source_locator).parent),str(Path(self.managed_locator).parent),
+            self.database_locator,str(Path(self.database_locator).parent))))
+
+
+def history_from_delivery(delivery):
+    """Copy only after protected acceptance; the result cannot renew validity."""
+    request=delivery.pending.request;guard=delivery.pending.assessment.guard
+    evaluation=replace(delivery.pending.evaluation,is_confirmed=False,
+        reason='HISTORICAL_PROTECTED_OUTPUT_OBSERVATION')
+    return OutputHistory(evaluation,request.library_id,request.track_id,request.binding_id,
+        request.operation_id,request.policy_revision,guard.metadata_revision,guard.binding_revision,
+        guard.owners_revision,guard.source_context,delivery.root,delivery.source_locator,
+        delivery.managed_locator,delivery.database_locator)
+
+
+def history_matches(history, snapshot, root, policy):
+    """Pure context check for display, NOT a physical file/ownership preflight."""
+    track=snapshot.track
+    if (history.evaluation.is_confirmed or str(root)!=history.root or policy!=history.policy_revision
+            or snapshot.library_id!=history.library_id or track is None or track.track_id!=history.track_id
+            or str(track.path)!=history.source_locator or metadata_revision(track)!=history.metadata_revision
+            or _source_context(track,snapshot.sources,snapshot.library_id)!=history.source_context
+            or evidence_digest([asdict(b) for b in snapshot.managed_bindings])!=history.owners_revision):
+        return False
+    owners=[b for b in snapshot.managed_bindings if b.track_id==history.track_id]
+    return (len(owners)==1 and owners[0].binding_id==history.binding_id
+        and owners[0].locator(root)==history.managed_locator
+        and evidence_digest(asdict(owners[0]))==history.binding_revision)

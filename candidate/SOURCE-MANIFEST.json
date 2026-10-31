@@ -1,8 +1,8 @@
 {
   "head": "ea20be0f6db1788f0a2a834fcdba355f2d828ddb",
   "base_tree": "de616e0fe890353463181b9c785ba9152189f842",
-  "input_tree": "220de1cc6a1f25836cd8c119e1f2a1b145a17f09",
-  "tree": "42d7476ff4a740008ddbda3fbb82440ddae163ef",
+  "input_tree": "42d7476ff4a740008ddbda3fbb82440ddae163ef",
+  "tree": "4172352fd9400f8ea71e109dc5067aba841bbab7",
   "files": [
     {
       "path": ".gitattributes",
@@ -1051,8 +1051,8 @@
     {
       "path": "src/audio_library_organizer/jobs/file_reconciliation.py",
       "mode": "100644",
-      "blob": "47a493c3f3629be534ad07dcc2302e57004217e7",
-      "sha256": "0f3cb8ced4f7593081d139fc330393c40b7f9ad5bc459c1c96fa3fd7d4ad8bd5"
+      "blob": "ece09ada97e84d2d4d7ca3080622d24f81552178",
+      "sha256": "04c17ccb8b95ed16e97af969a443c2d152ad48e9346505f6a56bba203b095220"
     },
     {
       "path": "src/audio_library_organizer/jobs/identifier.py",
@@ -1081,8 +1081,8 @@
     {
       "path": "src/audio_library_organizer/jobs/output_session.py",
       "mode": "100644",
-      "blob": "2de690ff407473bcfe40ae1223797c2ee83e5ed2",
-      "sha256": "9f7c2c485f8b6a9d962b55d6d385861e6a34c77664c79f824be8efafc8fbc05b"
+      "blob": "1d76f85ca42a0092e1a66fc4a7d5403c55853802",
+      "sha256": "288a5d91c89f3bf11012dedca83cbe8a6e104836ecb412abd0a8f94fa27549ce"
     },
     {
       "path": "src/audio_library_organizer/jobs/playlists.py",
@@ -1273,8 +1273,14 @@
     {
       "path": "src/audio_library_organizer/safety/windows_file_identity.py",
       "mode": "100644",
-      "blob": "648e558699992e8c4bd25518c2d357c9cc506208",
-      "sha256": "6cf69ca84c33fb6c07fe437ce17108b9a122775695d4f29e1719a2777d280898"
+      "blob": "0be0871c89c4d2b7dee4a4204e2c60703269aa9e",
+      "sha256": "b87ed8b3ef5a6ab3ea6f330ee8e2e9ab7731531ce3d10087398f229c3f963b58"
+    },
+    {
+      "path": "src/audio_library_organizer/safety/windows_output_lease.py",
+      "mode": "100644",
+      "blob": "931c02e76a9aea7399e394265d511d0dc113a668",
+      "sha256": "2281e124471aa55079bed1ca106debcd4a248c843349e02fb1dacbe0f7975108"
     },
     {
       "path": "src/audio_library_organizer/storage/__init__.py",
@@ -1477,8 +1483,8 @@
     {
       "path": "src/audio_library_organizer/ui/main_window.py",
       "mode": "100644",
-      "blob": "ab6b231fffdb6c7ba377b5e9df72cedfa46a59df",
-      "sha256": "a7d8cd8967a698052f986038d09ced754c1ee395652ea50672ab5fa63f27c875"
+      "blob": "b0eed93b76b908bc32a0a3da7ada2ce93ec72aaf",
+      "sha256": "6210bdd581f8474ab885df59968baa165dc90a720412bcc88037970031a10654"
     },
     {
       "path": "src/audio_library_organizer/ui/metadata_editor.py",
@@ -1537,8 +1543,8 @@
     {
       "path": "src/audio_library_organizer/ui/workers.py",
       "mode": "100644",
-      "blob": "e88a2b890965a72f228609ca0622a5d14c07a285",
-      "sha256": "207f1cb05909bb6cfd0b7bb7bc0e72d7455dc33a9e86f0f0a39527d43debf6df"
+      "blob": "aa728dbec317fe0314bd18cb73888ecf732b56e5",
+      "sha256": "3d858d71d815639a0c7c6214e00629d9a0005294411446a7993f90bf55fe5c23"
     },
     {
       "path": "tests/audio_adoption_fixtures.py",
@@ -2093,6 +2099,18 @@
       "sha256": "04672db1bb889814f3af099c95cbfeb0b6bfd85cd1650a0c6a51bfc9f7d4d475"
     },
     {
+      "path": "tests/test_output_contract_windows_v0427.py",
+      "mode": "100644",
+      "blob": "93789e546a8fc10aadf2d9404cbfbef455af430c",
+      "sha256": "f1f8a30049bee1f0a950683b092f0529ab33246fad19543322262bb89a9b7445"
+    },
+    {
+      "path": "tests/test_output_protection_boundary_v0427.py",
+      "mode": "100644",
+      "blob": "d321a270c13eab289be51ef4531b09c7c42635d2",
+      "sha256": "6346e30269bcbece1fd8904e2c399094d8aa0bf69cd02eb97882d2337af0957f"
+    },
+    {
       "path": "tests/test_output_reconciliation_v0427.py",
       "mode": "100644",
       "blob": "9bdada4161f7b7f6e302e15b2ba8baee1ba5f20f",
@@ -2101,8 +2119,8 @@
     {
       "path": "tests/test_output_session_ui_v0427.py",
       "mode": "100644",
-      "blob": "3fdc5b06f20762e1dbe197f3c0037d2ea6ac8ef1",
-      "sha256": "985bd27f4b3c09eb8b905bcc21f29de2cd74d9df64f0a107db65055062bf6e10"
+      "blob": "90d8f4bbf22fe15860e94e063ba3b87e351f1232",
+      "sha256": "260a4280e616ba804dc42e0352170d5eb32753e831de958a4947f315fc0b4df1"
     },
     {
       "path": "tests/test_output_spec_v0427.py",
@@ -2509,14 +2527,20 @@
     {
       "path": "tests/test_windows_output_identity_v0427.py",
       "mode": "100644",
-      "blob": "88efdd6eda6488ac2e3b5532b94067d0f2f02ace",
-      "sha256": "661c5e5a5351486186eb2b7533606a1ac7ee0f98735b17aad1e212c1e6226502"
+      "blob": "0b2b419108ded9d7a63439f00c5641b4e472e516",
+      "sha256": "409e30f486fbefef168882e7abf3422033bd695558ae393b58f174a1c420d3b0"
+    },
+    {
+      "path": "tests/test_windows_output_lease_v0427.py",
+      "mode": "100644",
+      "blob": "ce230ee6d8371e0dccb0927c7fbf00e952fa3851",
+      "sha256": "e3dc9ccf30656a52e6b4e956b3458d4acac92b2cc9215f3743094e43c6b7dc5b"
     },
     {
       "path": "tests/test_windows_output_native_v0427.py",
       "mode": "100644",
-      "blob": "e4edf198223843d743e6425d9297f46a85a77907",
-      "sha256": "bcccc254141de7fb1955f109d82d92abb1a8d8bd79498d877def7c6fcad35fff"
+      "blob": "be1b1061fe494078376ac6263630b42842a8fec7",
+      "sha256": "976b1f107e06cadaa9b4a3f7f1f09b25aa19b374b8729ba359132c5f70ca10e4"
     },
     {
       "path": "tests/test_windows_packaging.py",
@@ -2531,14 +2555,22 @@
       "sha256": "eb501c20aad1725a6afa7990be3b745497daf86bfb6ebc86cffbfb61f1fba5d7"
     }
   ],
-  "full_patch_sha256": "40c2bc4f8ed54e9959a6f50c6c09c5c98c6749b9b04e7c72028478e0dad388a9",
-  "delta_sha256": "6b0a7dc8a0cb389526433404290913f7d65576595c13eb498e83bf8ffaf5161a",
-  "status": " M START_ALO.bat\n M run_audio_library_organizer.bat\n M scripts/bootstrap_windows.ps1\n M scripts/build_release_windows.ps1\n M scripts/build_windows.ps1\n M src/audio_library_organizer/domain/file_state.py\n M src/audio_library_organizer/jobs/file_reconciliation.py\n M src/audio_library_organizer/jobs/legacy_adoption.py\n M src/audio_library_organizer/metadata/tag_writer.py\n M src/audio_library_organizer/storage/repository.py\n M src/audio_library_organizer/ui/main_window.py\n M src/audio_library_organizer/ui/workers.py\n?? src/audio_library_organizer/domain/output_spec.py\n?? src/audio_library_organizer/jobs/adopted_output.py\n?? src/audio_library_organizer/jobs/output_session.py\n?? src/audio_library_organizer/metadata/mp3_output.py\n?? src/audio_library_organizer/safety/windows_file_identity.py\n?? tests/test_adopted_output_spec_v0427.py\n?? tests/test_output_reconciliation_v0427.py\n?? tests/test_output_session_ui_v0427.py\n?? tests/test_output_spec_v0427.py\n?? tests/test_windows_output_identity_v0427.py\n?? tests/test_windows_output_native_v0427.py\n",
+  "full_patch_sha256": "0509cb7b8640356d235302bdfd1cfc6589df1a1ebb1d40558a4838b856dd8b81",
+  "delta_sha256": "0701dcd4314342279c3e7b61499e0630b7fbaee25915f70fee82f0cedade1533",
   "delta_paths": [
-    "src/audio_library_organizer/jobs/adopted_output.py",
+    "src/audio_library_organizer/jobs/file_reconciliation.py",
     "src/audio_library_organizer/jobs/output_session.py",
     "src/audio_library_organizer/safety/windows_file_identity.py",
+    "src/audio_library_organizer/safety/windows_output_lease.py",
+    "src/audio_library_organizer/ui/main_window.py",
+    "src/audio_library_organizer/ui/workers.py",
+    "tests/test_output_contract_windows_v0427.py",
+    "tests/test_output_protection_boundary_v0427.py",
+    "tests/test_output_session_ui_v0427.py",
     "tests/test_windows_output_identity_v0427.py",
+    "tests/test_windows_output_lease_v0427.py",
     "tests/test_windows_output_native_v0427.py"
-  ]
+  ],
+  "windows_gate": false,
+  "local_git": "N/A: isolated artifact sources, no branch/index/commit created"
 }

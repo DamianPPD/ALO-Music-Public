@@ -105,28 +105,61 @@ class FileReconciliationWorker(QObject):
 
     @Slot()
     def run(self):
+        lease=None
         try:
             if self.output_operation is not None:
                 self.output_request = self.output_operation.choose(self.repository.list_managed_bindings())
                 self.current_output_request = (self.output_operation.current_request
                     if self.output_request is not None else None)
+            extra={}
+            def is_cancelled():
+                return self._cancelled.is_set() or (lease is not None and lease.cancelled())
+            from audio_library_organizer.safety import windows_file_identity as native
+            if (native.positive_acceptance_enabled() and self.output_operation is not None
+                    and self.output_request is not None):
+                def acquire_selected_pair():
+                    nonlocal lease
+                    from audio_library_organizer.safety.windows_output_lease import acquire_output_lease
+                    snapshot=self.repository.adopted_assessment_snapshot(self.output_request.track_id)
+                    owners=[b for b in snapshot.managed_bindings if b.track_id==self.output_request.track_id]
+                    if (snapshot.track is None or snapshot.library_id!=self.library_id
+                            or len(owners)!=1 or owners[0].binding_id!=self.output_request.binding_id):
+                        self.output_operation.invalidate()
+                        raise ValueError('APPROVED_BINDING_REQUIRED')
+                    try:
+                        lease=acquire_output_lease(str(snapshot.track.path),owners[0].locator(self.library_root))
+                        if not self.output_operation.attach_windows_lease(lease):
+                            lease.close()
+                            return False
+                        return True
+                    except (OSError,ValueError,RuntimeError):
+                        self.output_operation.invalidate()
+                        raise
+                extra['before_output_check']=acquire_selected_pair
             result = check_library(self.repository, library_id=self.library_id,
                 operation_id=self.operation_id, managed_roots=self.managed_roots,
                 library_root=self.library_root, known_libraries=self.known_libraries,
                 include_adoption=self.library_root is not None,
                 output_request=self.output_request,
                 current_output_request=self.current_output_request,
-                cancelled=self._cancelled.is_set,
+                cancelled=is_cancelled,
                 progress=lambda current, total, name: self.progress.emit(
-                    self.library_id, self.operation_id, current, total, name))
+                    self.library_id, self.operation_id, current, total, name),**extra)
             if self.output_operation is not None and self.output_request is not None and not result.cancelled:
                 from dataclasses import replace
                 from audio_library_organizer.jobs.output_session import prepare_delivery
                 result = replace(result, output_delivery=prepare_delivery(self.repository,self.library_root,
-                    result.pending_output_assessment,self.output_operation.current_request()))
+                    result.pending_output_assessment,self.output_operation.current_request(),windows_lease=lease))
             self.finished.emit(result)
+            if lease is not None and result.output_delivery is not None:
+                lease.wait_for_delivery()
         except Exception as exc:
             self.failed.emit(self.library_id, self.operation_id, str(exc))
+        finally:
+            if lease is not None:
+                try:lease.close()
+                except Exception as exc:self.failed.emit(self.library_id,self.operation_id,str(exc))
+                finally:self.output_operation.detach_windows_lease(lease)
 
 
 class LegacyAdoptionWorker(FileReconciliationWorker):

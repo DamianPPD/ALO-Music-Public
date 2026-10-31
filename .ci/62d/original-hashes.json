@@ -1,7 +1,7 @@
 {
   "windows/run_windows.py": "1e985828944cd102ce9aae3180df2459db2f3722dfe329417b063e3bc3c50ffe",
   "windows/URUCHOM-TEST.cmd": "56a9b7dc0905d1c87d4cbcda9ca85b0c7566da027fb4e3dec782b086cd91ca5a",
-  "candidate/SOURCE-MANIFEST.json": "a6b60818cb5388534cfb077ec849221993a2027457e86c6ec064022885abebf9",
-  "tests/test_windows_output_native_v0427.py": "bcccc254141de7fb1955f109d82d92abb1a8d8bd79498d877def7c6fcad35fff",
-  "src/audio_library_organizer/safety/windows_file_identity.py": "6cf69ca84c33fb6c07fe437ce17108b9a122775695d4f29e1719a2777d280898"
+  "candidate/SOURCE-MANIFEST.json": "290102c12a30dce9d6ecdbaf3056f18b67aadc66e0564b20576be3224f752e2a",
+  "tests/test_windows_output_native_v0427.py": "976b1f107e06cadaa9b4a3f7f1f09b25aa19b374b8729ba359132c5f70ca10e4",
+  "src/audio_library_organizer/safety/windows_file_identity.py": "b87ed8b3ef5a6ab3ea6f330ee8e2e9ab7731531ce3d10087398f229c3f963b58"
 }

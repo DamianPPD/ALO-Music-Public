@@ -50,6 +50,29 @@ def presentation(window,track):
     return window.library._file_presentation(window.repository.get_track(track.track_id))
 
 
+def assert_completed_observation(window,track):
+    """Windows has useful H after release; Linux retains its original contract."""
+    from audio_library_organizer.safety import windows_file_identity as native
+    p=presentation(window,track)
+    if not native.on_windows():
+        assert p.confirmed
+        return
+    delivery=window.last_reconciliation_result.output_delivery
+    assert delivery is not None and delivery.windows_lease is not None
+    lease=delivery.windows_lease
+    assert lease.accepted and not lease.active and lease.owned_count==0
+    assert not p.confirmed and not window._output_session
+    history=window._output_history[track.track_id]
+    assert not history.evaluation.is_confirmed
+    assert history.operation_id==delivery.pending.request.operation_id
+
+
+def assert_no_output_confirmation(window,track):
+    assert not presentation(window,track).confirmed
+    assert track.track_id not in window._output_history
+    assert track.track_id not in window._output_session
+
+
 @pytest.mark.parametrize('language',['pl','en'])
 def test_real_check_reaches_column_filter_sort_and_survives_selection_refresh(adopted_window,language):
     from audio_library_organizer.ui.i18n import apply_static_language
@@ -65,7 +88,8 @@ def test_real_check_reaches_column_filter_sort_and_survives_selection_refresh(ad
     apply_static_language(window.library,language)
     run_check(window)
     p=presentation(window,track)
-    assert p.state==FileState.NEEDS_UPDATE and p.confirmed
+    assert p.state==FileState.NEEDS_UPDATE
+    assert_completed_observation(window,track)
     assert p.background=='#30251b'
     window.library.select_track(repo.get_track(other.track_id))
     assert presentation(window,track).state==FileState.NEEDS_UPDATE
@@ -75,12 +99,15 @@ def test_real_check_reaches_column_filter_sort_and_survives_selection_refresh(ad
     combo.setCurrentIndex(combo.findData(FileState.NEEDS_UPDATE))
     assert window.library.model.rowCount()==1
     window.library.table.sortByColumn(10,Qt.SortOrder.AscendingOrder)
-    assert window.library.model.item(0,10).text()==('Needs update' if language=='en' else 'Do aktualizacji')
+    from audio_library_organizer.safety import windows_file_identity as native
+    expected='Needs update' if language=='en' else 'Do aktualizacji'
+    if native.on_windows():expected+=' · '+('Unconfirmed' if language=='en' else 'Niepotwierdzony')
+    assert window.library.model.item(0,10).text()==expected
     if os.environ.get('STAGE62C_EVIDENCE'):
         target=Path(os.environ['STAGE62C_EVIDENCE'])
         window.library.table.horizontalScrollBar().setValue(window.library.table.horizontalScrollBar().maximum())
         QApplication.processEvents()
-        assert presentation(window,track).confirmed
+        assert_completed_observation(window,track)
         window.library.grab().save(str(target/f'library-needs-update-{language}.png'))
         (target/f'ui-difference-{language}.json').write_text(json.dumps({
             'library_id':repo.library_id,'track_id':track.track_id,'binding_id':binding.binding_id,
@@ -112,14 +139,15 @@ def test_partial_match_never_becomes_in_library(adopted_window):
 @pytest.mark.parametrize('field,value',[('artist','New artist'),('title','New title'),('album','New album'),('bpm',129.),('cover_choice','none')])
 def test_edit_after_acceptance_invalidates_state_before_next_check(adopted_window,field,value):
     window,lib,_=adopted_window;repo,_,track,_=lib
-    run_check(window);assert presentation(window,track).confirmed
+    run_check(window);assert_completed_observation(window,track)
     from copy import deepcopy
     t=repo.get_track(track.track_id);before=deepcopy(t);setattr(t,field,value)
     window._commit_track_metadata(before,t)
-    assert not presentation(window,track).confirmed
-    window.refresh_data();assert not presentation(window,track).confirmed
+    assert_no_output_confirmation(window,track)
+    window.refresh_data();assert_no_output_confirmation(window,track)
     run_check(window)
     assert presentation(window,track).state==FileState.NEEDS_UPDATE
+    assert_completed_observation(window,track)
 
 
 def test_manual_cover_and_same_path_replacement_remain_excluded(adopted_window,tmp_path):
@@ -129,9 +157,9 @@ def test_manual_cover_and_same_path_replacement_remain_excluded(adopted_window,t
     repo.save_metadata(t.track_id,{'manual_cover_path':str(cover),'cover_choice':'manual'},
         expected_revision=metadata_revision(t),library_id=repo.library_id)
     window.refresh_data();run_check(window)
-    assert not presentation(window,track).confirmed
+    assert_no_output_confirmation(window,track)
     cover.write_bytes(b'synthetic-two');run_check(window)
-    assert not presentation(window,track).confirmed
+    assert_no_output_confirmation(window,track)
 
 
 @pytest.mark.parametrize('kind',['artist','title','album','bpm','cover','binding','source','policy','generation','cancel','output-bytes'])
@@ -153,7 +181,13 @@ def test_change_between_worker_and_gui_delivery_is_rejected(adopted_window,monke
                     if kind=='binding':conn.execute('UPDATE managed_bindings SET binding_id=?',(str(uuid4()),))
                     else:conn.execute('UPDATE tracks SET sha256=? WHERE track_id=?',('f'*64,track.track_id))
             elif kind=='output-bytes':
-                with output.open('ab') as stream:stream.write(b'Controlled synthetic change')
+                from audio_library_organizer.safety import windows_file_identity as native
+                if native.on_windows():
+                    with pytest.raises(OSError):
+                        with output.open('ab') as stream:stream.write(b'Controlled synthetic change')
+                    worker.cancel()  # Write was blocked; cancellation is a separate refusal.
+                else:
+                    with output.open('ab') as stream:stream.write(b'Controlled synthetic change')
             elif kind=='cancel':worker.cancel()
         # Direct callback registered BEFORE MainWindow's queued connection.
         worker.finished.connect(mutate,Qt.ConnectionType.DirectConnection)
@@ -169,7 +203,7 @@ def test_change_between_worker_and_gui_delivery_is_rejected(adopted_window,monke
         monkeypatch.setattr(window,'_file_check_finished',deliver)
     window.review_btn.click();pump(lambda:window._thread is None)
     assert events
-    assert not presentation(window,track).confirmed
+    assert_no_output_confirmation(window,track)
 
 
 def test_worker_only_classifies_local_scope_and_cannot_be_used_as_watcher_only_proof():
@@ -190,7 +224,7 @@ def test_database_locked_at_gui_acceptance_refuses_without_waiting(adopted_windo
     monkeypatch.setattr(FileReconciliationWorker,'__init__',init)
     try:
         window.review_btn.click();pump(lambda:window._thread is None)
-        assert held and not window._output_session
+        assert held and not window._output_session and not window._output_history
     finally:
         for c in held:c.rollback();c.close()
 
@@ -200,16 +234,17 @@ def test_unknown_filesystem_is_not_accepted(adopted_window,monkeypatch):
     window,lib,_=adopted_window;_,_,track,_=lib
     monkeypatch.setattr(output_session,'local_filesystem',lambda p:None)
     run_check(window)
-    assert not presentation(window,track).confirmed and not window._output_session
+    assert_no_output_confirmation(window,track)
+    assert not window._output_session
 
 
 def test_state_is_not_restored_from_cache_after_restart(adopted_window):
     window,lib,_=adopted_window;repo,_,track,_=lib
-    run_check(window);assert presentation(window,track).confirmed
+    run_check(window);assert_completed_observation(window,track)
     reopened=type(repo)(repo.database_path)
     assert not reopened.get_file_state(track.track_id).evaluation.is_confirmed
     window._invalidate_output_states();window.refresh_data()
-    assert not presentation(window,track).confirmed
+    assert_no_output_confirmation(window,track)
 
 
 def test_late_result_cannot_replace_newer_actual_check(adopted_window):
@@ -219,7 +254,9 @@ def test_late_result_cannot_replace_newer_actual_check(adopted_window):
     assert old.operation_id!=new.operation_id
     window._file_check_finished(old)
     assert window.last_reconciliation_result is new
-    assert window._output_session[track.track_id].pending.request.operation_id==new.operation_id
+    from audio_library_organizer.safety import windows_file_identity as native
+    if native.on_windows():assert window._output_history[track.track_id].operation_id==new.operation_id
+    else:assert window._output_session[track.track_id].pending.request.operation_id==new.operation_id
 
 
 def test_foreign_library_context_cannot_accept_existing_delivery(adopted_window):
@@ -228,14 +265,14 @@ def test_foreign_library_context_cannot_accept_existing_delivery(adopted_window)
     window._invalidate_output_states()
     window._file_check_context=(str(uuid4()),old.operation_id,window._file_check_generation)
     window._file_check_finished(old)
-    assert not presentation(window,track).confirmed
+    assert_no_output_confirmation(window,track)
 
 
 def test_watch_event_invalidates_only_session_evidence(adopted_window):
     window,lib,_=adopted_window;_,_,track,output=lib
-    run_check(window);assert presentation(window,track).confirmed
+    run_check(window);assert_completed_observation(window,track)
     with output.open('ab') as stream:stream.write(b'synthetic modification')
-    pump(lambda:not presentation(window,track).confirmed)
+    pump(lambda:not presentation(window,track).confirmed and track.track_id not in window._output_history)
     assert output.exists()
 
 
@@ -252,12 +289,16 @@ def test_two_real_approved_bindings_are_checked_by_selection_without_mixing(adop
     adopt_legacy_output(repo,proposal.proposal_id,confirmed=True,library_root=root)
     assert len(repo.list_managed_bindings())==2
     window.refresh_data();window.library.select_track(repo.get_track(first.track_id));run_check(window)
-    assert presentation(window,first).confirmed and not presentation(window,second).confirmed
-    window.library.select_track(repo.get_track(second.track_id));assert presentation(window,first).confirmed
+    assert_completed_observation(window,first)
+    assert_no_output_confirmation(window,second)
+    window.library.select_track(repo.get_track(second.track_id));assert_completed_observation(window,first)
     run_check(window)
     assert presentation(window,second).state==FileState.NEEDS_UPDATE
+    assert_completed_observation(window,second)
     assert not presentation(window,first).confirmed
-    assert set(window._output_session)=={second.track_id}
+    from audio_library_organizer.safety import windows_file_identity as native
+    if native.on_windows():assert set(window._output_history)=={second.track_id} and not window._output_session
+    else:assert set(window._output_session)=={second.track_id}
 
 
 def test_wal_metadata_change_invalidates_accepted_state(adopted_window):
@@ -265,19 +306,19 @@ def test_wal_metadata_change_invalidates_accepted_state(adopted_window):
     conn=sqlite3.connect(repo.database_path)
     try:
         assert conn.execute('PRAGMA journal_mode=WAL').fetchone()[0]=='wal'
-        run_check(window);assert presentation(window,track).confirmed
+        run_check(window);assert_completed_observation(window,track)
         conn.execute('UPDATE tracks SET album=? WHERE track_id=?',('External WAL metadata',track.track_id));conn.commit()
-        pump(lambda:not presentation(window,track).confirmed)
+        pump(lambda:not presentation(window,track).confirmed and track.track_id not in window._output_history)
     finally:conn.close()
 
 
 def test_audio_source_save_revokes_session_proof(adopted_window):
     from copy import deepcopy
     window,lib,_=adopted_window;repo,_,track,_=lib
-    run_check(window);assert presentation(window,track).confirmed
+    run_check(window);assert_completed_observation(window,track)
     before=repo.get_track(track.track_id);changed=deepcopy(before);changed.artist='Audio-source approval edit'
     window._save_audio_source(changed,before)
-    assert not presentation(window,track).confirmed
+    assert_no_output_confirmation(window,track)
 
 
 def test_windows_scope_gate_is_explicitly_closed_without_native_change_token(tmp_path,monkeypatch):
@@ -301,5 +342,5 @@ def test_symlinked_database_directory_cannot_supply_new_ui_confirmation(adopted_
             worker.finished.connect(lambda result:swap(),Qt.ConnectionType.DirectConnection)
         monkeypatch.setattr(FileReconciliationWorker,'__init__',init)
     run_check(window)
-    assert not presentation(window,track).confirmed
+    assert_no_output_confirmation(window,track)
     assert (root/'.alo-held/library.sqlite3').is_file()

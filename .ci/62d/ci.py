@@ -12,7 +12,7 @@ ROOT=Path(__file__).resolve().parents[2]
 CONFIG=Path(__file__).resolve().parent
 EVIDENCE=Path(os.environ.get('RUNNER_TEMP',str(ROOT)))/'alo-62d-evidence'
 EVIDENCE.mkdir(parents=True,exist_ok=True)
-TREE='42d7476ff4a740008ddbda3fbb82440ddae163ef'
+TREE='4172352fd9400f8ea71e109dc5067aba841bbab7'
 
 
 def sha(raw):return hashlib.sha256(raw).hexdigest()
@@ -32,7 +32,7 @@ def execute(cmd,name,*,env=None,timeout=300):
 
 def verify_sources():
     manifest=json.loads((ROOT/'candidate/SOURCE-MANIFEST.json').read_text())
-    assert manifest['tree']==TREE and len(manifest['files'])==421
+    assert manifest['tree']==TREE and len(manifest['files'])==425
     for f in manifest['files']:
         raw=(ROOT/f['path']).read_bytes()
         assert sha(raw)==f['sha256'],f['path']
@@ -59,7 +59,7 @@ def materialize_inputs(ref='HEAD'):
     raw=git('cat-file','blob',ref+':candidate/SOURCE-MANIFEST.json')
     hashes=json.loads((CONFIG/'original-hashes.json').read_text())
     assert sha(raw)==hashes['candidate/SOURCE-MANIFEST.json']
-    manifest=json.loads(raw);assert manifest['tree']==TREE and len(manifest['files'])==421
+    manifest=json.loads(raw);assert manifest['tree']==TREE and len(manifest['files'])==425
     actual={}
     for line in git('ls-tree','-r','-z',ref).split(b'\0'):
         if line:
@@ -78,7 +78,7 @@ def materialize_inputs(ref='HEAD'):
         data=stream.read(int(size));assert stream.read(1)==b'\n' and sha(data)==f['sha256'],f['path']
         path=ROOT/f['path'];path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
     assert not stream.read()
-    write('raw-source-materialization.json',{'candidate_tree':TREE,'source_files':421,
+    write('raw-source-materialization.json',{'candidate_tree':TREE,'source_files':425,
         'mechanism':'exact Git blobs; checkout text filters undone before tests','after_test_restore':False})
 
 
@@ -218,3 +218,4 @@ if __name__=='__main__':
     except Exception as exc:
         write(action+'-error.json',{'error':type(exc).__name__,'message':str(exc),'time_utc':datetime.now(timezone.utc).isoformat(),'product_gate':'OFF'})
         raise
+
