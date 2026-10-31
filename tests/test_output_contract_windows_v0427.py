@@ -8,6 +8,7 @@ from collections import Counter
 from dataclasses import asdict
 from pathlib import Path
 import ctypes as C
+import errno
 import hashlib
 import os
 import subprocess
@@ -56,6 +57,16 @@ def owners(monkeypatch):
     record('actual-owner-teardown',owners=len(seen),owned_end=[o.owned_count for o in seen])
 
 
+def native_write_probe(path):
+    """Observe exact Win32 refusal, independent of CRT errno translation."""
+    api=native._WinAPI()
+    h=api.create(str(path),0x40000000,7,None,3,0x00200000,None)
+    if h in (None,C.c_void_p(-1).value):
+        return {'opened':False,'winerror':C.get_last_error()}
+    api.close(h)
+    return {'opened':True,'winerror':0}
+
+
 @pytest.mark.parametrize('which',[0,1])
 @pytest.mark.parametrize('action',['write','same-size','restored-mtime','delete','rename','replace'])
 def test_real_lease_blocks_content_and_namespace_mutation(pair,tmp_path,which,action):
@@ -74,17 +85,28 @@ def test_real_lease_blocks_content_and_namespace_mutation(pair,tmp_path,which,ac
     owner=leases.acquire_output_lease(*map(str,pair))
     try:
         assert owner.active and owner.active_for(tuple(map(str,pair)),owner.material)
+        write_case=action in ('write','same-size','restored-mtime')
+        native_refusal=native_write_probe(p) if write_case else None
+        if write_case:assert native_refusal=={'opened':False,'winerror':32}
         with pytest.raises(OSError) as denied:
             perform()
-        assert denied.value.winerror in (5,32)
+        if write_case:
+            # CPython FileIO uses CRT _wopen: errno may have no winerror.
+            assert isinstance(denied.value,PermissionError) and denied.value.errno==errno.EACCES
+            assert denied.value.winerror in (None,5,32)
+        else:assert denied.value.winerror in (5,32)
         assert p.read_bytes()==before
         assert owner.active
         record('protected-mutation-refused',which=which,action=action,winerror=denied.value.winerror,
+            errno=denied.value.errno,native_write_probe=native_refusal,
             before_sha256=hashlib.sha256(before).hexdigest(),after_sha256=hashlib.sha256(p.read_bytes()).hexdigest(),
             material=[asdict(x) for x in owner.material])
     finally:owner.close()
     assert owner.owned_count==0 and not owner.active
     # The SAME operation succeeds without protection, isolating the cause.
+    if action in ('write','same-size','restored-mtime'):
+        assert native_write_probe(p)=={'opened':True,'winerror':0}
+        record('native-write-open-succeeds-after-release',which=which,action=action)
     perform()
     if action in ('write','same-size','restored-mtime'):
         assert p.read_bytes()!=before
