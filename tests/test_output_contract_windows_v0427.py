@@ -170,7 +170,7 @@ def test_real_writable_mapping_refuses_entire_pair(pair,which,kind):
     assert pair[which].read_bytes()==before
     owner=leases.acquire_output_lease(*map(str,pair));owner.close()
     assert owner.owned_count==0
-    record('writable-mapping-pair-refusal',which=which,kind=kind,writer_file_handle_closed=True,error=32)
+    record('writable-mapping-pair-refusal',which=which,mapping_kind=kind,writer_file_handle_closed=True,error=32)
 
 
 def test_real_hardlink_is_refused_without_modifying_either_alias(pair,tmp_path):
@@ -383,7 +383,7 @@ def test_receiver_destruction_or_real_quit_releases_protection(library,monkeypat
         assert not owners[0].active and owners[0].owned_count==0
         if kind=='destroy':assert not shiboken6.isValid(window)
         else:assert quit_seen
-        record('receiver-lifetime',kind=kind,owned=0,thread_finished=True,about_to_quit=bool(quit_seen))
+        record('receiver-lifetime',receiver_kind=kind,owned=0,thread_finished=True,about_to_quit=bool(quit_seen))
     finally:
         if shiboken6.isValid(window):window.close()
         app.processEvents()

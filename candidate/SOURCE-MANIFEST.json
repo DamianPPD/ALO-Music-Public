@@ -2,7 +2,7 @@
   "head": "ea20be0f6db1788f0a2a834fcdba355f2d828ddb",
   "base_tree": "de616e0fe890353463181b9c785ba9152189f842",
   "input_tree": "42d7476ff4a740008ddbda3fbb82440ddae163ef",
-  "tree": "529c4a7013b069b8be1dc8ec4633e79aed20207b",
+  "tree": "13bd813e15ef85925e6b5da5cccde6edaf0807b8",
   "files": [
     {
       "path": ".gitattributes",
@@ -2101,8 +2101,8 @@
     {
       "path": "tests/test_output_contract_windows_v0427.py",
       "mode": "100644",
-      "blob": "9ed8696049fe9633536a11bc081b08c94bbf7d86",
-      "sha256": "1a80d1f29e9dc884875af3521cb2e1faf08241bbf16eb418d8937305ae89b409"
+      "blob": "c05dede88b98e17f93774abd49d54a87c3673b61",
+      "sha256": "efd6b01064f8713e236735d6998934805941ea8a99a8c663b443ed4f508b47ef"
     },
     {
       "path": "tests/test_output_protection_boundary_v0427.py",
@@ -2555,8 +2555,8 @@
       "sha256": "eb501c20aad1725a6afa7990be3b745497daf86bfb6ebc86cffbfb61f1fba5d7"
     }
   ],
-  "full_patch_sha256": "be358ef92a86378e18a0f0341c29e7781816e49f51006c78bc40a2a0f738949d",
-  "delta_sha256": "153cd85ceaf39fb6a1ee7376c9d2e6a35cdc08fd8b0d3ff0f767a3ae6a14ddeb",
+  "full_patch_sha256": "84b2c94dc1ed6f0bac64319699d863fe90764587e1dad7ba8eb98c5ebfb38985",
+  "delta_sha256": "3777842de55dd29c146716900ca8a371dcb5fcf9ed09c6911c864dea500871cd",
   "delta_paths": [
     "src/audio_library_organizer/jobs/file_reconciliation.py",
     "src/audio_library_organizer/jobs/output_session.py",
