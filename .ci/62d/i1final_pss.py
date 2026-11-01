@@ -7,7 +7,7 @@ Global inequality is recorded, not declared an accepted product PASS here.
 from pathlib import Path
 from collections import Counter
 from threading import get_ident
-import os,sys,time,json,sqlite3,weakref
+import os,sys,time,json,sqlite3,weakref,threading,traceback,inspect
 import pytest,shiboken6
 from PySide6.QtCore import QSettings,QThreadPool,QCoreApplication,QEvent,Qt
 from PySide6.QtWidgets import QApplication
@@ -25,13 +25,60 @@ def record(kind,**data):
         _monitor.take(kind,detail=data)
     original_record(kind,**data)
 
+def active_threads():
+    rows=[]
+    for ident,t in dict(threading._active).items():
+        started=getattr(t,'_started',None);cond=getattr(started,'_cond',None)
+        lock=getattr(cond,'_lock',None)
+        rows.append({'id':id(t),'ident':ident,'native_id':getattr(t,'_native_id',None),
+            'type':type(t).__module__+'.'+type(t).__qualname__,
+            'name':t.name,'started_event':id(started),'condition':id(cond),'lock':id(lock),
+            'event_set':started.is_set() if started is not None else None})
+    return rows
+
 @pytest.fixture
-def monitor():
-    m=Monitor()
+def monitor(monkeypatch):
+    # Load product Event aliases before the stdlib-only observation wrapper.
+    from audio_library_organizer.ui import main_window
+    m=Monitor();take=m.take;notes=[];constructing={}
+    original_dummy=threading._DummyThread.__init__;original_event=threading.Event
+    stdlib_source={name:inspect.getsource(obj) for name,obj in (
+        ('_DummyThread',threading._DummyThread),('Thread.__init__',threading.Thread.__init__),
+        ('current_thread',threading.current_thread),('Event',threading.Event))}
+    def observed_take(phase,objects=(),**detail):
+        event=take(phase,objects,**detail);event['python_threads']=active_threads();return event
+    m.take=observed_take
+    def event_factory(*args,**kwargs):
+        tid=get_ident()
+        if tid not in constructing:return original_event(*args,**kwargs)
+        m.take('dummy-event-before',dummy=constructing[tid]['dummy'])
+        event=original_event(*args,**kwargs)
+        constructing[tid]['events'].append(weakref.ref(event))
+        m.take('dummy-event-after',[('actual-stdlib-started-event',event)],
+            dummy=constructing[tid]['dummy'],event=id(event),condition=id(event._cond),lock=id(event._cond._lock))
+        return event
+    def dummy_init(dummy,*args,**kwargs):
+        tid=get_ident();assert tid not in constructing,'Recursive observer DummyThread construction'
+        span={'dummy':id(dummy),'events':[]};constructing[tid]=span
+        stack=[{'filename':x.filename,'line':x.lineno,'function':x.name,'code':x.line}
+            for x in traceback.extract_stack()[:-1]]
+        m.take('dummy-before',dummy=id(dummy),thread=tid)
+        try:result=original_dummy(dummy,*args,**kwargs)
+        finally:constructing.pop(tid)
+        notes.append({'dummy':id(dummy),'thread':tid,'native_id':dummy.native_id,
+            'event_ids':[id(x()) for x in span['events'] if x() is not None],
+            'started_event':id(dummy._started),'condition':id(dummy._started._cond),
+            'lock':id(dummy._started._cond._lock),'registered_in_active':threading._active.get(tid) is dummy,
+            'event_is_exact_stdlib_class':type(dummy._started) is original_event,'stack':stack})
+        m.take('dummy-after',[('actual-stdlib-DummyThread',dummy)],dummy=id(dummy),thread=tid)
+        return result
+    monkeypatch.setattr(threading,'Event',event_factory)
+    monkeypatch.setattr(threading._DummyThread,'__init__',dummy_init)
     try:yield m
     finally:
-        result={'scope':'I1-R1 PSS self-process only, not N1 rerun, not product acceptance',
-            'pid':os.getpid(),'dll_sha256':m.dll_sha256,'events':m.events}
+        result={'scope':'I1-R1 self-process PSS + exact stdlib helper attribution; no arbitrary close',
+            'pid':os.getpid(),'dll_sha256':m.dll_sha256,'events':m.events,
+            'stdlib_source':stdlib_source,'dummy_constructions':notes,'final_python_threads':active_threads()}
         (m.folder/'r1-pss-observations.json').write_text(json.dumps(result,indent=2)+'\n')
 
 @pytest.mark.parametrize('cycles',[1,2,8])

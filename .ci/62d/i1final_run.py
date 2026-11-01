@@ -3,7 +3,7 @@ from pathlib import Path
 import importlib.util,json,os,sys,traceback
 spec=importlib.util.spec_from_file_location('i1final_base',Path(__file__).with_name('contract_run.py'))
 base=importlib.util.module_from_spec(spec);spec.loader.exec_module(base)
-R1=[f'.ci/62d/i1final_pss.py::test_readonly_mainwindow_pss[{n}]' for n in (1,2,8)]
+R1=[f'.ci/62d/i1final_pss.py::test_readonly_mainwindow_pss[{n}]' for n in (2,)]
 base.CASES+=R1
 
 def run():

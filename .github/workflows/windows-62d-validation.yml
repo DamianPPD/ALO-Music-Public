@@ -1,5 +1,5 @@
-name: ALO 6.2D I1 FINAL read-only HANDLE attribution
-run-name: ALO 6.2D I1 FINAL read-only HANDLE attribution / Windows Server 2022 / ${{ github.sha }}
+name: ALO 6.2D I1 FINAL synchronization owner attribution
+run-name: ALO 6.2D I1 FINAL synchronization owner attribution / Windows Server 2022 / ${{ github.sha }}
 
 on:
   push:
@@ -85,7 +85,7 @@ jobs:
           [ordered]@{ source_sha256 = (Get-FileHash $source).Hash; dll_sha256 = (Get-FileHash $dll).Hash; vs_path = $vs; command = $cmd; scope = 'Compiled own read-only PSS observer; current process only' } | ConvertTo-Json | Set-Content (Join-Path $out 'n1-compiler.json')
 
 
-      - name: I1 R1 read-only PSS 1-2-8, not acceptance
+      - name: I1 R1 synchronization-owner observation, not acceptance
         run: |
           python -I .ci/62d/i1final_run.py r1-observe
           if ($LASTEXITCODE -ne 0) { throw 'Contract FAIL or infrastructure STOP; preserve all original outcomes' }
