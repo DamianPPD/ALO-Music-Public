@@ -1,8 +1,8 @@
 {
   "head": "ea20be0f6db1788f0a2a834fcdba355f2d828ddb",
   "base_tree": "de616e0fe890353463181b9c785ba9152189f842",
-  "input_tree": "13bd813e15ef85925e6b5da5cccde6edaf0807b8",
-  "tree": "3563267d6d94b9b6692276b74901dbc2d5deb23c",
+  "input_tree": "3563267d6d94b9b6692276b74901dbc2d5deb23c",
+  "tree": "9f1a769d99e01e789f3ea2487a7c63c9d36b9d3b",
   "files": [
     {
       "path": ".gitattributes",
@@ -1483,8 +1483,8 @@
     {
       "path": "src/audio_library_organizer/ui/main_window.py",
       "mode": "100644",
-      "blob": "b0eed93b76b908bc32a0a3da7ada2ce93ec72aaf",
-      "sha256": "6210bdd581f8474ab885df59968baa165dc90a720412bcc88037970031a10654"
+      "blob": "3643cef3a22e8a4b047f3621e623f950b71cf275",
+      "sha256": "64a7e0e664cd16b78c86dcef5097c4f7c52a7a0c1bbac1d2f8517184ef962227"
     },
     {
       "path": "src/audio_library_organizer/ui/metadata_editor.py",
@@ -2555,11 +2555,14 @@
       "sha256": "eb501c20aad1725a6afa7990be3b745497daf86bfb6ebc86cffbfb61f1fba5d7"
     }
   ],
-  "full_patch_sha256": "094a33cb83569faccbfe310666d647d5f7798e66dd93e4b14efb7cfc5a438fc8",
+  "full_patch_sha256": "768f3946d705dd3c84fda91728c1222c48e5e4fe5070e21e76cf0dca2ba98346",
   "delta_sha256": "e0ccfdd717bed836815ffce2a7089443650a032eb27f9f39a550ee99f80b2118",
   "delta_paths": [
     "tests/test_output_contract_windows_v0427.py"
   ],
   "windows_gate": false,
-  "scope": "N1 test methodology only; production unchanged"
+  "scope": "N1 test methodology only; production unchanged",
+  "full_patch_file": "ALO-Music-v0427-Stage6-2D-N2-I1-full.patch",
+  "delta_patch_sha256": "72aefed347ce77cef89c27d215f1d76c4a5559d3de48889c3651e31beb6430f5",
+  "delta_patch_file": "ALO-Music-v0427-Stage6-2D-N2-I1-delta.patch"
 }

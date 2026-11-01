@@ -10,6 +10,7 @@ import json
 import sqlite3
 from uuid import uuid4
 from functools import partial
+from weakref import WeakMethod
 
 from PySide6.QtCore import Qt, QThread, QSettings, Signal, Slot, QUrl, QTimer, QSize, QVariantAnimation, QFileSystemWatcher, QObject
 from PySide6.QtGui import QPixmap, QDesktopServices, QIcon, QColor
@@ -853,6 +854,21 @@ def _read_menu_snapshot(repository, library_root):
             {tid: cached.evaluation for tid, cached in snapshot.cached})
 
 
+def _borrowed_context_callback(method):
+    """GUI-only provider: the child page must not own its parent window.
+
+    A reader already returned by the factory owns only repository/root. Later
+    calls after native destruction fail closed without dereferencing a widget.
+    """
+    target = WeakMethod(method)
+    def invoke():
+        current = target()
+        if current is None or not isValid(current.__self__):
+            return None
+        return current()
+    return invoke
+
+
 class MainWindow(QMainWindow):
     def __init__(self, app_settings: AppSettings, qt_settings: QSettings, parent=None):
         super().__init__(parent)
@@ -1012,8 +1028,9 @@ class MainWindow(QMainWindow):
         self.library.approve_requested.connect(self._approve_track)
         self.library.review_requested.connect(lambda track: self._set_ready_from_editor(track, False))
         self.library.context_notice.connect(self._show_operation)
-        self.library.set_context_provider(self._library_context_snapshot,
-                                          worker_reader=self._library_context_reader)
+        self.library.set_context_provider(
+            _borrowed_context_callback(self._library_context_snapshot),
+            worker_reader=_borrowed_context_callback(self._library_context_reader))
         self.library.context_playlist_requested.connect(self._export_context_playlist)
         self.library.context_collection_requested.connect(self._create_context_collection)
         self.library.undo_requested.connect(self._undo_last_change)

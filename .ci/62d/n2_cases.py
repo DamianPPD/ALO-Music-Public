@@ -63,8 +63,6 @@ def observe_remaining_references(owner_refs,window_refs):
     A cycle is evidence of a reference path, not proof it is the only referrer.
     """
     import gc
-    from i1_refgraph import observe
-    observe(owner_refs,window_refs,record)
     for owner_ref in owner_refs:
         owner=owner_ref()
         if owner is None:continue
