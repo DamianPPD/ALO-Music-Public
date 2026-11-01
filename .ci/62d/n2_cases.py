@@ -26,8 +26,9 @@ def record(kind,**data):
         f.write(json.dumps({'kind':kind,'time':time.perf_counter(),'thread':get_ident(),**data})+'\n')
 
 class Receiver(QObject):
-    def __init__(self,window,mode,events):
+    def __init__(self,window,mode,events,repository):
         super().__init__(window);self.window=weakref.ref(window);self.mode=mode;self.events=events
+        self.repository=repository;self.gui_thread=get_ident()
     @Slot(object)
     def receive(self,result):
         window=self.window();self.events.append(('queued',get_ident(),time.perf_counter()))
@@ -37,6 +38,22 @@ class Receiver(QObject):
         elif self.mode=='close':window.close()
         elif self.mode=='destroy':shiboken6.delete(window)
         elif self.mode=='quit':QApplication.instance().quit()
+    @Slot(object)
+    def accept(self,result):
+        # A real GUI-affine QObject receiver is required here. A plain Python
+        # callback can inherit sender context while the worker waits for ACK.
+        from audio_library_organizer.ui.main_window import MainWindow
+        assert get_ident()==self.gui_thread
+        record('mainwindow-slot',mode=self.mode,count=handle_count())
+        if self.mode=='timeout':return
+        window=self.window()
+        if self.mode=='busy':
+            connection=sqlite3.connect(self.repository.database_path)
+            try:
+                connection.execute('BEGIN EXCLUSIVE')
+                MainWindow._file_check_finished(window,result)
+            finally:connection.rollback();connection.close()
+        else:MainWindow._file_check_finished(window,result)
 
 @pytest.mark.parametrize('mode',['success','cancel','timeout','busy','close','destroy','quit'])
 def test_real_mainwindow_strict_lifetime(library,monkeypatch,tmp_path,mode):
@@ -88,20 +105,10 @@ def test_real_mainwindow_strict_lifetime(library,monkeypatch,tmp_path,mode):
         AppPreferences(language='pl',theme='dark').save(store)
         window=main_window.MainWindow(AppSettings((),LibraryPaths(root)),store)
         window.resize(1500,960);window.show();app.processEvents()
-        receiver=Receiver(window,mode,events);destroyed=[];threads=[];emitted=[]
-        window_ref=weakref.ref(window)
-        original_slot=main_window.MainWindow._file_check_finished
-        def slot(result):
-            record('mainwindow-slot',mode=mode,count=handle_count())
-            if mode=='timeout':return
-            if mode=='busy':
-                connection=sqlite3.connect(repo.database_path);connection.execute('BEGIN EXCLUSIVE')
-                try:original_slot(window_ref(),result)
-                finally:connection.rollback();connection.close()
-            else:original_slot(window_ref(),result)
+        receiver=Receiver(window,mode,events,repo);destroyed=[];threads=[];emitted=[]
         # Test-owned instance only. A MonkeyPatch undo list would retain the
         # original bound method/window across the cross-round weakref check.
-        window._file_check_finished=slot
+        window._file_check_finished=receiver.accept
         def init(worker,*a,**kw):
             original_init(worker,*a,**kw);wid=id(worker)
             worker.destroyed.connect(lambda *_:destroyed.append(('worker',wid,get_ident())),Qt.ConnectionType.DirectConnection)
