@@ -55,6 +55,36 @@ class Receiver(QObject):
             finally:connection.rollback();connection.close()
         else:MainWindow._file_check_finished(window,result)
 
+def observe_remaining_references(owner_refs,window_refs):
+    """Read-only provenance after a failed-liveness boundary; no GC or cleanup.
+
+    Temporary inspection references disappear on this function's normal return.
+    The original immediate-liveness assertion remains unchanged afterwards.
+    A cycle is evidence of a reference path, not proof it is the only referrer.
+    """
+    import gc
+    for owner_ref in owner_refs:
+        owner=owner_ref()
+        if owner is None:continue
+        links=[]
+        for window_ref in window_refs:
+            window=window_ref()
+            if window is None:continue
+            result=getattr(window,'last_reconciliation_result',None)
+            delivery=getattr(result,'output_delivery',None)
+            page=getattr(window,'library',None)
+            links.append({'window':id(window),'window_native_valid':shiboken6.isValid(window),
+                'library_native_valid':shiboken6.isValid(page) if page is not None else None,
+                'window_last_result_contains_owner':getattr(delivery,'windows_lease',None) is owner,
+                'window_library_provider_back_to_window':getattr(getattr(page,'_context_provider',None),'__self__',None) is window,
+                'window_library_reader_back_to_window':getattr(getattr(page,'_context_worker_reader',None),'__self__',None) is window,
+                'window_gc_tracked':gc.is_tracked(window),
+                'receiver_has_weak_window':isinstance(getattr(getattr(window._file_check_finished,'__self__',None),'window',None),weakref.ReferenceType)})
+        record('retained-owner-reference-path',owner=id(owner),owned=owner.owned_count,
+            active=owner.active,reason=owner.reason,links=links,gc_enabled=gc.isenabled(),
+            gc_count=gc.get_count(),gc_threshold=gc.get_threshold(),
+            forced_gc=False,exclusive_cause_proven=False)
+
 @pytest.mark.parametrize('mode',['success','cancel','timeout','busy','close','destroy','quit'])
 def test_real_mainwindow_strict_lifetime(library,monkeypatch,tmp_path,mode):
     from audio_library_organizer.ui import main_window
@@ -68,7 +98,7 @@ def test_real_mainwindow_strict_lifetime(library,monkeypatch,tmp_path,mode):
     repo,root,track,_=library;approve(library)
     app=QApplication.instance() or QApplication([]);app.setQuitOnLastWindowClosed(False)
     pool=QThreadPool.globalInstance();gui_thread=get_ident()
-    opened=[];closed=[];live={};owner_refs=[];events=[];db_opens=[]
+    opened=[];closed=[];live={};owner_refs=[];window_refs=[];events=[];db_opens=[]
     original_open=native._WinAPI.open;original_close=native._WinAPI.close
     original_acquire=leases.acquire_output_lease;original_init=FileReconciliationWorker.__init__
     def observe_open(api,*a,**kw):
@@ -104,6 +134,7 @@ def test_real_mainwindow_strict_lifetime(library,monkeypatch,tmp_path,mode):
         store=QSettings(str(tmp_path/f'round-{index}.ini'),QSettings.Format.IniFormat)
         AppPreferences(language='pl',theme='dark').save(store)
         window=main_window.MainWindow(AppSettings((),LibraryPaths(root)),store)
+        window_refs.append(weakref.ref(window))
         window.resize(1500,960);window.show();app.processEvents()
         receiver=Receiver(window,mode,events,repo);destroyed=[];threads=[];emitted=[]
         # Test-owned instance only. A MonkeyPatch undo list would retain the
@@ -143,6 +174,7 @@ def test_real_mainwindow_strict_lifetime(library,monkeypatch,tmp_path,mode):
             pool_max=pool.maxThreadCount(),file_live=len(live),count=handle_count())
         # Return no owner, packet, QObject or bound method.
     roundtrip(0)
+    observe_remaining_references(owner_refs,window_refs)
     # End of normal Python scope, not a destructor forced for the measurement.
     assert owner_refs and all(ref() is None for ref in owner_refs)
     assert not live and Counter(opened)==Counter(closed)
