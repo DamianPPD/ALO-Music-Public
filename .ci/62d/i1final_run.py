@@ -60,8 +60,12 @@ def run_r2(resume=False):
         'R1_verified_run':41318357029,'A_C_evidence':'strict1/8 in that run, not reexecuted here',
         'source_before':True,'source_after':False}
     try:
-        selected=(LIFECYCLE[1:] if resume else LIFECYCLE)+TRANSPORT
-        if resume:report['B_verified_run']=41338957532
+        selected=TRANSPORT+LIFECYCLE[1:] if resume else LIFECYCLE+TRANSPORT
+        if resume:
+            report['B_verified_run']=41338957532
+            report['superseded_D_E_F_run']=41339304905
+            report['previous_H_timeout_run']=41339304905
+            report['order']='8transport then D/E/F/G/H; independent transport not hidden by H'
         for index,case in enumerate(selected,102 if resume else 101):
             folder=base.OUT/f'{index:03d}-case';folder.mkdir(exist_ok=False)
             profile=folder/'profile';profile.mkdir()

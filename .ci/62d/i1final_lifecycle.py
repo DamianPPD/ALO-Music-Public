@@ -24,8 +24,37 @@ class ScenarioReceiver(QObject):
     def __init__(self,window,mode,events,repository):
         super().__init__(window)
         self.window=weakref.ref(window);self.mode=mode;self.events=events
-        self.repository=repository;self.gui_thread=get_ident()
+        self.repository=repository;self.gui_thread=get_ident();self.completed_delivery=False
 
+    @Slot(object)
+    def accept(self,result):
+        assert get_ident()==self.gui_thread
+        window=self.window()
+        assert window is not None and shiboken6.isValid(window)
+        if self.mode in ('destroy','cancel-destroy'):
+            raise AssertionError('Dead receiver must not accept a queued result')
+        if self.mode in ('timeout','quit'):
+            assert not window._output_history and not window._output_session
+            record('positive-delivery-not-consumed',mode=self.mode,accepted=result.output_delivery.windows_lease.accepted)
+            return
+        assert self.mode=='after-delivery'
+        Receiver.accept(self,result)
+        lease=result.output_delivery.windows_lease
+        assert lease.accepted and not lease.active
+        assert window._output_history and not window._output_session
+        assert all(not h.evaluation.is_confirmed for h in window._output_history.values())
+        record('real-accept-complete-before-return',accepted=lease.accepted,history_confirmed=False)
+        self.completed_delivery=True
+
+class LifecycleController(QObject):
+    """Independent GUI receiver; survives the child receiver it destroys.
+
+    No parent/window strong edge and no deletion of the executing callback.
+    Its own teardown is performed by the outer GUI scope after return.
+    """
+    def __init__(self,window,mode,events):
+        super().__init__()
+        self.window=weakref.ref(window);self.mode=mode;self.events=events;self.gui_thread=get_ident()
     @Slot(object)
     def receive(self,result):
         window=self.window();lease=result.output_delivery.windows_lease
@@ -45,26 +74,7 @@ class ScenarioReceiver(QObject):
         elif self.mode=='quit':
             record('quit-before-positive-delivery',accepted=lease.accepted)
             QApplication.instance().quit()
-
-    @Slot(object)
-    def accept(self,result):
-        assert get_ident()==self.gui_thread
-        window=self.window()
-        assert window is not None and shiboken6.isValid(window)
-        if self.mode in ('destroy','cancel-destroy'):
-            raise AssertionError('Dead receiver must not accept a queued result')
-        if self.mode in ('timeout','quit'):
-            assert not window._output_history and not window._output_session
-            record('positive-delivery-not-consumed',mode=self.mode,accepted=result.output_delivery.windows_lease.accepted)
-            return
-        assert self.mode=='after-delivery'
-        Receiver.accept(self,result)
-        lease=result.output_delivery.windows_lease
-        assert lease.accepted and not lease.active
-        assert window._output_history and not window._output_session
-        assert all(not h.evaluation.is_confirmed for h in window._output_history.values())
-        record('destroy-after-real-accept',accepted=lease.accepted,history_confirmed=False)
-        shiboken6.delete(window)
+        assert shiboken6.isValid(self),'Executing controller must remain alive'
 
 @pytest.mark.parametrize('scenario',['D','E','F','G','H'])
 def test_lifecycle_matrix(library,monkeypatch,tmp_path,scenario,monitor):
@@ -84,7 +94,7 @@ def test_lifecycle_matrix(library,monkeypatch,tmp_path,scenario,monitor):
     app=QApplication.instance() or QApplication([]);app.setQuitOnLastWindowClosed(False)
     pool=QThreadPool.globalInstance();gui_thread=get_ident()
     opened=[];closed=[];live={};owner_refs=[];window_refs=[];events=[];db_opens=[]
-    i1_refs={name:[] for name in ('page','worker','thread','receiver')}
+    i1_refs={name:[] for name in ('page','worker','thread','receiver','controller')}
     original_open=native._WinAPI.open;original_close=native._WinAPI.close
     original_acquire=leases.acquire_output_lease;original_init=FileReconciliationWorker.__init__
     original_lease_close=leases.WindowsOutputLease.close;owner_closes=[]
@@ -92,6 +102,10 @@ def test_lifecycle_matrix(library,monkeypatch,tmp_path,scenario,monitor):
         result=original_lease_close(owner)
         state={'owner':id(owner),'reason':owner.reason,'accepted':owner.accepted,'owned':owner.owned_count,'thread':get_ident()}
         owner_closes.append(state);record('owner-closed',**state)
+        if mode=='quit':
+            import faulthandler
+            with (Path(os.environ['ALO_62D_EVIDENCE'])/'quit-owner-close-stacks.log').open('a') as stream:
+                faulthandler.dump_traceback(file=stream,all_threads=True)
         return result
     monkeypatch.setattr(leases.WindowsOutputLease,'close',observe_owner_close)
     def observe_open(api,*a,**kw):
@@ -132,7 +146,8 @@ def test_lifecycle_matrix(library,monkeypatch,tmp_path,scenario,monitor):
         window_refs.append(weakref.ref(window))
         i1_refs['page'].append(weakref.ref(window.library))
         window.resize(1500,960);window.show();app.processEvents()
-        receiver=ScenarioReceiver(window,mode,events,repo);destroyed=[];threads=[];emitted=[]
+        receiver=ScenarioReceiver(window,mode,events,repo);controller=LifecycleController(window,mode,events);destroyed=[];threads=[];emitted=[]
+        i1_refs['controller'].append(weakref.ref(controller))
         i1_refs['receiver'].append(weakref.ref(receiver))
         # Test-owned instance only. A MonkeyPatch undo list would retain the
         # original bound method/window across the cross-round weakref check.
@@ -145,7 +160,7 @@ def test_lifecycle_matrix(library,monkeypatch,tmp_path,scenario,monitor):
                 emitted.append(get_ident());record('worker-emission',count=handle_count(),
                     active=result.output_delivery.windows_lease.active)
             worker.finished.connect(emit,Qt.ConnectionType.DirectConnection)
-            worker.finished.connect(receiver.receive,Qt.ConnectionType.QueuedConnection)
+            worker.finished.connect(controller.receive,Qt.ConnectionType.QueuedConnection)
         start=time.perf_counter();before_db=len(db_opens);before_queued=len(events);before_owner_closes=len(owner_closes)
         # Restore per-round worker constructor before the next window is made.
         with monkeypatch.context() as patch:
@@ -153,7 +168,15 @@ def test_lifecycle_matrix(library,monkeypatch,tmp_path,scenario,monitor):
             window.review_btn.click();thread=window._thread
             i1_refs['thread'].append(weakref.ref(thread))
             thread.destroyed.connect(lambda *_:threads.append(get_ident()),Qt.ConnectionType.DirectConnection)
-            if mode=='quit':assert app.exec()==0
+            if mode=='quit':
+                record('app-exec-enter',index=index)
+                assert app.exec()==0
+                record('app-exec-returned',index=index)
+            if mode=='after-delivery':
+                drain_until(lambda:receiver.completed_delivery)
+                assert shiboken6.isValid(window) and shiboken6.isValid(receiver)
+                record('destroy-after-callback-return',index=index)
+                shiboken6.delete(window)
             drain_until(lambda:bool(threads))
         app.processEvents();QCoreApplication.sendPostedEvents(None,QEvent.Type.DeferredDelete)
         assert emitted and all(t!=gui_thread for t in emitted)
@@ -168,9 +191,10 @@ def test_lifecycle_matrix(library,monkeypatch,tmp_path,scenario,monitor):
                 assert timeout_closes,'Current round did not close its owner after the actual delivery timeout'
                 record('delivery-timeout-proved',reason='DELIVERY_TIMEOUT',owned=0)
             window.close();window.deleteLater()
+        controller.deleteLater()
         assert pool.waitForDone(5000)
         app.processEvents();QCoreApplication.sendPostedEvents(None,QEvent.Type.DeferredDelete)
-        assert not shiboken6.isValid(window) and pool.activeThreadCount()==0
+        assert not shiboken6.isValid(window) and not shiboken6.isValid(controller) and pool.activeThreadCount()==0
         record('round-complete',index=index,mode=mode,duration=time.perf_counter()-start,
             sqlite_connections_opened=len(db_opens)-before_db,worker_destroyed=destroyed,
             pool_active=pool.activeThreadCount(),pool_expiry=pool.expiryTimeout(),
