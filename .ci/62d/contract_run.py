@@ -52,6 +52,17 @@ def bounded_child(cmd,env,folder):
 
 def install_callback_observer(folder):
     errors=folder/'callback-exceptions.jsonl';errors.write_text('')
+    messages=folder/'qt-messages.jsonl';messages.write_text('')
+    from PySide6.QtCore import qInstallMessageHandler
+    previous=None
+    def qt_message(kind,context,message):
+        level=int(kind.value)
+        with messages.open('a',encoding='utf-8') as f:
+            f.write(json.dumps({'type':level,'message':message,
+                'thread':threading.get_ident(),'lifecycle_error':qt_message_is_error(level,message)})+'\n')
+        if previous is not None:previous(kind,context,message)
+        else:sys.stderr.write(message+'\n')
+    previous=qInstallMessageHandler(qt_message)
     def record_error(kind,typ,value,tb):
         with errors.open('a',encoding='utf-8') as f:
             f.write(json.dumps({'kind':kind,'type':typ.__module__+'.'+typ.__qualname__,
@@ -64,6 +75,14 @@ def install_callback_observer(folder):
         record_error('threading.excepthook',args.exc_type,args.exc_value,args.exc_traceback);threadhook(args)
     sys.excepthook=qt_error;sys.unraisablehook=unraised;threading.excepthook=thread_error
     return errors
+
+def qt_message_is_error(level,message):
+    # QtCriticalMsg=2, QtFatalMsg=3. Preserve benign backend information but
+    # never accept known QObject/QThread affinity/destruction failures.
+    prefixes=('QObject::killTimer','QObject::startTimer','QObject::~QObject',
+        'QObject::moveToThread','QObject::setParent','QObject: Cannot create children',
+        'QThread: Destroyed','QThread::wait','QBasicTimer::stop','QBasicTimer::start')
+    return level in (2,3) or message.startswith(prefixes)
 
 def child(case,folder):
     if sys.stdin.readline()!='GO\n':raise RuntimeError('No parent Job Object authorization')
@@ -105,21 +124,28 @@ def classify(folder,code):
     errors=folder/'callback-exceptions.jsonl';final=folder/'child-final.json'
     if not errors.exists() or not final.exists():return 'MISSING_CHILD_FINAL_EVIDENCE'
     if errors.read_text().strip():return 'CALLBACK_ERROR'
+    qtlog=folder/'qt-messages.jsonl'
+    if not qtlog.exists():return 'MISSING_QT_EVIDENCE'
+    messages=[json.loads(line) for line in qtlog.read_text(encoding='utf-8').splitlines()]
+    if any(qt_message_is_error(row['type'],row['message']) for row in messages):return 'QT_LIFECYCLE_ERROR'
     state=json.loads(final.read_text())
     if state.get('gate') is not False or state.get('quarantined_owners')!=0 or state.get('pytest_exit')!=0:
         return 'UNSAFE_CHILD_FINAL'
     return 'PASS'
 
-def run():
+def run(start_index=1):
     old.windows_required();ci.verify_sources()
     prepared=json.loads((ci.EVIDENCE/'prepared.json').read_text())
     env=old.child_environment(Path(prepared['python']),Path(prepared['bin']))
     assert len(CASES)==83 and len(set(CASES))==len(CASES)
+    assert start_index in (1,23)
     status={'scope':'Native Windows Server 2022. NOT Windows10/11 Desktop.',
         'candidate_tree':ci.TREE,'gate':'OFF','planned':len(CASES),'not_scheduled':PLAN['not_scheduled'],
-        'source_before':True,'source_after':False,'cases':[],'status':'INCOMPLETE'}
+        'source_before':True,'source_after':False,'cases':[],'status':'INCOMPLETE',
+        'start_index':start_index,'scheduled':len(CASES)-start_index+1,
+        'earlier_cases_not_executed_in_this_run':start_index-1}
     try:
-        for i,case in enumerate(CASES,1):
+        for i,case in list(enumerate(CASES,1))[start_index-1:]:
             folder=OUT/f'{i:03d}-case';folder.mkdir(exist_ok=False)
             profile=folder/'profile';profile.mkdir()
             childenv=dict(env,ALO_62D_EVIDENCE=str(folder),STAGE62C_EVIDENCE=str(folder),
@@ -134,7 +160,7 @@ def run():
             ci.verify_sources()
             if outcome!='PASS':raise RuntimeError('STOP: '+case+' / '+outcome)
             audit_synthetic(folder)
-        status['status']='CONTRACT_WINDOWS_SERVER_PASS'
+        status['status']='CONTRACT_WINDOWS_SERVER_PASS' if start_index==1 else 'N2_RESUMED_SCOPE_PASS_NOT_FULL_RUN'
     except BaseException as exc:
         status['status']='STOP';status['error']=repr(exc);raise
     finally:
@@ -168,7 +194,7 @@ def finish():
 
 if __name__=='__main__':
     try:
-        code=child(sys.argv[2],Path(sys.argv[3])) if sys.argv[1]=='pytest-wait' else {'run':run,'finish':finish}[sys.argv[1]]()
+        code=child(sys.argv[2],Path(sys.argv[3])) if sys.argv[1]=='pytest-wait' else {'run':run,'resume':lambda:run(23),'finish':finish}[sys.argv[1]]()
     except BaseException:
         (OUT/'exception.log').write_text(traceback.format_exc());raise
     sys.exit(code)
