@@ -9,7 +9,7 @@ from collections import Counter
 from threading import get_ident
 import os,sys,time,json,weakref
 import pytest,shiboken6
-from PySide6.QtCore import Slot,QSettings,QThreadPool,QCoreApplication,QEvent,Qt
+from PySide6.QtCore import QObject,Slot,QSettings,QThreadPool,QCoreApplication,QEvent,Qt
 from PySide6.QtWidgets import QApplication
 import n2_cases as original
 import i1final_pss as i1base
@@ -20,7 +20,12 @@ from n2_cases import handle_count,native,leases
 from i1_post_refgraph import observe
 pytestmark=pytest.mark.skipif(sys.platform!='win32',reason='Native Windows/NTFS I1 only')
 
-class ScenarioReceiver(Receiver):
+class ScenarioReceiver(QObject):
+    def __init__(self,window,mode,events,repository):
+        super().__init__(window)
+        self.window=weakref.ref(window);self.mode=mode;self.events=events
+        self.repository=repository;self.gui_thread=get_ident()
+
     @Slot(object)
     def receive(self,result):
         window=self.window();lease=result.output_delivery.windows_lease

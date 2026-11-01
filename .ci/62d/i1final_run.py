@@ -49,18 +49,20 @@ def run(verify=False):
     finally:base.ci.verify_sources();base.write(base.OUT/'run.json',report)
     return 0
 
-def run_r2():
+def run_r2(resume=False):
     # R1 was independently verified from complete raw run41318357029 on this
     # exact product TREE. A/C refer to its strict1/8, not a claim of this run.
     base.old.windows_required();base.ci.verify_sources()
     assert base.ci.TREE=='715aee6d642e0aa79e721a24b66a5c055729d05c'
     prepared=json.loads((base.ci.EVIDENCE/'prepared.json').read_text())
     report={'scope':'I1 remaining B/D/E/F/G/H + exact8 transport tests; native Windows Server2022, NOT Desktop',
-        'candidate_tree':base.ci.TREE,'planned':14,'cases':[],'gate':'OFF','status':'INCOMPLETE',
+        'candidate_tree':base.ci.TREE,'planned':13 if resume else 14,'cases':[],'gate':'OFF','status':'INCOMPLETE',
         'R1_verified_run':41318357029,'A_C_evidence':'strict1/8 in that run, not reexecuted here',
         'source_before':True,'source_after':False}
     try:
-        for index,case in enumerate(LIFECYCLE+TRANSPORT,101):
+        selected=(LIFECYCLE[1:] if resume else LIFECYCLE)+TRANSPORT
+        if resume:report['B_verified_run']=41338957532
+        for index,case in enumerate(selected,102 if resume else 101):
             folder=base.OUT/f'{index:03d}-case';folder.mkdir(exist_ok=False)
             profile=folder/'profile';profile.mkdir()
             env=base.old.child_environment(Path(prepared['python']),Path(prepared['bin']))
@@ -79,7 +81,7 @@ def run_r2():
                 assert summary['acceptance'] is True and summary['strict_global_equality'] is True
                 item['observations']=summary
             base.audit_synthetic(folder)
-        assert len(report['cases'])==14
+        assert len(report['cases'])==report['planned']
         report['status']='I1_REMAINING_SCOPE_PASS_NOT_FULL_N2'
     except BaseException as error:
         report.update(status='STOP',error=repr(error));raise
@@ -89,7 +91,7 @@ def run_r2():
 
 if __name__=='__main__':
     try:
-        code=base.child(sys.argv[2],Path(sys.argv[3])) if sys.argv[1]=='pytest-wait' else {'r1-observe':run,'r1-verify':lambda:run(True),'r2':run_r2,'finish':base.finish}[sys.argv[1]]()
+        code=base.child(sys.argv[2],Path(sys.argv[3])) if sys.argv[1]=='pytest-wait' else {'r1-observe':run,'r1-verify':lambda:run(True),'r2':run_r2,'r2-resume':lambda:run_r2(True),'finish':base.finish}[sys.argv[1]]()
     except BaseException:
         (base.OUT/'i1final-exception.log').write_text(traceback.format_exc());raise
     sys.exit(code)

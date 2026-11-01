@@ -1,5 +1,5 @@
-name: ALO 6.2D I1 FINAL remaining B-D-H lifecycle and transport
-run-name: ALO 6.2D I1 FINAL remaining B-D-H lifecycle and transport / Windows Server 2022 / ${{ github.sha }}
+name: ALO 6.2D I1 FINAL remaining D-H direct QObject receiver and transport
+run-name: ALO 6.2D I1 FINAL remaining D-H direct QObject receiver and transport / Windows Server 2022 / ${{ github.sha }}
 
 on:
   push:
@@ -87,7 +87,7 @@ jobs:
 
       - name: Remaining I1 real lifecycle and exact transport tests
         run: |
-          python -I .ci/62d/i1final_run.py r2
+          python -I .ci/62d/i1final_run.py r2-resume
           if ($LASTEXITCODE -ne 0) { throw 'I1 remaining scope FAIL; raw evidence preserved' }
 
       - name: Preserve and summarize all available results
