@@ -66,9 +66,9 @@ jobs:
           python -I .ci/62d/ci.py prepare
           if ($LASTEXITCODE -ne 0) { throw 'Environment/preflight failed; no application PASS' }
 
-      - name: N2 resume from corrected case023 through original case083
+      - name: N2 supplemental real MainWindow lifetime and strict handle accounting
         run: |
-          python -I .ci/62d/contract_run.py resume
+          python -I .ci/62d/contract_run.py supplement
           if ($LASTEXITCODE -ne 0) { throw 'Contract FAIL or infrastructure STOP; preserve all original outcomes' }
 
       - name: Preserve and summarize all available results
@@ -83,7 +83,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: ALO-62D-N2-resume-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ALO-62D-N2-supplement-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/alo-62d-evidence/ALO-62D-CONTRACT-evidence.zip
             ${{ runner.temp }}/alo-62d-evidence/ALO-62D-CONTRACT-evidence.zip.sha256.txt

@@ -1,0 +1,13 @@
+{
+  "scope": "7 justified native N2 lifetime/handle measurement gaps; original83 unchanged",
+  "selected": [
+    ".ci/62d/n2_cases.py::test_real_mainwindow_strict_lifetime[success]",
+    ".ci/62d/n2_cases.py::test_real_mainwindow_strict_lifetime[cancel]",
+    ".ci/62d/n2_cases.py::test_real_mainwindow_strict_lifetime[timeout]",
+    ".ci/62d/n2_cases.py::test_real_mainwindow_strict_lifetime[busy]",
+    ".ci/62d/n2_cases.py::test_real_mainwindow_strict_lifetime[close]",
+    ".ci/62d/n2_cases.py::test_real_mainwindow_strict_lifetime[destroy]",
+    ".ci/62d/n2_cases.py::test_real_mainwindow_strict_lifetime[quit]"
+  ],
+  "count": 7
+}

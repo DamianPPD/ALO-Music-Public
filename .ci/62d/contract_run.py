@@ -13,7 +13,9 @@ ci=old.ci;ROOT=old.ROOT
 job_types=module('original_handle_job',HERE/'handle_probe.py')
 OUT=ci.EVIDENCE/'contract';OUT.mkdir(exist_ok=True)
 PLAN=json.loads((HERE/'contract-cases.json').read_text())
-CASES=PLAN['selected']
+EXTRA_PLAN=json.loads((HERE/'n2-cases.json').read_text()) if (HERE/'n2-cases.json').exists() else {'selected':[]}
+EXTRA_CASES=EXTRA_PLAN['selected']
+CASES=PLAN['selected']+EXTRA_CASES
 
 def write(path,value):path.write_text(json.dumps(value,indent=2)+'\n',encoding='utf-8')
 
@@ -137,12 +139,13 @@ def run(start_index=1):
     old.windows_required();ci.verify_sources()
     prepared=json.loads((ci.EVIDENCE/'prepared.json').read_text())
     env=old.child_environment(Path(prepared['python']),Path(prepared['bin']))
-    assert len(CASES)==83 and len(set(CASES))==len(CASES)
-    assert start_index in (1,23)
+    assert len(PLAN['selected'])==83 and len(set(CASES))==len(CASES)
+    assert start_index in (1,23,84) and start_index<=len(CASES)
     status={'scope':'Native Windows Server 2022. NOT Windows10/11 Desktop.',
         'candidate_tree':ci.TREE,'gate':'OFF','planned':len(CASES),'not_scheduled':PLAN['not_scheduled'],
         'source_before':True,'source_after':False,'cases':[],'status':'INCOMPLETE',
-        'start_index':start_index,'scheduled':len(CASES)-start_index+1,
+        'start_index':start_index,'original_cases':83,'supplemental_cases':len(EXTRA_CASES),
+        'scheduled':len(CASES)-start_index+1,
         'earlier_cases_not_executed_in_this_run':start_index-1}
     try:
         for i,case in list(enumerate(CASES,1))[start_index-1:]:
@@ -160,7 +163,8 @@ def run(start_index=1):
             ci.verify_sources()
             if outcome!='PASS':raise RuntimeError('STOP: '+case+' / '+outcome)
             audit_synthetic(folder)
-        status['status']='CONTRACT_WINDOWS_SERVER_PASS' if start_index==1 else 'N2_RESUMED_SCOPE_PASS_NOT_FULL_RUN'
+        status['status']='CONTRACT_WINDOWS_SERVER_PASS' if start_index==1 else (
+            'N2_SUPPLEMENT_SCOPE_PASS_NOT_FULL_RUN' if start_index==84 else 'N2_RESUMED_SCOPE_PASS_NOT_FULL_RUN')
     except BaseException as exc:
         status['status']='STOP';status['error']=repr(exc);raise
     finally:
@@ -194,7 +198,8 @@ def finish():
 
 if __name__=='__main__':
     try:
-        code=child(sys.argv[2],Path(sys.argv[3])) if sys.argv[1]=='pytest-wait' else {'run':run,'resume':lambda:run(23),'finish':finish}[sys.argv[1]]()
+        code=child(sys.argv[2],Path(sys.argv[3])) if sys.argv[1]=='pytest-wait' else {
+            'run':run,'resume':lambda:run(23),'supplement':lambda:run(84),'finish':finish}[sys.argv[1]]()
     except BaseException:
         (OUT/'exception.log').write_text(traceback.format_exc());raise
     sys.exit(code)
