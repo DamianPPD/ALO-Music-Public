@@ -1,5 +1,5 @@
-name: ALO 6.2D I1 FINAL unmodified reproduction
-run-name: ALO 6.2D I1 FINAL unmodified reproduction / Windows Server 2022 / ${{ github.sha }}
+name: ALO 6.2D I1 FINAL read-only HANDLE attribution
+run-name: ALO 6.2D I1 FINAL read-only HANDLE attribution / Windows Server 2022 / ${{ github.sha }}
 
 on:
   push:
@@ -66,9 +66,28 @@ jobs:
           python -I .ci/62d/ci.py prepare
           if ($LASTEXITCODE -ne 0) { throw 'Environment/preflight failed; no application PASS' }
 
-      - name: I1 only original success lifecycle, unchanged assertion
+      - name: Compile self-process PSS observer with installed Microsoft SDK
         run: |
-          python -I .ci/62d/contract_run.py i1-original
+          $ErrorActionPreference = 'Stop'
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (!$vs) { throw 'Microsoft C++ tools unavailable; no native diagnostic claim' }
+          $dev = Join-Path $vs 'Common7/Tools/VsDevCmd.bat'
+          $out = Join-Path $env:RUNNER_TEMP 'alo-62d-evidence'
+          $source = Join-Path $env:GITHUB_WORKSPACE '.ci/62d/n1_pss.c'
+          $dll = Join-Path $out 'n1_pss.dll'
+          $obj = Join-Path $out 'n1_pss.obj'
+          $cmd = 'call "' + $dev + '" -arch=x64 -host_arch=x64 && cl.exe /nologo /Bv /LD /W4 /WX /MT /O2 /Fo"' + $obj + '" "' + $source + '" /link kernel32.lib /OUT:"' + $dll + '"'
+          & $env:ComSpec /d /s /c $cmd *> (Join-Path $out 'n1-compile.log')
+          $code = $LASTEXITCODE
+          $code | Set-Content (Join-Path $out 'n1-compile.exit.txt')
+          if ($code -ne 0) { Get-Content (Join-Path $out 'n1-compile.log'); throw 'PSS helper compile failed' }
+          [ordered]@{ source_sha256 = (Get-FileHash $source).Hash; dll_sha256 = (Get-FileHash $dll).Hash; vs_path = $vs; command = $cmd; scope = 'Compiled own read-only PSS observer; current process only' } | ConvertTo-Json | Set-Content (Join-Path $out 'n1-compiler.json')
+
+
+      - name: I1 R1 read-only PSS 1-2-8, not acceptance
+        run: |
+          python -I .ci/62d/i1final_run.py r1-observe
           if ($LASTEXITCODE -ne 0) { throw 'Contract FAIL or infrastructure STOP; preserve all original outcomes' }
 
       - name: Preserve and summarize all available results
