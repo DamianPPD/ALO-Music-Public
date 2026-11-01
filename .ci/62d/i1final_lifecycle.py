@@ -55,6 +55,22 @@ class LifecycleController(QObject):
     def __init__(self,window,mode,events):
         super().__init__()
         self.window=weakref.ref(window);self.mode=mode;self.events=events;self.gui_thread=get_ident()
+        self.last_closed=0;self.quit_seen=0
+    @Slot()
+    def last_window_closed(self):
+        self.last_closed+=1
+        record('actual-last-window-closed',quit_on_last=QApplication.instance().quitOnLastWindowClosed())
+    @Slot()
+    def about_to_quit(self):
+        self.quit_seen+=1
+        window=self.window()
+        assert not window._output_history and not window._output_session
+        record('actual-about-to-quit',quit_on_last=QApplication.instance().quitOnLastWindowClosed(),history_empty=True)
+    def eventFilter(self,watched,event):
+        if self.mode=='quit' and event.type() in (QEvent.Type.Close,QEvent.Type.Hide):
+            record('actual-window-close-or-hide',event=int(event.type()),visible=watched.isVisible(),
+                worker_present=watched._worker is not None,quit_on_last=QApplication.instance().quitOnLastWindowClosed())
+        return False
     @Slot(object)
     def receive(self,result):
         window=self.window();lease=result.output_delivery.windows_lease
@@ -91,7 +107,7 @@ def test_lifecycle_matrix(library,monkeypatch,tmp_path,scenario,monitor):
     monkeypatch.setattr(native,'WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED',True)
     monkeypatch.setattr(main_window,'DashboardPage',DashboardPage)
     repo,root,track,_=library;approve(library)
-    app=QApplication.instance() or QApplication([]);app.setQuitOnLastWindowClosed(False)
+    app=QApplication.instance() or QApplication([]);app.setQuitOnLastWindowClosed(mode=='quit')
     pool=QThreadPool.globalInstance();gui_thread=get_ident()
     opened=[];closed=[];live={};owner_refs=[];window_refs=[];events=[];db_opens=[]
     i1_refs={name:[] for name in ('page','worker','thread','receiver','controller')}
@@ -102,10 +118,6 @@ def test_lifecycle_matrix(library,monkeypatch,tmp_path,scenario,monitor):
         result=original_lease_close(owner)
         state={'owner':id(owner),'reason':owner.reason,'accepted':owner.accepted,'owned':owner.owned_count,'thread':get_ident()}
         owner_closes.append(state);record('owner-closed',**state)
-        if mode=='quit':
-            import faulthandler
-            with (Path(os.environ['ALO_62D_EVIDENCE'])/'quit-owner-close-stacks.log').open('a') as stream:
-                faulthandler.dump_traceback(file=stream,all_threads=True)
         return result
     monkeypatch.setattr(leases.WindowsOutputLease,'close',observe_owner_close)
     def observe_open(api,*a,**kw):
@@ -148,6 +160,10 @@ def test_lifecycle_matrix(library,monkeypatch,tmp_path,scenario,monitor):
         window.resize(1500,960);window.show();app.processEvents()
         receiver=ScenarioReceiver(window,mode,events,repo);controller=LifecycleController(window,mode,events);destroyed=[];threads=[];emitted=[]
         i1_refs['controller'].append(weakref.ref(controller))
+        if mode=='quit':
+            window.installEventFilter(controller)
+            app.lastWindowClosed.connect(controller.last_window_closed)
+            app.aboutToQuit.connect(controller.about_to_quit)
         i1_refs['receiver'].append(weakref.ref(receiver))
         # Test-owned instance only. A MonkeyPatch undo list would retain the
         # original bound method/window across the cross-round weakref check.
@@ -172,6 +188,8 @@ def test_lifecycle_matrix(library,monkeypatch,tmp_path,scenario,monitor):
                 record('app-exec-enter',index=index)
                 assert app.exec()==0
                 record('app-exec-returned',index=index)
+                assert controller.last_closed>=1 and controller.quit_seen==1
+                assert app.quitOnLastWindowClosed() is True
             if mode=='after-delivery':
                 drain_until(lambda:receiver.completed_delivery)
                 assert shiboken6.isValid(window) and shiboken6.isValid(receiver)

@@ -1,5 +1,5 @@
-name: ALO 6.2D I1 FINAL safe callback teardown D-H and exact transport
-run-name: ALO 6.2D I1 FINAL safe callback teardown D-H and exact transport / Windows Server 2022 / ${{ github.sha }}
+name: ALO 6.2D I1 FINAL H only production default quit policy
+run-name: ALO 6.2D I1 FINAL H only production default quit policy / Windows Server 2022 / ${{ github.sha }}
 
 on:
   push:

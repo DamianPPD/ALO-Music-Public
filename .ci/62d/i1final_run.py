@@ -56,17 +56,18 @@ def run_r2(resume=False):
     assert base.ci.TREE=='a4941cee5f9bd1c201b841e428801256104345cc'
     prepared=json.loads((base.ci.EVIDENCE/'prepared.json').read_text())
     report={'scope':'I1 remaining B/D/E/F/G/H + exact8 transport tests; native Windows Server2022, NOT Desktop',
-        'candidate_tree':base.ci.TREE,'planned':6 if resume else 14,'cases':[],'gate':'OFF','status':'INCOMPLETE',
+        'candidate_tree':base.ci.TREE,'planned':1 if resume else 14,'cases':[],'gate':'OFF','status':'INCOMPLETE',
         'R1_verified_run':41318357029,'A_C_evidence':'strict1/8 in that run, not reexecuted here',
         'source_before':True,'source_after':False}
     try:
-        selected=TRANSPORT[-1:]+LIFECYCLE[1:] if resume else LIFECYCLE+TRANSPORT
+        selected=LIFECYCLE[-1:] if resume else LIFECYCLE+TRANSPORT
         if resume:
             report['B_verified_run']=41338957532
             report['superseded_D_E_F_run']=41339304905
             report['previous_H_timeout_run']=41339304905
             report['transport_first7_verified_run']=41340138364
-            report['order']='one already-expired-deadline transport case then D/E/F/G/H;7passedtransportnotrepeated'
+            report['order']='H only, real default quit policy; all previously passed cases not repeated'
+            report['D_E_F_G_and_deadline_verified_run']=41340678373
             report['earlier_source_tree']='715aee6d642e0aa79e721a24b66a5c055729d05c'
             report['source_change_since_earlier_evidence']='testonly already-expired deadline; all productionblobsidentical'
         for index,case in enumerate(selected,102 if resume else 101):
