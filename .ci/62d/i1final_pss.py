@@ -7,8 +7,8 @@ Global inequality is recorded, not declared an accepted product PASS here.
 from pathlib import Path
 from collections import Counter
 from threading import get_ident
-import os,sys,time,json,sqlite3,weakref,threading,traceback,inspect
-import pytest,shiboken6
+import os,sys,time,json,sqlite3,weakref
+import pytest,shiboken6,ctypes as C,threading
 from PySide6.QtCore import QSettings,QThreadPool,QCoreApplication,QEvent,Qt
 from PySide6.QtWidgets import QApplication
 import n2_cases as original
@@ -25,60 +25,20 @@ def record(kind,**data):
         _monitor.take(kind,detail=data)
     original_record(kind,**data)
 
-def active_threads():
-    rows=[]
-    for ident,t in dict(threading._active).items():
-        started=getattr(t,'_started',None);cond=getattr(started,'_cond',None)
-        lock=getattr(cond,'_lock',None)
-        rows.append({'id':id(t),'ident':ident,'native_id':getattr(t,'_native_id',None),
-            'type':type(t).__module__+'.'+type(t).__qualname__,
-            'name':t.name,'started_event':id(started),'condition':id(cond),'lock':id(lock),
-            'event_set':started.is_set() if started is not None else None})
-    return rows
-
 @pytest.fixture
-def monitor(monkeypatch):
-    # Load product Event aliases before the stdlib-only observation wrapper.
-    from audio_library_organizer.ui import main_window
-    m=Monitor();take=m.take;notes=[];constructing={}
-    original_dummy=threading._DummyThread.__init__;original_event=threading.Event
-    stdlib_source={name:inspect.getsource(obj) for name,obj in (
-        ('_DummyThread',threading._DummyThread),('Thread.__init__',threading.Thread.__init__),
-        ('current_thread',threading.current_thread),('Event',threading.Event))}
+def monitor():
+    m=Monitor();take=m.take
     def observed_take(phase,objects=(),**detail):
-        event=take(phase,objects,**detail);event['python_threads']=active_threads();return event
-    m.take=observed_take
-    def event_factory(*args,**kwargs):
-        tid=get_ident()
-        if tid not in constructing:return original_event(*args,**kwargs)
-        m.take('dummy-event-before',dummy=constructing[tid]['dummy'])
-        event=original_event(*args,**kwargs)
-        constructing[tid]['events'].append(weakref.ref(event))
-        m.take('dummy-event-after',[('actual-stdlib-started-event',event)],
-            dummy=constructing[tid]['dummy'],event=id(event),condition=id(event._cond),lock=id(event._cond._lock))
+        event=take(phase,objects,**detail)
+        event['python_threads']=[{'id':id(t),'ident':ident,'type':type(t).__qualname__,
+            'started_event':id(t._started),'condition':id(t._started._cond),'lock':id(t._started._cond._lock)}
+            for ident,t in dict(threading._active).items()]
         return event
-    def dummy_init(dummy,*args,**kwargs):
-        tid=get_ident();assert tid not in constructing,'Recursive observer DummyThread construction'
-        span={'dummy':id(dummy),'events':[]};constructing[tid]=span
-        stack=[{'filename':x.filename,'line':x.lineno,'function':x.name,'code':x.line}
-            for x in traceback.extract_stack()[:-1]]
-        m.take('dummy-before',dummy=id(dummy),thread=tid)
-        try:result=original_dummy(dummy,*args,**kwargs)
-        finally:constructing.pop(tid)
-        notes.append({'dummy':id(dummy),'thread':tid,'native_id':dummy.native_id,
-            'event_ids':[id(x()) for x in span['events'] if x() is not None],
-            'started_event':id(dummy._started),'condition':id(dummy._started._cond),
-            'lock':id(dummy._started._cond._lock),'registered_in_active':threading._active.get(tid) is dummy,
-            'event_is_exact_stdlib_class':type(dummy._started) is original_event,'stack':stack})
-        m.take('dummy-after',[('actual-stdlib-DummyThread',dummy)],dummy=id(dummy),thread=tid)
-        return result
-    monkeypatch.setattr(threading,'Event',event_factory)
-    monkeypatch.setattr(threading._DummyThread,'__init__',dummy_init)
+    m.take=observed_take
     try:yield m
     finally:
-        result={'scope':'I1-R1 self-process PSS + exact stdlib helper attribution; no arbitrary close',
-            'pid':os.getpid(),'dll_sha256':m.dll_sha256,'events':m.events,
-            'stdlib_source':stdlib_source,'dummy_constructions':notes,'final_python_threads':active_threads()}
+        result={'scope':'I1-R1 PSS self-process only, not N1 rerun, not product acceptance',
+            'pid':os.getpid(),'dll_sha256':m.dll_sha256,'events':m.events}
         (m.folder/'r1-pss-observations.json').write_text(json.dumps(result,indent=2)+'\n')
 
 @pytest.mark.parametrize('cycles',[1,2,8])
@@ -185,6 +145,8 @@ def test_readonly_mainwindow_pss(library,monkeypatch,tmp_path,cycles,monitor):
     observe(i1_refs,record,'after-normal-scope-0')
     observe_remaining_references(owner_refs,window_refs)
     assert owner_refs and all(ref() is None for ref in owner_refs)
+    assert all(ref() is None for ref in window_refs)
+    assert all(ref() is None for refs in i1_refs.values() for ref in refs)
     assert not live and Counter(opened)==Counter(closed)
     state=(pool.activeThreadCount(),pool.expiryTimeout(),pool.maxThreadCount())
     before=handle_count();record('equivalent-before',count=before,pool_state=state)
@@ -193,6 +155,8 @@ def test_readonly_mainwindow_pss(library,monkeypatch,tmp_path,cycles,monitor):
         roundtrip(index)
         observe(i1_refs,record,'after-normal-scope-'+str(index))
         assert all(ref() is None for ref in owner_refs)
+        assert all(ref() is None for ref in window_refs)
+        assert all(ref() is None for refs in i1_refs.values() for ref in refs)
         assert not live and Counter(opened)==Counter(closed)
         assert state==(pool.activeThreadCount(),pool.expiryTimeout(),pool.maxThreadCount())
         after=handle_count();counts.append(after)
@@ -207,3 +171,37 @@ def test_readonly_mainwindow_pss(library,monkeypatch,tmp_path,cycles,monitor):
         'owners':len(owner_refs),'owners_dead':all(x() is None for x in owner_refs),
         'gate_test_only':True,'forced_gc':False,'acceptance':False}
     (Path(os.environ['ALO_62D_EVIDENCE'])/'r1-summary.json').write_text(json.dumps(summary,indent=2)+'\n')
+
+
+def strict_global_equal(before,after):
+    assert before==after,'I1_STRICT_GLOBAL_HANDLE_COUNT_MISMATCH'
+
+@pytest.mark.parametrize('cycles',[1,2,8])
+def test_strict_mainwindow_rounds(library,monkeypatch,tmp_path,cycles,monitor):
+    test_readonly_mainwindow_pss(library,monkeypatch,tmp_path,cycles,monitor)
+    summary=json.loads((Path(os.environ['ALO_62D_EVIDENCE'])/'r1-summary.json').read_text())
+    for after in summary['after_each']:strict_global_equal(summary['before'],after)
+    steady=[e for e in monitor.events if e['phase'] in ('equivalent-before','equivalent-after')]
+    inventory=[[(x['id'],x['type'],x['started_event'],x['lock']) for x in e['python_threads']] for e in steady]
+    assert inventory and all(row==inventory[0] for row in inventory)
+    summary.update(status='R1_STRICT_SCOPE_PASS_NOT_FULL_I1',acceptance=True)
+    (Path(os.environ['ALO_62D_EVIDENCE'])/'r1-summary.json').write_text(json.dumps(summary,indent=2)+'\n')
+
+
+def test_deliberate_owned_event_detection(monitor):
+    k=C.WinDLL('kernel32',use_last_error=True)
+    create=k.CreateEventW;create.argtypes=[C.c_void_p,C.c_int,C.c_int,C.c_wchar_p];create.restype=C.c_void_p
+    close=k.CloseHandle;close.argtypes=[C.c_void_p];close.restype=C.c_int
+    before=handle_count();monitor.take('owned-event-before')
+    handle=create(None,0,0,None);assert handle
+    try:
+        during=handle_count();snap=monitor.take('owned-event-live',handle=int(handle))
+        assert during==before+1
+        assert any(h['value']==int(handle) and h['type_name']=='Event' for h in snap['handles'])
+        with pytest.raises(AssertionError,match='I1_STRICT_GLOBAL_HANDLE_COUNT_MISMATCH'):
+            strict_global_equal(before,during)
+    finally:assert close(handle),'Own injected Event close failed'
+    after=handle_count();strict_global_equal(before,after);monitor.take('owned-event-after')
+    (Path(os.environ['ALO_62D_EVIDENCE'])/'r1-summary.json').write_text(json.dumps({
+        'status':'DELIBERATE_EVENT_FAIL_DETECTED_AND_OWN_HANDLE_CLOSED','acceptance':True,
+        'before':before,'injected':during,'after':after,'handle':int(handle)},indent=2)+'\n')

@@ -16,6 +16,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 
 from mutagen import MutagenError
@@ -158,10 +159,43 @@ def _find_decoder():
     return shutil.which('ffmpeg')
 
 
+
+def _decode_windows(command, cancelled):
+    """Wait without implicit reader Threads registering an alien QThread.
+
+    communicate() on CPython Windows creates reader Threads with inherited
+    daemon state, retaining a DummyThread/Event for each native Qt worker.
+    Own only a private stderr file; reap the child before closing that file.
+    """
+    with tempfile.TemporaryFile(mode='w+b') as errors:
+        process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=errors)
+        deadline = time.monotonic() + DECODE_SECONDS
+        try:
+            while True:
+                _cancel(cancelled)
+                if time.monotonic() > deadline:
+                    raise TimeoutError('Complete audio decoding exceeded its limit.')
+                try:
+                    process.wait(timeout=0.1)
+                    break
+                except subprocess.TimeoutExpired:
+                    continue
+            errors.seek(0)
+            error = errors.read(4097)
+            if process.returncode or error:
+                raise ValueError('Full MP3 decoding failed: ' + error[:4096].decode(errors='replace'))
+        finally:
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+
+
 def _decode(path, decoder, cancelled):
     command = [str(decoder), '-hide_banner', '-v', 'error', '-nostdin', '-xerror',
                '-err_detect', 'explode', '-protocol_whitelist', 'file,pipe', '-f', 'mp3',
                '-i', str(path), '-map', '0:a:0', '-vn', '-sn', '-dn', '-threads', '1', '-f', 'null', '-']
+    if os.name == 'nt':
+        return _decode_windows(command, cancelled)
     process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     deadline = time.monotonic() + DECODE_SECONDS
     try:

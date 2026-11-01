@@ -1,8 +1,8 @@
 {
   "head": "ea20be0f6db1788f0a2a834fcdba355f2d828ddb",
   "base_tree": "de616e0fe890353463181b9c785ba9152189f842",
-  "input_tree": "3563267d6d94b9b6692276b74901dbc2d5deb23c",
-  "tree": "9f1a769d99e01e789f3ea2487a7c63c9d36b9d3b",
+  "input_tree": "9f1a769d99e01e789f3ea2487a7c63c9d36b9d3b",
+  "tree": "715aee6d642e0aa79e721a24b66a5c055729d05c",
   "files": [
     {
       "path": ".gitattributes",
@@ -889,8 +889,8 @@
     {
       "path": "src/audio_library_organizer/audio/identity.py",
       "mode": "100644",
-      "blob": "ee6546491f9e855162391e49d4b99098c4a38f2f",
-      "sha256": "0d75c9fe0430477784e140f9d49d28b59e74993f92b327c23733cfd138ef94b9"
+      "blob": "0c8efff5d62483e8bd688868fa20ec122f73bd5e",
+      "sha256": "5a654ffbface3cadc936c5f123a5096a1179386666a535107d438a83126bcd90"
     },
     {
       "path": "src/audio_library_organizer/audio/probe.py",
@@ -1615,8 +1615,8 @@
     {
       "path": "tests/test_audio_identity_v0427.py",
       "mode": "100644",
-      "blob": "f7689647d801c96efb8c9b032bfc586a70b6c159",
-      "sha256": "b508448b4295d58e5dd66867e3695c0787e2d989c4a192555cbd2e6ce8151f59"
+      "blob": "bf7d3977d29cb6a7afc2d087efa08280739eae67",
+      "sha256": "ecb25d0625d79a8046930bb092499b528ba07a56949140d0d7e7efbe7799dacf"
     },
     {
       "path": "tests/test_change_history.py",
@@ -2555,14 +2555,14 @@
       "sha256": "eb501c20aad1725a6afa7990be3b745497daf86bfb6ebc86cffbfb61f1fba5d7"
     }
   ],
-  "full_patch_sha256": "768f3946d705dd3c84fda91728c1222c48e5e4fe5070e21e76cf0dca2ba98346",
+  "full_patch_sha256": "d3409ce583e4cc4764d1402d0ce874144595e51a8b37c7afa9b3fe90bb6856f3",
   "delta_sha256": "e0ccfdd717bed836815ffce2a7089443650a032eb27f9f39a550ee99f80b2118",
   "delta_paths": [
     "tests/test_output_contract_windows_v0427.py"
   ],
   "windows_gate": false,
   "scope": "N1 test methodology only; production unchanged",
-  "full_patch_file": "ALO-Music-v0427-Stage6-2D-N2-I1-full.patch",
-  "delta_patch_sha256": "72aefed347ce77cef89c27d215f1d76c4a5559d3de48889c3651e31beb6430f5",
-  "delta_patch_file": "ALO-Music-v0427-Stage6-2D-N2-I1-delta.patch"
+  "full_patch_file": "ALO-Music-v0427-Stage6-2D-N2-I1-FINAL-full.patch",
+  "delta_patch_sha256": "6e87c892f4530cff1abc6b1d7b7d96646e652c5e986d5bde34534802556d664c",
+  "delta_patch_file": "ALO-Music-v0427-Stage6-2D-N2-I1-FINAL-delta.patch"
 }
