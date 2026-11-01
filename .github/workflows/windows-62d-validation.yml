@@ -1,5 +1,5 @@
-name: ALO 6.2D I1 FINAL exact strict GREEN and bounded R1 verification
-run-name: ALO 6.2D I1 FINAL exact strict GREEN and bounded R1 verification / Windows Server 2022 / ${{ github.sha }}
+name: ALO 6.2D I1 FINAL remaining B-D-H lifecycle and transport
+run-name: ALO 6.2D I1 FINAL remaining B-D-H lifecycle and transport / Windows Server 2022 / ${{ github.sha }}
 
 on:
   push:
@@ -85,15 +85,10 @@ jobs:
           [ordered]@{ source_sha256 = (Get-FileHash $source).Hash; dll_sha256 = (Get-FileHash $dll).Hash; vs_path = $vs; command = $cmd; scope = 'Compiled own read-only PSS observer; current process only' } | ConvertTo-Json | Set-Content (Join-Path $out 'n1-compiler.json')
 
 
-      - name: Exact unchanged I1 lifecycle case
+      - name: Remaining I1 real lifecycle and exact transport tests
         run: |
-          python -I .ci/62d/contract_run.py i1-original
-          if ($LASTEXITCODE -ne 0) { throw 'Original I1 remains FAIL; do not continue' }
-
-      - name: Strict R1 1-2-8 and deliberate owned Event detection
-        run: |
-          python -I .ci/62d/i1final_run.py r1-verify
-          if ($LASTEXITCODE -ne 0) { throw 'R1 strict verification FAIL; do not continue' }
+          python -I .ci/62d/i1final_run.py r2
+          if ($LASTEXITCODE -ne 0) { throw 'I1 remaining scope FAIL; raw evidence preserved' }
 
       - name: Preserve and summarize all available results
         if: always()

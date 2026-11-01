@@ -5,7 +5,15 @@ spec=importlib.util.spec_from_file_location('i1final_base',Path(__file__).with_n
 base=importlib.util.module_from_spec(spec);spec.loader.exec_module(base)
 R1=[f'.ci/62d/i1final_pss.py::test_readonly_mainwindow_pss[{n}]' for n in (2,)]
 GREEN=[f'.ci/62d/i1final_pss.py::test_strict_mainwindow_rounds[{n}]' for n in (1,2,8)]+['.ci/62d/i1final_pss.py::test_deliberate_owned_event_detection']
-base.CASES+=R1+GREEN
+LIFECYCLE=['.ci/62d/i1final_lifecycle.py::test_multiple_operations_one_window']+[
+    f'.ci/62d/i1final_lifecycle.py::test_lifecycle_matrix[{mode}]' for mode in ('D','E','F','G','H')]
+TRANSPORT=['tests/test_audio_identity_v0427.py::test_windows_decode_transport_uses_real_ffmpeg_and_preserves_source']+[
+    f'tests/test_audio_identity_v0427.py::test_windows_decode_transport_failure_reaps_and_closes[{mode}]'
+    for mode in ('stderr','cancel','timeout','spawn-error','tempfile-error')]+[
+    f'tests/test_audio_identity_v0427.py::test_windows_decode_transport_reaps_real_child_on_stop[{mode}]'
+    for mode in ('cancel','deadline')]
+base.CASES+=R1+GREEN+LIFECYCLE+TRANSPORT
+
 
 def run(verify=False):
     selected=GREEN if verify else R1
@@ -41,9 +49,47 @@ def run(verify=False):
     finally:base.ci.verify_sources();base.write(base.OUT/'run.json',report)
     return 0
 
+def run_r2():
+    # R1 was independently verified from complete raw run41318357029 on this
+    # exact product TREE. A/C refer to its strict1/8, not a claim of this run.
+    base.old.windows_required();base.ci.verify_sources()
+    assert base.ci.TREE=='715aee6d642e0aa79e721a24b66a5c055729d05c'
+    prepared=json.loads((base.ci.EVIDENCE/'prepared.json').read_text())
+    report={'scope':'I1 remaining B/D/E/F/G/H + exact8 transport tests; native Windows Server2022, NOT Desktop',
+        'candidate_tree':base.ci.TREE,'planned':14,'cases':[],'gate':'OFF','status':'INCOMPLETE',
+        'R1_verified_run':41318357029,'A_C_evidence':'strict1/8 in that run, not reexecuted here',
+        'source_before':True,'source_after':False}
+    try:
+        for index,case in enumerate(LIFECYCLE+TRANSPORT,101):
+            folder=base.OUT/f'{index:03d}-case';folder.mkdir(exist_ok=False)
+            profile=folder/'profile';profile.mkdir()
+            env=base.old.child_environment(Path(prepared['python']),Path(prepared['bin']))
+            env.update(ALO_62D_EVIDENCE=str(folder),STAGE62C_EVIDENCE=str(folder),
+                APPDATA=str(profile),LOCALAPPDATA=str(profile),USERPROFILE=str(profile))
+            code=base.bounded_child([prepared['python'],'-I','-B',str(Path(__file__).resolve()),
+                'pytest-wait',case,str(folder)],env,folder)
+            (folder/'exit.txt').write_text(str(code));outcome=base.classify(folder,code)
+            item={'case':case,'exit':code,'outcome':outcome,
+                'kind':'real-Qt-lifecycle' if case in LIFECYCLE else ('transport-model' if 'failure_reaps' in case else 'real-FFmpeg-transport')}
+            report['cases'].append(item);base.write(base.OUT/'run.json',report)
+            base.ci.verify_sources()
+            if outcome!='PASS':raise RuntimeError('STOP '+case+' / '+outcome)
+            if case in LIFECYCLE:
+                summary=json.loads((folder/'r2-summary.json').read_text())
+                assert summary['acceptance'] is True and summary['strict_global_equality'] is True
+                item['observations']=summary
+            base.audit_synthetic(folder)
+        assert len(report['cases'])==14
+        report['status']='I1_REMAINING_SCOPE_PASS_NOT_FULL_N2'
+    except BaseException as error:
+        report.update(status='STOP',error=repr(error));raise
+    finally:
+        base.ci.verify_sources();report['source_after']=True;base.write(base.OUT/'run.json',report)
+    return 0
+
 if __name__=='__main__':
     try:
-        code=base.child(sys.argv[2],Path(sys.argv[3])) if sys.argv[1]=='pytest-wait' else {'r1-observe':run,'r1-verify':lambda:run(True),'finish':base.finish}[sys.argv[1]]()
+        code=base.child(sys.argv[2],Path(sys.argv[3])) if sys.argv[1]=='pytest-wait' else {'r1-observe':run,'r1-verify':lambda:run(True),'r2':run_r2,'finish':base.finish}[sys.argv[1]]()
     except BaseException:
         (base.OUT/'i1final-exception.log').write_text(traceback.format_exc());raise
     sys.exit(code)
