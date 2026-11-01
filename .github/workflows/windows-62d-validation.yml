@@ -1,5 +1,5 @@
-name: ALO 6.2D N2 Windows integration
-run-name: ALO 6.2D N2 Windows integration / Windows Server 2022 / ${{ github.sha }}
+name: ALO 6.2D I1 lifecycle RED
+run-name: ALO 6.2D I1 lifecycle RED / Windows Server 2022 / ${{ github.sha }}
 
 on:
   push:
@@ -66,9 +66,9 @@ jobs:
           python -I .ci/62d/ci.py prepare
           if ($LASTEXITCODE -ne 0) { throw 'Environment/preflight failed; no application PASS' }
 
-      - name: N2 supplemental real MainWindow lifetime and strict handle accounting
+      - name: I1 only original success lifecycle, unchanged assertion
         run: |
-          python -I .ci/62d/contract_run.py supplement
+          python -I .ci/62d/contract_run.py i1-original
           if ($LASTEXITCODE -ne 0) { throw 'Contract FAIL or infrastructure STOP; preserve all original outcomes' }
 
       - name: Preserve and summarize all available results

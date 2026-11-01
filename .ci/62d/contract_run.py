@@ -135,20 +135,23 @@ def classify(folder,code):
         return 'UNSAFE_CHILD_FINAL'
     return 'PASS'
 
-def run(start_index=1):
+def run(start_index=1,end_index=None):
     old.windows_required();ci.verify_sources()
     prepared=json.loads((ci.EVIDENCE/'prepared.json').read_text())
     env=old.child_environment(Path(prepared['python']),Path(prepared['bin']))
     assert len(PLAN['selected'])==83 and len(set(CASES))==len(CASES)
     assert start_index in (1,23,84) and start_index<=len(CASES)
+    selected=list(enumerate(CASES,1))[start_index-1:end_index]
+    assert selected
     status={'scope':'Native Windows Server 2022. NOT Windows10/11 Desktop.',
         'candidate_tree':ci.TREE,'gate':'OFF','planned':len(CASES),'not_scheduled':PLAN['not_scheduled'],
         'source_before':True,'source_after':False,'cases':[],'status':'INCOMPLETE',
         'start_index':start_index,'original_cases':83,'supplemental_cases':len(EXTRA_CASES),
-        'scheduled':len(CASES)-start_index+1,
+        'scheduled':len(selected),
+        'end_index':end_index,
         'earlier_cases_not_executed_in_this_run':start_index-1}
     try:
-        for i,case in list(enumerate(CASES,1))[start_index-1:]:
+        for i,case in selected:
             folder=OUT/f'{i:03d}-case';folder.mkdir(exist_ok=False)
             profile=folder/'profile';profile.mkdir()
             childenv=dict(env,ALO_62D_EVIDENCE=str(folder),STAGE62C_EVIDENCE=str(folder),
@@ -163,8 +166,8 @@ def run(start_index=1):
             ci.verify_sources()
             if outcome!='PASS':raise RuntimeError('STOP: '+case+' / '+outcome)
             audit_synthetic(folder)
-        status['status']='CONTRACT_WINDOWS_SERVER_PASS' if start_index==1 else (
-            'N2_SUPPLEMENT_SCOPE_PASS_NOT_FULL_RUN' if start_index==84 else 'N2_RESUMED_SCOPE_PASS_NOT_FULL_RUN')
+        status['status']='I1_SINGLE_SCOPE_PASS_NOT_N2_COMPLETE' if end_index is not None else ('CONTRACT_WINDOWS_SERVER_PASS' if start_index==1 else (
+            'N2_SUPPLEMENT_SCOPE_PASS_NOT_FULL_RUN' if start_index==84 else 'N2_RESUMED_SCOPE_PASS_NOT_FULL_RUN'))
     except BaseException as exc:
         status['status']='STOP';status['error']=repr(exc);raise
     finally:
@@ -199,7 +202,7 @@ def finish():
 if __name__=='__main__':
     try:
         code=child(sys.argv[2],Path(sys.argv[3])) if sys.argv[1]=='pytest-wait' else {
-            'run':run,'resume':lambda:run(23),'supplement':lambda:run(84),'finish':finish}[sys.argv[1]]()
+            'run':run,'resume':lambda:run(23),'supplement':lambda:run(84),'i1-original':lambda:run(84,84),'finish':finish}[sys.argv[1]]()
     except BaseException:
         (OUT/'exception.log').write_text(traceback.format_exc());raise
     sys.exit(code)
