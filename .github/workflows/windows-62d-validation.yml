@@ -1,5 +1,5 @@
-name: ALO 6.2D I1 lifecycle RED
-run-name: ALO 6.2D I1 lifecycle RED / Windows Server 2022 / ${{ github.sha }}
+name: ALO 6.2D I1 read-only referrers
+run-name: ALO 6.2D I1 read-only referrers / Windows Server 2022 / ${{ github.sha }}
 
 on:
   push:
