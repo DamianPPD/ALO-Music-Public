@@ -99,6 +99,7 @@ def test_real_mainwindow_strict_lifetime(library,monkeypatch,tmp_path,mode):
     app=QApplication.instance() or QApplication([]);app.setQuitOnLastWindowClosed(False)
     pool=QThreadPool.globalInstance();gui_thread=get_ident()
     opened=[];closed=[];live={};owner_refs=[];window_refs=[];events=[];db_opens=[]
+    i1_refs={name:[] for name in ('page','worker','thread','receiver')}
     original_open=native._WinAPI.open;original_close=native._WinAPI.close
     original_acquire=leases.acquire_output_lease;original_init=FileReconciliationWorker.__init__
     def observe_open(api,*a,**kw):
@@ -135,13 +136,16 @@ def test_real_mainwindow_strict_lifetime(library,monkeypatch,tmp_path,mode):
         AppPreferences(language='pl',theme='dark').save(store)
         window=main_window.MainWindow(AppSettings((),LibraryPaths(root)),store)
         window_refs.append(weakref.ref(window))
+        i1_refs['page'].append(weakref.ref(window.library))
         window.resize(1500,960);window.show();app.processEvents()
         receiver=Receiver(window,mode,events,repo);destroyed=[];threads=[];emitted=[]
+        i1_refs['receiver'].append(weakref.ref(receiver))
         # Test-owned instance only. A MonkeyPatch undo list would retain the
         # original bound method/window across the cross-round weakref check.
         window._file_check_finished=receiver.accept
         def init(worker,*a,**kw):
             original_init(worker,*a,**kw);wid=id(worker)
+            i1_refs['worker'].append(weakref.ref(worker))
             worker.destroyed.connect(lambda *_:destroyed.append(('worker',wid,get_ident())),Qt.ConnectionType.DirectConnection)
             def emit(result):
                 emitted.append(get_ident());record('worker-emission',count=handle_count(),
@@ -153,6 +157,7 @@ def test_real_mainwindow_strict_lifetime(library,monkeypatch,tmp_path,mode):
         with monkeypatch.context() as patch:
             patch.setattr(FileReconciliationWorker,'__init__',init)
             window.review_btn.click();thread=window._thread
+            i1_refs['thread'].append(weakref.ref(thread))
             thread.destroyed.connect(lambda *_:threads.append(get_ident()),Qt.ConnectionType.DirectConnection)
             if mode=='quit':assert app.exec()==0
             drain_until(lambda:bool(threads))
@@ -174,6 +179,8 @@ def test_real_mainwindow_strict_lifetime(library,monkeypatch,tmp_path,mode):
             pool_max=pool.maxThreadCount(),file_live=len(live),count=handle_count())
         # Return no owner, packet, QObject or bound method.
     roundtrip(0)
+    from i1_post_refgraph import observe
+    observe(i1_refs,record,'after-normal-scope-0')
     observe_remaining_references(owner_refs,window_refs)
     # End of normal Python scope, not a destructor forced for the measurement.
     assert owner_refs and all(ref() is None for ref in owner_refs)
@@ -181,6 +188,7 @@ def test_real_mainwindow_strict_lifetime(library,monkeypatch,tmp_path,mode):
     state=(pool.activeThreadCount(),pool.expiryTimeout(),pool.maxThreadCount())
     before=handle_count();record('equivalent-before',count=before,pool_state=state)
     roundtrip(1)
+    observe(i1_refs,record,'after-normal-scope-1')
     assert all(ref() is None for ref in owner_refs)
     assert not live and Counter(opened)==Counter(closed)
     assert state==(pool.activeThreadCount(),pool.expiryTimeout(),pool.maxThreadCount())
