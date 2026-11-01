@@ -149,7 +149,7 @@ def test_windows_decode_transport_failure_reaps_and_closes(monkeypatch,mode):
 
 @pytest.mark.parametrize('stop',['cancel','deadline'])
 def test_windows_decode_transport_reaps_real_child_on_stop(mp3_samples,monkeypatch,stop):
-    """Real FFmpeg + real temp file; deadline is deliberately zero, no sleep."""
+    """Real FFmpeg + real temp file; deadline is already expired, no clock-tick assumption or sleep."""
     import shutil,tempfile,subprocess
     from types import SimpleNamespace
     api=importlib.import_module('audio_library_organizer.audio.identity')
@@ -161,7 +161,7 @@ def test_windows_decode_transport_reaps_real_child_on_stop(mp3_samples,monkeypat
     monkeypatch.setattr(api,'tempfile',SimpleNamespace(TemporaryFile=owned))
     monkeypatch.setattr(api,'subprocess',SimpleNamespace(Popen=real_process,
         DEVNULL=subprocess.DEVNULL,TimeoutExpired=subprocess.TimeoutExpired))
-    if stop=='deadline':monkeypatch.setattr(api,'DECODE_SECONDS',0.0)
+    if stop=='deadline':monkeypatch.setattr(api,'DECODE_SECONDS',-1.0)
     path=mp3_samples['original'];before=path.read_bytes()
     command=[shutil.which('ffmpeg'),'-v','error','-nostdin','-i',str(path),'-f','null','-']
     with pytest.raises(InterruptedError if stop=='cancel' else TimeoutError):
