@@ -16,7 +16,6 @@ import shutil
 import stat
 import subprocess
 import sys
-import tempfile
 import time
 
 from mutagen import MutagenError
@@ -25,6 +24,7 @@ from mutagen.id3 import ID3, ID3NoHeaderError
 ALGORITHM = 'mp3-layer3-frames-sha256/v1'
 MAX_ID3_BYTES = 64 * 1024 * 1024
 DECODE_SECONDS = 120
+MAX_DECODE_STDERR_BYTES = 64 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,34 +160,89 @@ def _find_decoder():
 
 
 
+def _windows_stderr_probe(stream):
+    """Borrow the sole-consumer anonymous pipe handle; never close it here."""
+    import ctypes as C
+    import msvcrt
+
+    peek = C.WinDLL('kernel32', use_last_error=True).PeekNamedPipe
+    peek.argtypes = [C.c_void_p, C.c_void_p, C.c_uint32, C.c_void_p,
+                     C.POINTER(C.c_uint32), C.c_void_p]
+    peek.restype = C.c_int
+    handle = msvcrt.get_osfhandle(stream.fileno())
+
+    def available():
+        count = C.c_uint32()
+        if not peek(handle, None, 0, None, C.byref(count), None):
+            error = C.get_last_error()
+            if error == 109:  # ERROR_BROKEN_PIPE: writer closed, no more bytes
+                return 0
+            raise C.WinError(error)
+        return count.value
+    return available
+
+
 def _decode_windows(command, cancelled):
-    """Wait without implicit reader Threads registering an alien QThread.
+    """Bound stderr while decoding, without disk spooling or reader Threads.
 
     communicate() on CPython Windows creates reader Threads with inherited
     daemon state, retaining a DummyThread/Event for each native Qt worker.
-    Own only a private stderr file; reap the child before closing that file.
+    Peek/read use one worker and one pipe consumer, with no concurrent reads
+    on its synchronous handle. Retain only the diagnostic prefix, count every
+    byte, and refuse at quota+1. Kernel pipe buffering is finite; no temp file.
     """
-    with tempfile.TemporaryFile(mode='w+b') as errors:
-        process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=errors)
+    process = subprocess.Popen(command, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.PIPE, bufsize=0)
+    try:
         deadline = time.monotonic() + DECODE_SECONDS
+        prefix = bytearray()
+        consumed = 0
         try:
+            available = _windows_stderr_probe(process.stderr)
             while True:
                 _cancel(cancelled)
                 if time.monotonic() > deadline:
                     raise TimeoutError('Complete audio decoding exceeded its limit.')
+                count = available()
+                if count:
+                    chunk = os.read(process.stderr.fileno(),
+                                    min(count, 4096, MAX_DECODE_STDERR_BYTES + 1 - consumed))
+                    if not chunk:
+                        raise OSError('Unexpected EOF in decoder stderr pipe.')
+                    consumed += len(chunk)
+                    if consumed > MAX_DECODE_STDERR_BYTES:
+                        raise ValueError('Decoder stderr exceeded 65536-byte transport limit.')
+                    prefix.extend(chunk[:4096 - len(prefix)])
+                    continue  # stop/deadline checks also apply to continuous output
+                if process.poll() is not None:
+                    # The child may have written and exited since the empty
+                    # peek. Recheck after observing exit before accepting EOF.
+                    if available():
+                        continue
+                    break
                 try:
                     process.wait(timeout=0.1)
-                    break
                 except subprocess.TimeoutExpired:
-                    continue
-            errors.seek(0)
-            error = errors.read(4097)
-            if process.returncode or error:
-                raise ValueError('Full MP3 decoding failed: ' + error[:4096].decode(errors='replace'))
-        finally:
+                    pass
+        except (InterruptedError, TimeoutError):
+            raise
+        except OSError as exc:
+            raise OSError('Decoder stderr transport failed: ' + str(exc)) from exc
+        if process.returncode or consumed:
+            raise ValueError('Full MP3 decoding failed: ' + prefix.decode(errors='replace'))
+    finally:
+        try:
             if process.poll() is None:
-                process.kill()
-            process.wait()
+                try:
+                    process.kill()
+                except OSError:
+                    if process.poll() is None:
+                        raise
+        finally:
+            try:
+                process.wait()
+            finally:
+                process.stderr.close()
 
 
 def _decode(path, decoder, cancelled):

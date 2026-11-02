@@ -390,16 +390,63 @@ def test_real_ffmpeg_stderr_and_bounded_sample_of_temp_disk(tmp_path,monkeypatch
     broken=tmp_path/'only-synthetic-broken.mp3';broken.write_bytes(b'not an MP3')
     with pytest.raises(ValueError):
         identity._decode_windows([ffmpeg,'-v','error','-nostdin','-f','mp3','-i',str(broken),'-f','null','-'],lambda:False)
-    actual=identity.tempfile.TemporaryFile;paths=[];sizes=[]
-    @contextmanager
-    def tempfile(*a,**kw):
-        with actual(*a,**kw) as stream:
-            try:yield stream
-            finally:sizes.append(os.fstat(stream.fileno()).st_size)
-    monkeypatch.setattr(identity.tempfile,'TemporaryFile',tempfile)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError,match='stderr exceeded 65536-byte transport limit'):
         identity._decode_windows([sys.executable,'-I','-c','import os;os.write(2,b"E"*(2*1024*1024))'],lambda:False)
-    assert sizes==[2*1024*1024]
-    record('bounded-disk-risk-observation',producer='controlled CPython child, NOT FFmpeg proof',
-        producer_bytes=2*1024*1024,temporary_bytes=sizes[0],rejected=True,
-        limitation='Production transport has no byte quota; sample producer is bounded, output disk usage is not')
+    record('stderr-quota-enforced',producer='controlled CPython child, NOT FFmpeg proof',
+        offered_bytes=2*1024*1024,quota=65536,stderr_disk_spool=False,rejected=True)
+
+
+def test_windows_stderr_repeated_qthreads_have_no_dummy_or_handle_growth(pair,monkeypatch):
+    """Transport regression: real FFmpeg + producer in fresh alien Qt threads."""
+    import threading,msvcrt
+    from PySide6.QtCore import QThread
+    from audio_library_organizer.audio import identity
+    from types import SimpleNamespace
+    app=QApplication.instance() or QApplication([])
+    api=C.WinDLL('kernel32',use_last_error=True)
+    getinfo=api.GetHandleInformation;getinfo.argtypes=[C.c_void_p,C.POINTER(C.c_uint32)];getinfo.restype=C.c_int
+    getcount=api.GetProcessHandleCount;getcount.argtypes=[C.c_void_p,C.POINTER(C.c_uint32)];getcount.restype=C.c_int
+    current=api.GetCurrentProcess;current.argtypes=[];current.restype=C.c_void_p
+    def count():
+        n=C.c_uint32();assert getcount(current(),C.byref(n));return n.value
+    before_active=dict(threading._active);children=[];closed=[]
+    original=subprocess.Popen
+    def spawn(*a,**kw):
+        p=original(*a,**kw)
+        children.append((weakref.ref(p),int(p._handle),msvcrt.get_osfhandle(p.stderr.fileno())))
+        return p
+    monkeypatch.setattr(identity,'subprocess',SimpleNamespace(Popen=spawn,PIPE=subprocess.PIPE,
+        DEVNULL=subprocess.DEVNULL,TimeoutExpired=subprocess.TimeoutExpired))
+    ffmpeg=identity._find_decoder();assert ffmpeg
+    argv=[ffmpeg,'-hide_banner','-v','error','-nostdin','-xerror','-err_detect','explode',
+        '-protocol_whitelist','file,pipe','-f','mp3','-i',str(pair[0]),'-map','0:a:0',
+        '-vn','-sn','-dn','-threads','1','-f','null','-']
+    class Work(QThread):
+        def run(self):
+            self.failure=None
+            try:
+                identity._decode_windows(argv,lambda:False)
+                try:
+                    identity._decode_windows([sys.executable,'-I','-c',
+                        'import os\nwhile True: os.write(2,b"X"*4096)'],lambda:False)
+                except ValueError as error:
+                    assert str(error)=='Decoder stderr exceeded 65536-byte transport limit.'
+                else:raise AssertionError('Missing overflow refusal')
+            except BaseException as error:self.failure=repr(error)
+    counts=[]
+    for i in range(9):
+        children.clear();w=Work();w.start();assert w.wait(20000);failure=w.failure
+        shiboken6.delete(w);assert failure is None,failure
+        assert dict(threading._active)==before_active,'New threading._active / DummyThread retention'
+        assert len(children)==2
+        for reference,process_handle,pipe_handle in children:
+            assert reference() is None,'Popen wrapper retained after transport completion'
+            for h in (process_handle,pipe_handle):
+                flags=C.c_uint32();C.set_last_error(0)
+                assert not getinfo(h,C.byref(flags)) and C.get_last_error()==6,'Native process/pipe handle still open'
+                closed.append(h)
+        app.processEvents();counts.append(count())
+    assert counts[1:]==[counts[0]]*8,counts
+    record('stderr-Qt-repeat',warmup=1,measured=8,real_FFmpeg=9,synthetic_overflow=9,
+        active_threads_unchanged=True,dummy_growth=0,handle_counts=counts,
+        native_process_pipe_handles_verified_closed=len(closed),popen_wrappers_released=True)

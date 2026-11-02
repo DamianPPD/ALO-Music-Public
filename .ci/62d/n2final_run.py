@@ -28,6 +28,18 @@ base.CASES+=ADDED
 STDERR_RED=['tests/test_audio_identity_v0427.py::test_windows_stderr_quota_refuses_large_real_producer']
 base.CASES+=STDERR_RED
 
+AUDIO='tests/test_audio_identity_v0427.py::'
+TRANSPORT=STDERR_RED+[
+ AUDIO+'test_windows_decode_transport_uses_real_ffmpeg_and_preserves_source']+[
+ AUDIO+'test_windows_decode_transport_failure_reaps_and_closes['+m+']' for m in ('stderr','cancel','timeout','spawn-error','probe-error')]+[
+ AUDIO+'test_windows_decode_transport_reaps_real_child_on_stop['+m+']' for m in ('cancel','deadline')]+[
+ AUDIO+'test_windows_stderr_real_stream_boundaries['+m+']' for m in ('empty','small','limit','overflow','continuous','closed-stderr','exit-error')]+[
+ AUDIO+'test_windows_stderr_active_child_is_reaped['+m+']' for m in ('cancel','timeout','read','peek')]+[
+ AUDIO+'test_windows_stderr_closed_before_child_exit_keeps_deadline',
+ AUDIO+'test_windows_stderr_exit_between_probe_and_poll_is_not_lost',
+ PREFIX+'test_windows_stderr_repeated_qthreads_have_no_dummy_or_handle_growth']
+base.CASES+=TRANSPORT
+
 def run(final=False,start=0,fix=False):
     base.old.windows_required();base.ci.verify_sources()
     prepared=json.loads((base.ci.EVIDENCE/'prepared.json').read_text())
@@ -35,7 +47,7 @@ def run(final=False,start=0,fix=False):
     n1=[case for case in base.PLAN['selected'] if 'test_native_owner_has_zero_process_handle_delta' in case]
     assert len(n1)==1
     originals=[case for case in base.PLAN['selected'] if case not in n1]
-    selected=(STDERR_RED if sys.argv[1]=='stderrred' else FIX+ADDED[1:]+[PREFIX+'test_sqlite_delivery_boundaries[wal]'] if fix else originals+NEW+ADDED if final else NEW)[start:]
+    selected=(STDERR_RED if sys.argv[1]=='stderrred' else TRANSPORT if sys.argv[1]=='stderrtarget' else FIX+ADDED[1:]+[PREFIX+'test_sqlite_delivery_boundaries[wal]'] if fix else list(dict.fromkeys(originals+NEW+ADDED+TRANSPORT)) if final else NEW)[start:]
     report={'scope':'Native Windows Server2022 / NTFS / CPython3.11.9, NOT Desktop',
       'candidate_tree':base.ci.TREE,'gate':'OFF','status':'INCOMPLETE','selected':len(selected),
       'cases':[],'source_before':True,'source_after':False,'final_regression':final,

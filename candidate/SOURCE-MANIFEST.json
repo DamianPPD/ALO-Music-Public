@@ -2,7 +2,7 @@
   "head": "ea20be0f6db1788f0a2a834fcdba355f2d828ddb",
   "base_tree": "de616e0fe890353463181b9c785ba9152189f842",
   "input_tree": "c88886b062116edbc2f26e0a7e94cbf468eec8af",
-  "tree": "d0e26060455c4f9b29ec0ac25431d0ebe86a00c1",
+  "tree": "bea8fc4fbc128fbfd99f2c6c1a3d0b62493844ee",
   "files": [
     {
       "path": ".gitattributes",
@@ -1036,9 +1036,9 @@
     {
       "path": "src/audio_library_organizer/audio/identity.py",
       "mode": "100644",
-      "blob": "0c8efff5d62483e8bd688868fa20ec122f73bd5e",
-      "sha256": "5a654ffbface3cadc936c5f123a5096a1179386666a535107d438a83126bcd90",
-      "bytes": 12152
+      "blob": "b043fb30a9f17417504772a3d6998dd72878686d",
+      "sha256": "53f87b391ce93850e9d1b8cce12acfccd4f6f6bb450dc7a86d655bd28011ad7c",
+      "bytes": 14508
     },
     {
       "path": "src/audio_library_organizer/audio/probe.py",
@@ -1883,9 +1883,9 @@
     {
       "path": "tests/test_audio_identity_v0427.py",
       "mode": "100644",
-      "blob": "48598057202a2e107275097def1e710ac4d053b9",
-      "sha256": "f3a8bc09bdda8046a7b2f362cfadc0b5837b286db923232c434b0bd04979fada",
-      "bytes": 10520
+      "blob": "ac9fdf47bf60882b246e02fa57343469574da23a",
+      "sha256": "c6ab35bc84750bd8e581010b7d8eb18ed8b35af69b635555e8f12159553010b8",
+      "bytes": 17290
     },
     {
       "path": "tests/test_change_history.py",

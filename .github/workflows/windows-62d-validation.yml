@@ -1,5 +1,5 @@
-name: ALO N2 FINAL 122 cases database identity guarded
-run-name: ALO N2 FINAL 122 cases database identity guarded / Windows Server 2022 / ${{ github.sha }}
+name: ALO N2 I5-F1 bounded decoder stderr
+run-name: ALO N2 I5-F1 bounded decoder stderr / Windows Server 2022 / ${{ github.sha }}
 
 on:
   push:
@@ -68,7 +68,7 @@ jobs:
 
       - name: Remaining N2 SQLite, active Qt, DACL and resource boundaries
         run: |
-          python -I .ci/62d/n2final_run.py stderrred
+          python -I .ci/62d/n2final_run.py stderrtarget
           if ($LASTEXITCODE -ne 0) { throw 'N2 boundary FAIL; raw evidence preserved' }
 
       - name: Preserve and summarize all available results
