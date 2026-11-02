@@ -260,7 +260,8 @@ def test_sqlite_connection_lifetimes_and_timings(diagnostic_window,monkeypatch):
     def acquire(*a,**kw):
         start=time.perf_counter();owner=original_acquire(*a,**kw);acquires.append((id(owner),time.perf_counter(),time.perf_counter()-start));return owner
     def close(owner):
-        if owner.owned_count:holds.append(time.perf_counter()-next(t for oid,t,_ in acquires if oid==id(owner)))
+        started=next((t for oid,t,_ in acquires if oid==id(owner)),None)
+        if owner.owned_count and started is not None:holds.append(time.perf_counter()-started)
         return original_close(owner)
     monkeypatch.setattr(leases,'acquire_output_lease',acquire);monkeypatch.setattr(leases.WindowsOutputLease,'close',close)
     from audio_library_organizer.ui.workers import FileReconciliationWorker
