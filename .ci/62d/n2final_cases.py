@@ -237,15 +237,16 @@ def test_actual_dacl_refuses_pair_and_restores_access(pair,which):
 
 def test_sqlite_connection_lifetimes_and_timings(diagnostic_window,monkeypatch):
     window,lib,_=diagnostic_window;gui=get_ident();connect=sqlite3.connect
-    opened=[];closed=[];live={};decode_threads=[];acquires=[];holds=[];queued=[]
+    opened=[];closed=[];live={};lifetimes=[];decode_threads=[];acquires=[];holds=[];queued=[]
     class Connection(sqlite3.Connection):
         def close(self):
-            token=live.pop(id(self));closed.append(token)
-            record('sqlite-close',token=token,thread=get_ident())
+            token,started=live.pop(id(self));closed.append(token)
+            lifetime=time.perf_counter()-started;lifetimes.append(lifetime)
+            record('sqlite-close',token=token,thread=get_ident(),lifetime_seconds=lifetime)
             return super().close()
     def observed(*a,**kw):
         kw['factory']=Connection;start=time.perf_counter();conn=connect(*a,**kw)
-        token=len(opened);live[id(conn)]=token;opened.append(token)
+        token=len(opened);live[id(conn)]=(token,time.perf_counter());opened.append(token)
         record('sqlite-open',token=token,thread=get_ident(),connect_seconds=time.perf_counter()-start)
         return conn
     monkeypatch.setattr(sqlite3,'connect',observed)
@@ -271,11 +272,39 @@ def test_sqlite_connection_lifetimes_and_timings(diagnostic_window,monkeypatch):
     monkeypatch.setattr(window,'_accept_output_delivery',observed_accept)
     run_check(window)
     assert not live and opened and sorted(opened)==sorted(closed)
+    assert len(lifetimes)==len(opened) and all(t>=0 for t in lifetimes)
     assert decode_threads and all(t!=gui for t in decode_threads)
     assert holds and queued and window._output_history
     record('resource-performance',sqlite_open=len(opened),sqlite_close=len(closed),sqlite_live=0,
         acquire_seconds=[x[2] for x in acquires],hold_seconds=holds,qt_queue_seconds=queued,
-        decode_off_gui=True,scope='One real selected operation; timings reported, no fabricated timing threshold')
+        sqlite_lifetimes_seconds=lifetimes,decode_off_gui=True,
+        scope='One real selected operation; timings reported, no fabricated timing threshold')
+
+def test_database_replaced_between_precheck_and_snapshot_is_refused(diagnostic_window,monkeypatch):
+    from audio_library_organizer.jobs import output_session
+    window,lib,_=diagnostic_window;repo,root,track,_=lib
+    actual=output_session.database_safe;seen=[];held=repo.database_path.with_suffix('.held')
+    def exchange(delivery):
+        valid=actual(delivery)
+        if valid and not seen:
+            old=native.capture(repo.database_path,mutable=True)
+            repo.database_path.rename(held)
+            repo.database_path.write_bytes(held.read_bytes())
+            new=native.capture(repo.database_path,mutable=True)
+            assert not native.same_database(old,new)
+            seen.append(delivery.windows_lease)
+            record('database-exchanged-after-real-native-precheck',old_id=old.leaf.file_id.hex(),
+                new_id=new.leaf.file_id.hex(),precheck=valid,identical_database_bytes=True)
+        return valid
+    monkeypatch.setattr(output_session,'database_safe',exchange)
+    try:
+        run_check(window);assert len(seen)==1
+        record('replacement-between-check-and-use-result',accepted=seen[0].accepted,
+            historical_entries=len(window._output_history),session_entries=len(window._output_session))
+        assert seen[0].accepted is False,'Replaced DB acquired authority from an earlier FileID precheck'
+        assert not window._output_history and not window._output_session
+    finally:
+        if held.exists():repo.database_path.unlink();held.rename(repo.database_path)
 
 @pytest.mark.parametrize('mode',['success','source','cancel','receiver-destroy','reader-error'])
 def test_actual_readtask_pool(diagnostic_window,mode):

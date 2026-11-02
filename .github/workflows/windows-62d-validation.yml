@@ -1,5 +1,5 @@
-name: ALO 6.2D N2 FINAL 116 cases gate OFF
-run-name: ALO 6.2D N2 FINAL 116 cases gate OFF / Windows Server 2022 / ${{ github.sha }}
+name: ALO N2 final review SQLite timings and replacement RED
+run-name: ALO N2 final review SQLite timings and replacement RED / Windows Server 2022 / ${{ github.sha }}
 
 on:
   push:
@@ -68,7 +68,7 @@ jobs:
 
       - name: Remaining N2 SQLite, active Qt, DACL and resource boundaries
         run: |
-          python -I .ci/62d/n2final_run.py final
+          python -I .ci/62d/n2final_run.py fix
           if ($LASTEXITCODE -ne 0) { throw 'N2 boundary FAIL; raw evidence preserved' }
 
       - name: Preserve and summarize all available results

@@ -16,15 +16,18 @@ NEW=[PREFIX+'test_sqlite_delivery_boundaries['+m+']' for m in (
  PREFIX+'test_actual_readtask_pool['+m+']' for m in ('success','source','cancel','receiver-destroy','reader-error')]+[
  PREFIX+'test_actual_invalid_close_api_and_missing_file',PREFIX+'test_real_ffmpeg_stderr_and_bounded_sample_of_temp_disk']
 base.CASES+=NEW
+FIX=[PREFIX+'test_sqlite_connection_lifetimes_and_timings',
+     PREFIX+'test_database_replaced_between_precheck_and_snapshot_is_refused']
+base.CASES+=FIX[-1:]
 
-def run(final=False,start=0):
+def run(final=False,start=0,fix=False):
     base.old.windows_required();base.ci.verify_sources()
     prepared=json.loads((base.ci.EVIDENCE/'prepared.json').read_text())
     # N1/I1 accepted separately. No new Semaphore/PSS/WeakMethod experiments.
     n1=[case for case in base.PLAN['selected'] if 'test_native_owner_has_zero_process_handle_delta' in case]
     assert len(n1)==1
     originals=[case for case in base.PLAN['selected'] if case not in n1]
-    selected=(originals+NEW if final else NEW)[start:]
+    selected=(FIX if fix else originals+NEW if final else NEW)[start:]
     report={'scope':'Native Windows Server2022 / NTFS / CPython3.11.9, NOT Desktop',
       'candidate_tree':base.ci.TREE,'gate':'OFF','status':'INCOMPLETE','selected':len(selected),
       'cases':[],'source_before':True,'source_after':False,'final_regression':final,
@@ -53,7 +56,7 @@ def run(final=False,start=0):
 if __name__=='__main__':
     try:
         if sys.argv[1]=='pytest-wait':code=base.child(sys.argv[2],Path(sys.argv[3]))
-        else:code=run(sys.argv[1]=='final',int(sys.argv[2]) if len(sys.argv)>2 else 0)
+        else:code=run(sys.argv[1]=='final',int(sys.argv[2]) if len(sys.argv)>2 else 0,sys.argv[1]=='fix')
     except BaseException:
         (base.OUT/'n2final-exception.log').write_text(traceback.format_exc());raise
     sys.exit(code)
