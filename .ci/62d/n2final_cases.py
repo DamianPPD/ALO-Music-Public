@@ -51,7 +51,7 @@ def drain(predicate,seconds=15):
     assert predicate(),'Bounded observed Qt operation did not finish'
 
 @pytest.mark.parametrize('mode',['valid','read-only','write-denied','locked','unavailable','replace',
-    'binding','library-uuid','track-uuid','source-uuid','wal','metadata','read-denied'])
+    'binding','library-uuid','track-uuid','source-uuid','source-registry-uuid','wal','metadata','read-denied'])
 def test_sqlite_delivery_boundaries(diagnostic_window,monkeypatch,mode):
     window,lib,binding=diagnostic_window;repo,root,track,output=lib
     database=repo.database_path;actual=window._accept_output_delivery;observed=[]
@@ -84,12 +84,13 @@ def test_sqlite_delivery_boundaries(diagnostic_window,monkeypatch,mode):
                         held.rename(database)
                     undo=restore
                     if mode=='replace':assert not native.same_database(before,native.capture(database,mutable=True))
-                elif mode in ('binding','library-uuid','track-uuid','source-uuid','metadata'):
+                elif mode in ('binding','library-uuid','track-uuid','source-uuid','source-registry-uuid','metadata'):
                     table,column,where,arg={
                         'binding':('managed_bindings','binding_id','binding_id',binding.binding_id),
                         'library-uuid':('library_metadata','library_id','singleton',1),
                         'track-uuid':('tracks','track_id','track_id',track.track_id),
                         'source-uuid':('tracks','source_id','track_id',track.track_id),
+                        'source-registry-uuid':('sources','source_id','source_id',track.source_id),
                         'metadata':('tracks','title','track_id',track.track_id)}[mode]
                     with closing(sqlite3.connect(database)) as c:
                         value=c.execute(f'SELECT {column} FROM {table} WHERE {where}=?',(arg,)).fetchone()[0]
@@ -276,16 +277,20 @@ def test_sqlite_connection_lifetimes_and_timings(diagnostic_window,monkeypatch):
         acquire_seconds=[x[2] for x in acquires],hold_seconds=holds,qt_queue_seconds=queued,
         decode_off_gui=True,scope='One real selected operation; timings reported, no fabricated timing threshold')
 
-@pytest.mark.parametrize('mode',['success','cancel','receiver-destroy','reader-error'])
+@pytest.mark.parametrize('mode',['success','source','cancel','receiver-destroy','reader-error'])
 def test_actual_readtask_pool(diagnostic_window,mode):
     from audio_library_organizer.jobs.managed_files import resolve_read_path,ReadPurpose
     from audio_library_organizer.ui.workers import ReadTask
     window,lib,_=diagnostic_window;repo,root,track,output=lib
+    if mode=='source':
+        with closing(sqlite3.connect(repo.database_path)) as c:
+            c.execute('DELETE FROM managed_bindings');c.commit()
     plan=resolve_read_path(repo.get_track(track.track_id),repo.read_context(root),ReadPurpose.AUDIO_PROPERTIES,generation=77)
-    assert plan.locator==str(output),plan
+    expected=track.path if mode=='source' else output
+    assert plan.locator==str(expected),plan
     entered=Event();release=Event();cancel=Event();received=[];destroyed=[];threads=[];gui=get_ident()
     def reader(path):
-        assert path==output and get_ident()!=gui
+        assert path==expected and get_ident()!=gui
         with path.open('rb') as stream:
             value=stream.read(16);entered.set()
             assert release.wait(10),'GUI did not release the test read'
@@ -313,7 +318,7 @@ def test_actual_readtask_pool(diagnostic_window,mode):
     else:
         assert len(received)==1 and received[0][0]==77 and received[0][2]==gui
         result=received[0][1]
-        assert result.resolution.is_verified is (mode=='success')
+        assert result.resolution.is_verified is (mode in ('success','source'))
     record('actual-QRunnable-teardown',mode=mode,native_QRunnable_destroyed=True,
         native_QObject_destroyed=True,QObject_destroy_thread=destroyed[0],gui_thread=gui,
         queued_deliveries=len(received),pool_active_end=pool.activeThreadCount())

@@ -7,13 +7,13 @@ base=importlib.util.module_from_spec(spec);spec.loader.exec_module(base)
 PREFIX='.ci/62d/n2final_cases.py::'
 NEW=[PREFIX+'test_sqlite_delivery_boundaries['+m+']' for m in (
  'valid','read-only','write-denied','locked','unavailable','replace','binding','library-uuid',
- 'track-uuid','source-uuid','wal','metadata','read-denied')]+[
+ 'track-uuid','source-uuid','source-registry-uuid','wal','metadata','read-denied')]+[
  PREFIX+'test_new_interpreter_reopens_without_restoring_authority']+[
  PREFIX+'test_active_qthread_boundaries['+m+']' for m in (
  'success','cancel','close','receiver-destroy','switch','binding','timeout','exception','quit')]+[
  PREFIX+'test_actual_dacl_refuses_pair_and_restores_access['+str(i)+']' for i in (0,1)]+[
  PREFIX+'test_sqlite_connection_lifetimes_and_timings']+[
- PREFIX+'test_actual_readtask_pool['+m+']' for m in ('success','cancel','receiver-destroy','reader-error')]+[
+ PREFIX+'test_actual_readtask_pool['+m+']' for m in ('success','source','cancel','receiver-destroy','reader-error')]+[
  PREFIX+'test_actual_invalid_close_api_and_missing_file',PREFIX+'test_real_ffmpeg_stderr_and_bounded_sample_of_temp_disk']
 base.CASES+=NEW
 
@@ -21,11 +21,15 @@ def run(final=False,start=0):
     base.old.windows_required();base.ci.verify_sources()
     prepared=json.loads((base.ci.EVIDENCE/'prepared.json').read_text())
     # N1/I1 accepted separately. No new Semaphore/PSS/WeakMethod experiments.
-    selected=(base.PLAN['selected']+NEW if final else NEW)[start:]
+    n1=[case for case in base.PLAN['selected'] if 'test_native_owner_has_zero_process_handle_delta' in case]
+    assert len(n1)==1
+    originals=[case for case in base.PLAN['selected'] if case not in n1]
+    selected=(originals+NEW if final else NEW)[start:]
     report={'scope':'Native Windows Server2022 / NTFS / CPython3.11.9, NOT Desktop',
       'candidate_tree':base.ci.TREE,'gate':'OFF','status':'INCOMPLETE','selected':len(selected),
       'cases':[],'source_before':True,'source_after':False,'final_regression':final,
-      'original':83 if final else 0,'new_boundaries':len(NEW),'historical_7_I1_not_selected':7}
+      'original':len(originals) if final else 0,'new_boundaries':len(NEW),'historical_7_I1_not_selected':7,
+      'historical_N1_not_selected':n1,'reason':'User forbids repeating N1/I1 investigations; preserve accepted evidence'}
     try:
         for i,case in enumerate(selected,201+start):
             folder=base.OUT/f'{i:03d}-case';folder.mkdir(exist_ok=False)
