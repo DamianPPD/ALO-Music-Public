@@ -25,6 +25,8 @@ GUARD_MODELS=['tests/test_windows_output_lease_v0427.py::DatabaseGuardProtocolTe
  'test_database_guard_gate_off_opens_nothing')]
 ADDED=FIX[-1:]+[PREFIX+'test_database_namespace_is_held_through_actual_snapshot']+GUARD_MODELS
 base.CASES+=ADDED
+STDERR_RED=['tests/test_audio_identity_v0427.py::test_windows_stderr_quota_refuses_large_real_producer']
+base.CASES+=STDERR_RED
 
 def run(final=False,start=0,fix=False):
     base.old.windows_required();base.ci.verify_sources()
@@ -33,7 +35,7 @@ def run(final=False,start=0,fix=False):
     n1=[case for case in base.PLAN['selected'] if 'test_native_owner_has_zero_process_handle_delta' in case]
     assert len(n1)==1
     originals=[case for case in base.PLAN['selected'] if case not in n1]
-    selected=(FIX+ADDED[1:]+[PREFIX+'test_sqlite_delivery_boundaries[wal]'] if fix else originals+NEW+ADDED if final else NEW)[start:]
+    selected=(STDERR_RED if sys.argv[1]=='stderrred' else FIX+ADDED[1:]+[PREFIX+'test_sqlite_delivery_boundaries[wal]'] if fix else originals+NEW+ADDED if final else NEW)[start:]
     report={'scope':'Native Windows Server2022 / NTFS / CPython3.11.9, NOT Desktop',
       'candidate_tree':base.ci.TREE,'gate':'OFF','status':'INCOMPLETE','selected':len(selected),
       'cases':[],'source_before':True,'source_after':False,'final_regression':final,

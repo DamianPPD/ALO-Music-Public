@@ -1,10 +1,53 @@
 import hashlib
 import importlib
 import importlib.util
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
 from audio_adoption_fixtures import mp3_samples, copy_audio
+
+
+def test_windows_stderr_quota_refuses_large_real_producer(monkeypatch):
+    """Real bounded CPython producer, not evidence of FFmpeg output volume."""
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+    import tempfile
+    api = importlib.import_module('audio_library_organizer.audio.identity')
+    temporary_sizes = []
+    actual = tempfile.TemporaryFile
+    @contextmanager
+    def observed_tempfile(*args, **kwargs):
+        with actual(*args, **kwargs) as stream:
+            try:
+                yield stream
+            finally:
+                temporary_sizes.append(os.fstat(stream.fileno()).st_size)
+    # Keep the old path observable too: this same test must fail before the fix.
+    monkeypatch.setattr(api, 'tempfile', SimpleNamespace(TemporaryFile=observed_tempfile), raising=False)
+    processes = []
+    popen = subprocess.Popen
+    def observed_process(*args, **kwargs):
+        p = popen(*args, **kwargs); processes.append(p); return p
+    monkeypatch.setattr(api, 'subprocess', SimpleNamespace(Popen=observed_process,
+        DEVNULL=subprocess.DEVNULL, PIPE=subprocess.PIPE, TimeoutExpired=subprocess.TimeoutExpired))
+    with pytest.raises(ValueError) as error:
+        api._decode_windows([sys.executable, '-I', '-c',
+            'import os;os.write(2,b"E"*(2*1024*1024))'], lambda: False)
+    evidence = {'producer': 'controlled CPython, NOT FFmpeg', 'offered_bytes': 2097152,
+        'temporary_stderr_bytes': temporary_sizes, 'error': str(error.value),
+        'reaped': all(p.poll() is not None for p in processes)}
+    print(json.dumps(evidence))
+    folder = os.environ.get('ALO_62D_EVIDENCE')
+    if folder:
+        (Path(folder)/'stderr-quota.json').write_text(json.dumps(evidence, indent=2))
+    assert evidence['reaped'] and processes
+    assert 'stderr exceeded 65536-byte transport limit' in str(error.value)
+    assert temporary_sizes == [], 'No stderr disk spool is permitted'
 
 
 def identity(path, **kwargs):

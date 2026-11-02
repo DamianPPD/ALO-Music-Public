@@ -68,7 +68,7 @@ jobs:
 
       - name: Remaining N2 SQLite, active Qt, DACL and resource boundaries
         run: |
-          python -I .ci/62d/n2final_run.py final
+          python -I .ci/62d/n2final_run.py stderrred
           if ($LASTEXITCODE -ne 0) { throw 'N2 boundary FAIL; raw evidence preserved' }
 
       - name: Preserve and summarize all available results
