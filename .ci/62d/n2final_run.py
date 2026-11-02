@@ -51,7 +51,8 @@ def run(final=False,start=0,fix=False):
     report={'scope':'Native Windows Server2022 / NTFS / CPython3.11.9, NOT Desktop',
       'candidate_tree':base.ci.TREE,'gate':'OFF','status':'INCOMPLETE','selected':len(selected),
       'cases':[],'source_before':True,'source_after':False,'final_regression':final,
-      'original':len(originals) if final else 0,'new_boundaries':len(NEW)+len(ADDED),'historical_7_I1_not_selected':7,
+      'original':len(originals) if final else 0,'new_boundaries':len(NEW)+len(ADDED)+len(TRANSPORT),
+      'stderr_transport_cases':len(TRANSPORT),'historical_7_I1_not_selected':7,
       'historical_N1_not_selected':n1,'reason':'User forbids repeating N1/I1 investigations; preserve accepted evidence'}
     try:
         for i,case in enumerate(selected,201+start):
@@ -63,8 +64,12 @@ def run(final=False,start=0,fix=False):
             code=base.bounded_child([prepared['python'],'-I','-B',str(Path(__file__).resolve()),
                'pytest-wait',case,str(folder)],env,folder)
             (folder/'exit.txt').write_text(str(code));outcome=base.classify(folder,code)
+            is_model=any(name in case for name in ('test_windows_output_lease_',
+                'test_windows_decode_transport_failure_reaps_and_closes',
+                'test_windows_stderr_closed_before_child_exit_keeps_deadline',
+                'test_windows_stderr_exit_between_probe_and_poll_is_not_lost'))
             report['cases'].append({'case':case,'exit':code,'outcome':outcome,
-              'category':'protocol-model' if 'test_windows_output_lease_' in case else 'native'})
+              'category':'protocol-model' if is_model else 'native-or-controlled-fault'})
             base.write(base.OUT/'run.json',report);base.ci.verify_sources()
             if outcome!='PASS':raise RuntimeError('STOP '+case+' / '+outcome)
             base.audit_synthetic(folder)
