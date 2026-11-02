@@ -311,7 +311,7 @@ def test_database_replaced_between_precheck_and_snapshot_is_refused(diagnostic_w
 
 def test_database_namespace_is_held_through_actual_snapshot(diagnostic_window,monkeypatch):
     window,lib,_=diagnostic_window;repo,root,track,_=lib
-    actual=repo.adopted_assessment_snapshot;gui=get_ident();seen=[]
+    actual=window.repository.adopted_assessment_snapshot;gui=get_ident();seen=[]
     def snapshot(*a,**kw):
         if get_ident()==gui:
             with pytest.raises(PermissionError) as denied:
@@ -319,7 +319,7 @@ def test_database_namespace_is_held_through_actual_snapshot(diagnostic_window,mo
             assert denied.value.winerror in (5,32)
             seen.append(denied.value.winerror)
         return actual(*a,**kw)
-    monkeypatch.setattr(repo,'adopted_assessment_snapshot',snapshot)
+    monkeypatch.setattr(window.repository,'adopted_assessment_snapshot',snapshot)
     run_check(window)
     lease=window.last_reconciliation_result.output_delivery.windows_lease
     assert seen and lease.accepted and not lease.active and lease.owned_count==0
