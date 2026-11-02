@@ -3,7 +3,7 @@
 Only DACL and queued mutations touch owned synthetic files. API fault cases
 are explicitly fault injection, never evidence of an actual OS malfunction.
 """
-from contextlib import ExitStack,closing
+from contextlib import ExitStack,closing,contextmanager
 from pathlib import Path
 from threading import Event,get_ident
 from uuid import uuid4
@@ -20,6 +20,29 @@ from audio_library_organizer.safety import windows_output_lease as leases
 from n2final_dacl import deny
 
 pytestmark=pytest.mark.skipif(sys.platform!='win32',reason='Actual Windows x64/NTFS required')
+
+@pytest.fixture(autouse=True)
+def native_file_accounting(monkeypatch):
+    """Observe actual API ownership, not wrappers or a process-count tolerance."""
+    opened=[];closed=[];live={}
+    original_open=native._WinAPI.open;original_close=native._WinAPI.close
+    def open_(api,*a,**kw):
+        h=original_open(api,*a,**kw);key=(id(api),h)
+        assert key not in live
+        token=len(opened);live[key]=token;opened.append(token)
+        record('n2-file-open',token=token,thread=get_ident())
+        return h
+    def close_(api,h):
+        if h==0:return original_close(api,h)  # explicit INVALID_HANDLE native test
+        key=(id(api),h);assert key in live,'Unowned/double-close native handle'
+        token=live[key];result=original_close(api,h)
+        del live[key];closed.append(token);record('n2-file-close',token=token,thread=get_ident())
+        return result
+    monkeypatch.setattr(native._WinAPI,'open',open_)
+    monkeypatch.setattr(native._WinAPI,'close',close_)
+    yield
+    record('n2-file-final',opened=len(opened),closed=len(closed),live=len(live))
+    assert not live and sorted(opened)==sorted(closed)
 
 def drain(predicate,seconds=15):
     deadline=time.monotonic()+seconds
@@ -313,11 +336,11 @@ def test_real_ffmpeg_stderr_and_bounded_sample_of_temp_disk(tmp_path,monkeypatch
     with pytest.raises(ValueError):
         identity._decode_windows([ffmpeg,'-v','error','-nostdin','-f','mp3','-i',str(broken),'-f','null','-'],lambda:False)
     actual=identity.tempfile.TemporaryFile;paths=[];sizes=[]
+    @contextmanager
     def tempfile(*a,**kw):
-        stream=actual(*a,**kw);original_close=stream.close
-        def close():
-            sizes.append(os.fstat(stream.fileno()).st_size);return original_close()
-        stream.close=close;return stream
+        with actual(*a,**kw) as stream:
+            try:yield stream
+            finally:sizes.append(os.fstat(stream.fileno()).st_size)
     monkeypatch.setattr(identity.tempfile,'TemporaryFile',tempfile)
     with pytest.raises(ValueError):
         identity._decode_windows([sys.executable,'-I','-c','import os;os.write(2,b"E"*(2*1024*1024))'],lambda:False)

@@ -2,7 +2,7 @@
 from pathlib import Path
 import json,sys,os
 ROOT=Path(__file__).resolve().parents[2]
-sys.path[:0]=[str(ROOT/'src'),str(ROOT/'tests')]
+sys.path[:0]=[str(ROOT/'src'),str(ROOT/'tests'),str(Path(__file__).resolve().parent)]
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
 from audio_library_organizer.domain.settings import AppSettings,LibraryPaths
@@ -16,6 +16,9 @@ def main():
     root=Path(sys.argv[1]).resolve();track_id=sys.argv[2]
     allowed=Path(os.environ['ALO_62D_EVIDENCE']).resolve()/'synthetic'
     assert root.is_relative_to(allowed) and native.WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED is False
+    import contract_run as runtime
+    hooks=Path(os.environ['ALO_62D_EVIDENCE'])/'restart-observations';hooks.mkdir()
+    errors=runtime.install_callback_observer(hooks)
     app=QApplication([]);main_window.DashboardPage=DashboardPage
     store=QSettings(str(root/'restart-isolated.ini'),QSettings.Format.IniFormat)
     AppPreferences(language='en',theme='dark').save(store)
@@ -29,11 +32,15 @@ def main():
         run_check(window)
         h=window._output_history[track_id]
         assert not h.evaluation.is_confirmed and not window._output_session
-        print(json.dumps({'pid':os.getpid(),'restart':'new interpreter / real MainWindow',
+        result={'pid':os.getpid(),'restart':'new interpreter / real MainWindow',
             'historical_P_restored':False,'initial_H_entries':0,'fresh_H_confirmed':False,
-            'library_id':window.repository.library_id,'track_id':track_id,'status':'PASS'}))
+            'library_id':window.repository.library_id,'track_id':track_id,'status':'PASS'}
     finally:
         native.WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED=False
         window.close();app.processEvents()
+    assert not errors.read_text().strip()
+    messages=[json.loads(line) for line in (hooks/'qt-messages.jsonl').read_text().splitlines()]
+    assert not any(runtime.qt_message_is_error(x['type'],x['message']) for x in messages)
+    print(json.dumps(dict(result,callback_errors=0,Qt_lifecycle_errors=0,gate=False)))
     return 0
 if __name__=='__main__':sys.exit(main())
