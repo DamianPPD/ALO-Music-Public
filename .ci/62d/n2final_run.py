@@ -18,7 +18,13 @@ NEW=[PREFIX+'test_sqlite_delivery_boundaries['+m+']' for m in (
 base.CASES+=NEW
 FIX=[PREFIX+'test_sqlite_connection_lifetimes_and_timings',
      PREFIX+'test_database_replaced_between_precheck_and_snapshot_is_refused']
-base.CASES+=FIX[-1:]
+GUARD_MODELS=['tests/test_windows_output_lease_v0427.py::DatabaseGuardProtocolTests::'+name for name in (
+ 'test_database_guard_retains_mutable_handles_until_scope_exit',
+ 'test_database_guard_partial_query_failure_closes_all',
+ 'test_database_guard_close_failure_quarantines_further_acquisition',
+ 'test_database_guard_gate_off_opens_nothing')]
+ADDED=FIX[-1:]+[PREFIX+'test_database_namespace_is_held_through_actual_snapshot']+GUARD_MODELS
+base.CASES+=ADDED
 
 def run(final=False,start=0,fix=False):
     base.old.windows_required();base.ci.verify_sources()
@@ -27,11 +33,11 @@ def run(final=False,start=0,fix=False):
     n1=[case for case in base.PLAN['selected'] if 'test_native_owner_has_zero_process_handle_delta' in case]
     assert len(n1)==1
     originals=[case for case in base.PLAN['selected'] if case not in n1]
-    selected=(FIX if fix else originals+NEW if final else NEW)[start:]
+    selected=(FIX+ADDED[1:]+[PREFIX+'test_sqlite_delivery_boundaries[wal]'] if fix else originals+NEW+ADDED if final else NEW)[start:]
     report={'scope':'Native Windows Server2022 / NTFS / CPython3.11.9, NOT Desktop',
       'candidate_tree':base.ci.TREE,'gate':'OFF','status':'INCOMPLETE','selected':len(selected),
       'cases':[],'source_before':True,'source_after':False,'final_regression':final,
-      'original':len(originals) if final else 0,'new_boundaries':len(NEW),'historical_7_I1_not_selected':7,
+      'original':len(originals) if final else 0,'new_boundaries':len(NEW)+len(ADDED),'historical_7_I1_not_selected':7,
       'historical_N1_not_selected':n1,'reason':'User forbids repeating N1/I1 investigations; preserve accepted evidence'}
     try:
         for i,case in enumerate(selected,201+start):

@@ -20,7 +20,7 @@ class ModelAPI:
     def query(self,h):
         if h==self.fail_query:raise OSError('model Win32 query error')
         _,path,mutable=self.opened[h-1]
-        p=PureWindowsPath(path);directory=p.suffix.lower()!='.mp3'
+        p=PureWindowsPath(path);directory=p.suffix.lower() not in ('.mp3','.sqlite3')
         n=native.NativeNode('NTFS',3,'model-volume',4,bytes([h])*16,0 if directory else 16,
             5,6,7,1,0x10 if directory else 0,0,False,path,directory)
         if self.bad and not directory:n=replace(n,**self.bad)
@@ -179,6 +179,46 @@ class LeaseProtocolTests(unittest.TestCase):
         with self.assertRaises(OSError):self.acquire(api)
         with self.assertRaisesRegex(OSError,'WINDOWS_LEASE_CLEANUP_UNCERTAIN_RESTART_REQUIRED'):
             m.acquire_output_lease(*self.paths)
+
+
+class DatabaseGuardProtocolTests(unittest.TestCase):
+    """Model-only identity guard contract; native tests remain separate."""
+    database=r'C:\synthetic-library\.alo\library.sqlite3'
+    module=LeaseProtocolTests.module
+    tearDown=LeaseProtocolTests.tearDown
+
+    def test_database_guard_retains_mutable_handles_until_scope_exit(self):
+        m=self.module();api=ModelAPI()
+        with patch.object(native,'positive_acceptance_enabled',return_value=True),patch.object(native,'_WinAPI',return_value=api):
+            with m.guard_database_identity(self.database) as proof:
+                self.assertFalse(proof.leaf.directory)
+                self.assertEqual(api.closed,[])
+                self.assertTrue(all(mutable for _,_,mutable in api.opened))
+            self.assertEqual(api.closed,[h for h,_,_ in reversed(api.opened)])
+
+    def test_database_guard_partial_query_failure_closes_all(self):
+        m=self.module();api=ModelAPI(fail_query=3)
+        with patch.object(native,'positive_acceptance_enabled',return_value=True),patch.object(native,'_WinAPI',return_value=api):
+            with self.assertRaises(OSError):
+                with m.guard_database_identity(self.database):self.fail('Invalid proof entered body')
+        self.assertEqual(sorted(api.closed),sorted(h for h,_,_ in api.opened))
+
+    def test_database_guard_close_failure_quarantines_further_acquisition(self):
+        m=self.module();api=ModelAPI(fail_close=1)
+        with patch.object(native,'positive_acceptance_enabled',return_value=True),patch.object(native,'_WinAPI',return_value=api):
+            with self.assertRaises(m.LeaseCleanupError):
+                with m.guard_database_identity(self.database):pass
+            count=len(api.opened)
+            with self.assertRaisesRegex(OSError,'UNCERTAIN'):
+                with m.guard_database_identity(self.database):self.fail('Quarantine bypass')
+            self.assertEqual(len(api.opened),count)
+
+    def test_database_guard_gate_off_opens_nothing(self):
+        m=self.module();api=ModelAPI()
+        with patch.object(native,'positive_acceptance_enabled',return_value=False),patch.object(native,'_WinAPI',return_value=api):
+            with self.assertRaises(OSError):
+                with m.guard_database_identity(self.database):self.fail('Gate bypass')
+        self.assertEqual(api.opened,[])
 
 
 if __name__=='__main__':unittest.main()

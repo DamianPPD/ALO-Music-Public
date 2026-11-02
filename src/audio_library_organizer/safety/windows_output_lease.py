@@ -5,6 +5,7 @@ revocation. Only the acquiring thread closes handles. Other threads may revoke
 and wake it; cancellation cannot close a file under an in-flight worker read.
 """
 from threading import Event, Lock, get_ident
+from contextlib import contextmanager
 from math import isfinite
 from time import monotonic
 
@@ -162,3 +163,24 @@ def acquire_output_lease(source, managed):
     if any(not p.lower().endswith('.mp3') for p in paths):
         raise ValueError('ONLY_ADOPTED_MP3_SUPPORTED')
     return _acquire_pair(paths,native._WinAPI())
+
+
+@contextmanager
+def guard_database_identity(path):
+    """Hold DB and ancestor identities through the GUI's SQLite read/claim.
+
+    Share-write preserves normal SQLite/WAL activity; deny-delete prevents
+    replacing this namespace while a separate SQLite connection reads it.
+    This is metadata protection, never a content receipt or a music lease.
+    The acquiring thread closes through the existing quarantine policy.
+    """
+    with _QUARANTINE_LOCK:
+        if _UNCERTAIN_OWNERS:raise OSError('WINDOWS_LEASE_CLEANUP_UNCERTAIN_RESTART_REQUIRED')
+    if not native.positive_acceptance_enabled():
+        raise OSError('WINDOWS_POSITIVE_ACCEPTANCE_NOT_VERIFIED')
+    path=str(native._lexical(path));api=native._WinAPI()
+    owner=WindowsOutputLease((path,),api)
+    try:
+        proof,_=native._open_path(path,api,mutable=True,owner=owner)
+        yield proof
+    finally:owner.close()

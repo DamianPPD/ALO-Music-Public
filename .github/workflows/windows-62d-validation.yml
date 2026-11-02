@@ -1,5 +1,5 @@
-name: ALO N2 final review SQLite timings and replacement RED
-run-name: ALO N2 final review SQLite timings and replacement RED / Windows Server 2022 / ${{ github.sha }}
+name: ALO N2 SQLite identity guard GREEN
+run-name: ALO N2 SQLite identity guard GREEN / Windows Server 2022 / ${{ github.sha }}
 
 on:
   push:

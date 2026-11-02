@@ -11,6 +11,7 @@ import sqlite3
 from uuid import uuid4
 from functools import partial
 from weakref import WeakMethod
+from contextlib import nullcontext
 
 from PySide6.QtCore import Qt, QThread, QSettings, Signal, Slot, QUrl, QTimer, QSize, QVariantAnimation, QFileSystemWatcher, QObject
 from PySide6.QtGui import QPixmap, QDesktopServices, QIcon, QColor
@@ -1800,27 +1801,34 @@ class MainWindow(QMainWindow):
             self._output_watcher.removePaths(self._output_watcher.files() + self._output_watcher.directories())
             return
         try:
-            current = self.repository.adopted_assessment_snapshot(request.track_id, timeout=0.0)
-            if not context_matches(delivery, current, request) or not material_matches(delivery):
-                return
-            if windows_identity.on_windows():
-                lease=delivery.windows_lease
-                if (lease is None or not operation.owns_windows_lease(lease)
-                        or not lease.claim(delivery.windows_material)):return
-                # P is consumed here, not cached as a GUI confirmation. Only
-                # copied H is painted, so timeout/release cannot leave stale P
-                # in the view or active map. There is no flashing positive row.
-                selected=[f for f in result.files if f.track_id==request.track_id]
-                if len(selected)!=1:return
-                self._output_baseline_evals[request.track_id]=selected[0].evaluation
-                self._output_history[request.track_id]=history_from_delivery(delivery)
-                self._refresh_output_display()
-            else:
-                self._output_session[request.track_id] = delivery
-                self.refresh_data()
+            from audio_library_organizer.safety.windows_output_lease import guard_database_identity
+            protection=(guard_database_identity(delivery.database_locator)
+                if windows_identity.on_windows() else nullcontext(None))
+            with protection as database:
+                if (windows_identity.on_windows()
+                        and not windows_identity.same_database(delivery.windows_database,database)):return
+                current = self.repository.adopted_assessment_snapshot(request.track_id, timeout=0.0)
+                if not context_matches(delivery, current, request) or not material_matches(delivery):
+                    return
+                if windows_identity.on_windows():
+                    lease=delivery.windows_lease
+                    if (lease is None or not operation.owns_windows_lease(lease)
+                            or not lease.claim(delivery.windows_material)):return
+                    # P is consumed here, not cached as a GUI confirmation. Only
+                    # copied H is painted, so timeout/release cannot leave stale P
+                    # in the view or active map. There is no flashing positive row.
+                    selected=[f for f in result.files if f.track_id==request.track_id]
+                    if len(selected)!=1:return
+                    self._output_baseline_evals[request.track_id]=selected[0].evaluation
+                    self._output_history[request.track_id]=history_from_delivery(delivery)
+                    self._refresh_output_display()
+                else:
+                    self._output_session[request.track_id] = delivery
+                    self.refresh_data()
         except (sqlite3.Error, OSError, ValueError, RuntimeError):
             self._output_session.pop(request.track_id, None)
             self._output_history.pop(request.track_id,None)
+            self._refresh_output_display()
         finally:
             if not self._output_session and not self._output_history:
                 watches = self._output_watcher.files() + self._output_watcher.directories()

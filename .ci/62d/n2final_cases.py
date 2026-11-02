@@ -240,10 +240,12 @@ def test_sqlite_connection_lifetimes_and_timings(diagnostic_window,monkeypatch):
     opened=[];closed=[];live={};lifetimes=[];decode_threads=[];acquires=[];holds=[];queued=[]
     class Connection(sqlite3.Connection):
         def close(self):
-            token,started=live.pop(id(self));closed.append(token)
+            token,started=live[id(self)]
+            result=super().close()
+            del live[id(self)];closed.append(token)
             lifetime=time.perf_counter()-started;lifetimes.append(lifetime)
-            record('sqlite-close',token=token,thread=get_ident(),lifetime_seconds=lifetime)
-            return super().close()
+            record('sqlite-close',token=token,thread=get_ident(),lifetime_seconds=lifetime,successful=True)
+            return result
     def observed(*a,**kw):
         kw['factory']=Connection;start=time.perf_counter();conn=connect(*a,**kw)
         token=len(opened);live[id(conn)]=(token,time.perf_counter());opened.append(token)
@@ -305,6 +307,24 @@ def test_database_replaced_between_precheck_and_snapshot_is_refused(diagnostic_w
         assert not window._output_history and not window._output_session
     finally:
         if held.exists():repo.database_path.unlink();held.rename(repo.database_path)
+
+def test_database_namespace_is_held_through_actual_snapshot(diagnostic_window,monkeypatch):
+    window,lib,_=diagnostic_window;repo,root,track,_=lib
+    actual=repo.adopted_assessment_snapshot;gui=get_ident();seen=[]
+    def snapshot(*a,**kw):
+        if get_ident()==gui:
+            with pytest.raises(PermissionError) as denied:
+                repo.database_path.rename(repo.database_path.with_suffix('.should-not-move'))
+            assert denied.value.winerror in (5,32)
+            seen.append(denied.value.winerror)
+        return actual(*a,**kw)
+    monkeypatch.setattr(repo,'adopted_assessment_snapshot',snapshot)
+    run_check(window)
+    lease=window.last_reconciliation_result.output_delivery.windows_lease
+    assert seen and lease.accepted and not lease.active and lease.owned_count==0
+    assert window._output_history and not window._output_session
+    record('database-native-identity-held-through-snapshot',rename_refusals=seen,accepted=lease.accepted,
+        historical_confirmed=[h.evaluation.is_confirmed for h in window._output_history.values()])
 
 @pytest.mark.parametrize('mode',['success','source','cancel','receiver-destroy','reader-error'])
 def test_actual_readtask_pool(diagnostic_window,mode):

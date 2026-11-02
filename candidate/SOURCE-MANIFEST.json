@@ -1,8 +1,8 @@
 {
   "head": "ea20be0f6db1788f0a2a834fcdba355f2d828ddb",
   "base_tree": "de616e0fe890353463181b9c785ba9152189f842",
-  "input_tree": "9f1a769d99e01e789f3ea2487a7c63c9d36b9d3b",
-  "tree": "a4941cee5f9bd1c201b841e428801256104345cc",
+  "input_tree": "a4941cee5f9bd1c201b841e428801256104345cc",
+  "tree": "c88886b062116edbc2f26e0a7e94cbf468eec8af",
   "files": [
     {
       "path": ".gitattributes",
@@ -1279,8 +1279,8 @@
     {
       "path": "src/audio_library_organizer/safety/windows_output_lease.py",
       "mode": "100644",
-      "blob": "931c02e76a9aea7399e394265d511d0dc113a668",
-      "sha256": "2281e124471aa55079bed1ca106debcd4a248c843349e02fb1dacbe0f7975108"
+      "blob": "4f679290c6ae47584a0f6a346e7343d54753bebe",
+      "sha256": "53b931ce5de2fbed5389006bdd848ac952bc06444fcccd8d917ffddcdbf94b39"
     },
     {
       "path": "src/audio_library_organizer/storage/__init__.py",
@@ -1483,8 +1483,8 @@
     {
       "path": "src/audio_library_organizer/ui/main_window.py",
       "mode": "100644",
-      "blob": "3643cef3a22e8a4b047f3621e623f950b71cf275",
-      "sha256": "64a7e0e664cd16b78c86dcef5097c4f7c52a7a0c1bbac1d2f8517184ef962227"
+      "blob": "37ea19587f21db27b48148188b1846fd77be2c31",
+      "sha256": "bae1adfba3598ab610edf16f0434e7a479c127e31b1fc8c06e461d4f81d696f1"
     },
     {
       "path": "src/audio_library_organizer/ui/metadata_editor.py",
@@ -2533,8 +2533,8 @@
     {
       "path": "tests/test_windows_output_lease_v0427.py",
       "mode": "100644",
-      "blob": "ce230ee6d8371e0dccb0927c7fbf00e952fa3851",
-      "sha256": "e3dc9ccf30656a52e6b4e956b3458d4acac92b2cc9215f3743094e43c6b7dc5b"
+      "blob": "fa6a1eb491755daabf930c37879af97c2f9224bc",
+      "sha256": "2cea94dbc48bc035d35e598841eafb5dd56b69b2d35d65f8ae97289c04b22880"
     },
     {
       "path": "tests/test_windows_output_native_v0427.py",
@@ -2555,14 +2555,16 @@
       "sha256": "eb501c20aad1725a6afa7990be3b745497daf86bfb6ebc86cffbfb61f1fba5d7"
     }
   ],
-  "full_patch_sha256": "5424543ffad411202efa4e4efed1625588cb0486298bf6af51f041efea33bec1",
-  "delta_sha256": "e0ccfdd717bed836815ffce2a7089443650a032eb27f9f39a550ee99f80b2118",
+  "full_patch_sha256": "72454774dba9af41ccd59b418e8ff60f1d74e8cd03e5dfd60c43e97e4b209446",
+  "delta_sha256": "dc1d58d5fa16686b7c1ff3f945c6f9e0ed0f5dd37c023c5997d769a44f2a7f59",
   "delta_paths": [
-    "tests/test_output_contract_windows_v0427.py"
+    "src/audio_library_organizer/safety/windows_output_lease.py",
+    "src/audio_library_organizer/ui/main_window.py",
+    "tests/test_windows_output_lease_v0427.py"
   ],
   "windows_gate": false,
-  "scope": "N1 test methodology only; production unchanged",
-  "full_patch_file": "ALO-Music-v0427-Stage6-2D-N2-I1-FINAL-full.patch",
-  "delta_patch_sha256": "db186e8449f77d0dd2b02afc12b54ed31a2bb76175a1dadfd6b1ae213c89aa3b",
-  "delta_patch_file": "ALO-Music-v0427-Stage6-2D-N2-I1-FINAL-delta.patch"
+  "scope": "N2 FINAL I3 DB identity continuity; gate OFF",
+  "full_patch_file": "ALO-Music-v0427-Stage6-2D-N2-FINAL-full.patch",
+  "delta_patch_sha256": "dc1d58d5fa16686b7c1ff3f945c6f9e0ed0f5dd37c023c5997d769a44f2a7f59",
+  "delta_patch_file": "ALO-Music-v0427-Stage6-2D-N2-FINAL-delta.patch"
 }
