@@ -29,10 +29,25 @@ def install(package,work,profile=None,output=None):
     def emit(kind,**kw):
         row=json.dumps(dict(kind=kind,**kw),ensure_ascii=True,default=str)+'\n'
         with log_lock:os.write(fd,row.encode())
-    def refuse(kind,detail):emit('VIOLATION',operation=kind,detail=detail);raise PermissionError('ISOLATION STOP: '+kind)
+    def probe_origin(function,relative):
+        expected=os.path.normcase(str(package/'runtime'/relative));frame=sys._getframe(1)
+        while frame is not None:
+            origin=getattr(frame.f_globals.get('__spec__'),'origin',None)
+            locations=(frame.f_code.co_filename,origin)
+            if frame.f_code.co_name==function and any(isinstance(p,str)and os.path.normcase(p)in(expected,expected+'c')for p in locations):return True
+            frame=frame.f_back
+        return False
+    def refuse(kind,detail,capability_probe=False):
+        # Both classes are denied before any operation. Only exact immutable
+        # dependency probes, which already catch OSError, are nonfatal evidence.
+        emit('DENIED_CAPABILITY_PROBE'if capability_probe else'VIOLATION',operation=kind,detail=detail)
+        raise PermissionError('ISOLATION STOP: '+kind)
     def readable(p):return any(inside(p,r)for r in(package,work,system))
     def audit(event,args):
-        if event.startswith(('socket.connect','socket.bind','socket.getaddrinfo')):refuse(event,'network disabled')
+        if event.startswith(('socket.connect','socket.bind','socket.getaddrinfo')):
+            probe=(event=='socket.bind' and len(args)>1 and args[1]in(('::1',0),('::1',0,0,0))
+                and probe_origin('_has_ipv6','Lib/site-packages/urllib3/util/connection.py'))
+            refuse(event,'network disabled; no socket operation permitted',capability_probe=probe)
         if event in ('winreg.CreateKey','winreg.DeleteKey','winreg.DeleteValue','winreg.SetValue','winreg.SetValueEx','winreg.LoadKey','winreg.SaveKey'):refuse(event,'registry writes disabled')
         if event=='open':
             p,mode,flags=args
@@ -62,7 +77,10 @@ def install(package,work,profile=None,output=None):
     class PinnedPopen(original):
         def __init__(self,*a,**kw):
             argv=a[0]if a else kw.get('args')
-            if not isinstance(argv,(list,tuple))or not argv or kw.get('shell'):refuse('Popen','argv list required, shell disabled')
+            if not isinstance(argv,(list,tuple))or not argv or kw.get('shell'):
+                probe=(isinstance(argv,str)and argv in('ver','command /c ver','cmd /c ver')and kw.get('shell')is True
+                    and probe_origin('_syscmd_ver','python311.zip/platform.py'))
+                refuse('Popen','argv list required, shell disabled',capability_probe=probe)
             try:
                 selected=os.fsdecode(kw.get('executable')or argv[0])
                 executable=Path(selected)if Path(selected).is_absolute()else Path(shutil.which(selected)or '')

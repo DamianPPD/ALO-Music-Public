@@ -31,6 +31,9 @@ def trial(name,corrupt=False):
         p=subprocess.run([str(cmd),'/d','/c',str(root/'URUCHOM-TESTY.cmd')],cwd=root,env=env,stdout=out,stderr=err,timeout=1800)
     results=list((root/'wyniki').rglob('*.zip'));assert len(results)==1,results
     for file in(results[0],Path(str(results[0])+'.sha256.txt')):shutil.copy2(file,OUT/(name+'-'+file.name))
+    if p.returncode!=(2 if corrupt else 0):
+        print((OUT/(name+'.stdout.log')).read_text(encoding='utf-8',errors='replace')[-12000:],flush=True)
+        print((OUT/(name+'.stderr.log')).read_text(encoding='utf-8',errors='replace')[-12000:],flush=True)
     assert p.returncode==(2 if corrupt else 0),(name,p.returncode)
     report=audit_results(results[0],'STOP'if corrupt else'PASS',p.returncode)
     return report

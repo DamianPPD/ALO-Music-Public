@@ -142,7 +142,8 @@ def main():
                         print('ISOLATION/Qt EVIDENCE:',json.dumps(event),flush=True)
                         outcome='ISOLATION_OR_QT_ERROR'
             i=int(folder.name.split('-')[0])-201;node=selected[i]
-            row=next(r for r in rows if r['case']==node);row.update(outcome=outcome,exit=code)
+            row=next(r for r in rows if r['case']==node)
+            row.update(outcome=outcome if outcome in('PASS','FAIL','ERROR','SKIP')else'ERROR',raw_outcome=outcome,exit=code)
             if code==124:row['failure_kind']='TIMEOUT'
             elif code<0 or code>0x7fffffff:row['failure_kind']='CRASH'
             print(f'{i+1:03d}/{len(selected)} {outcome}  {node}',flush=True)
@@ -164,6 +165,8 @@ def main():
         if n:
             try:n.base.ci.verify_sources();report['source_after']=True
             except BaseException as e:report.update(status='STOP',source_error=str(e))
+        try:verify_package();report['package_after']=True
+        except BaseException as e:report.update(status='STOP',package_after=False,package_error=str(e))
         report['executed']=sum(r['exit']is not None for r in rows)
         report['counts']={name:sum(r['outcome']==name for r in rows)for name in('PASS','FAIL','ERROR','SKIP','BLOCKED','NOT RUN')}
         report['phases_expected_for_PASS']=3*report['counts']['PASS']
