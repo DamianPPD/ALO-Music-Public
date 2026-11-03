@@ -25,9 +25,8 @@ def main():
  ci.write('runtime-reuse.json',{'package_sha256':SHA,'runtime_files':len(runtime),'all_package_hashes_verified':len(rows),'new_installations':0})
  python=root/'runtime/python.exe';bins=root/'tools';env=ci.safe_environment(python,bins);env['RUNNER_TEMP']=str(temp)
  ci.write('prepared.json',{'python':str(python),'bin':str(bins),'runtime_root':str(root),'candidate_tree':ci.TREE})
- # Probe in a separate -I process before adding any product/test search path.
- probe="import importlib.util,pathlib,json,sys;s=importlib.util.spec_from_file_location('verified_probe',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);d=m.probe(pathlib.Path(sys.argv[2]));d.update(candidate_tree=sys.argv[3],product_gate=True,scope='Native Windows Server 2022; NOT Windows11 activation run');pathlib.Path(sys.argv[4]).write_text(json.dumps(d,indent=2))"
- ci.execute([python,'-I','-B','-c',probe,HERE/'portable_launch.py',root,ci.TREE,ci.EVIDENCE/'environment.json'],'private-runtime-probe',env=env,timeout=60)
+ # Probe the exact preserved runtime layout in a separate isolated process.
+ ci.execute([python,'-I','-B',HERE/'activation_preflight.py',root,ci.TREE,ci.EVIDENCE/'environment.json'],'private-runtime-probe',env=env,timeout=60)
  code=subprocess.run([str(python),'-I','-B',str(HERE/'activation_run.py'),'run'],cwd=ci.ROOT,env=env).returncode
  return code
 if __name__=='__main__':sys.exit(main())
