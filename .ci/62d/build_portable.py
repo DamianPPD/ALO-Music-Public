@@ -12,7 +12,14 @@ def signatures(paths):
  ps=Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'
  names=','.join("'"+str(p).replace("'","''")+"'"for p in paths)
  command='@('+names+') | ForEach-Object { $s=Get-AuthenticodeSignature -LiteralPath $_; $v=(Get-Item -LiteralPath $_).VersionInfo; [pscustomobject]@{name=[IO.Path]::GetFileName($_);status=[string]$s.Status;subject=[string]$s.SignerCertificate.Subject;company=$v.CompanyName;original=$v.OriginalFilename;version=$v.FileVersion} } | ConvertTo-Json -Compress'
- p=subprocess.run([str(ps),'-NoProfile','-NonInteractive','-Command',command],capture_output=True,text=True,check=True)
+ if paths[0].name=='python.exe':
+  legacy=subprocess.run([str(ps),'-NoProfile','-NonInteractive','-Command',command],capture_output=True,text=True)
+  write(OUT/'signature-host-before.json',{'stdout':legacy.stdout,'stderr':legacy.stderr,'exit':legacy.returncode})
+ env=dict(os.environ,PSModulePath=str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/Modules'))
+ p=subprocess.run([str(ps),'-NoProfile','-NonInteractive','-Command',"$ErrorActionPreference='Stop';"+command],capture_output=True,text=True,env=env)
+ if p.returncode:
+  write(OUT/'signature-host-error.json',{'stdout':p.stdout,'stderr':p.stderr,'exit':p.returncode})
+  raise RuntimeError('Signature host failed: '+p.stderr)
  rows=json.loads(p.stdout);rows=rows if isinstance(rows,list)else[rows]
  for row in rows:assert row['status']=='Valid'and ('Python Software Foundation'in row['subject']or'Microsoft'in row['subject']),row
  return rows
@@ -44,7 +51,9 @@ def main():
   with zipfile.ZipFile(p)as z:
    for name in z.namelist():
     if name.endswith('/'):continue
-    q=PurePosixPath(name);assert not q.is_absolute()and'..'not in q.parts and ':'not in name and not any(part.endswith('.data')for part in q.parts)
+    q=PurePosixPath(name);assert not q.is_absolute()and'..'not in q.parts and ':'not in name
+    if any(part.endswith('.data')for part in q.parts):
+     assert q.parts[:5]==('mutagen-1.47.0.data','data','share','man','man1')and q.suffix=='.1',name
     d=site/name;d.parent.mkdir(parents=True,exist_ok=True);b=z.read(name)
     if d.exists():assert d.read_bytes()==b
     else:d.write_bytes(b)
@@ -86,4 +95,10 @@ if w:
  Path(str(path)+'.sha256.txt').write_text(sha(path.read_bytes())+'  '+path.name+'\n')
  write(OUT/'build.json',dict(tree=TREE,source_files=425,package_bytes=path.stat().st_size,sha256=sha(path.read_bytes()),manifest_files=len(manifest),gate=False))
  print('BUILT',path.name,path.stat().st_size,sha(path.read_bytes()),flush=True)
-if __name__=='__main__':main()
+if __name__=='__main__':
+    try:main()
+    except BaseException:
+        import traceback
+        (OUT/'build-error.log').write_text(traceback.format_exc())
+        raise
+

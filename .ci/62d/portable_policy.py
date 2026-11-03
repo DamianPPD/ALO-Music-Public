@@ -13,6 +13,10 @@ def junction_command(args,root):
 def summary_status(outcomes,planned):
     return 'PASS' if len(outcomes)==planned and all(x=='PASS'for x in outcomes)else 'STOP'
 
+def null_device(path):
+    try:return os.fsdecode(path).casefold()in('nul',r'\\.\nul')
+    except TypeError:return False
+
 def install(package,work,profile=None,output=None):
     """No read/write access to private music; not an OS sandbox for hostile code."""
     if getattr(sys,'_alo_portable_policy',False):return
@@ -32,7 +36,7 @@ def install(package,work,profile=None,output=None):
         if event in ('winreg.CreateKey','winreg.DeleteKey','winreg.DeleteValue','winreg.SetValue','winreg.SetValueEx','winreg.LoadKey','winreg.SaveKey'):refuse(event,'registry writes disabled')
         if event=='open':
             p,mode,flags=args
-            if isinstance(p,int):return
+            if isinstance(p,int)or null_device(p):return
             write=bool((flags or 0)&(os.O_WRONLY|os.O_RDWR|os.O_CREAT|os.O_TRUNC|os.O_APPEND))
             if write and not any(inside(p,r)for r in writable):refuse(event,'write outside new synthetic workspace')
             if not write and not readable(p):refuse(event,'read outside package/workspace/system')
@@ -68,6 +72,10 @@ def install(package,work,profile=None,output=None):
                 if executable!=cmd or not junction_command(argv[1:],work):refuse('Popen','unapproved executable/command')
             if kw.get('cwd')and not readable(kw['cwd']):refuse('Popen','unapproved working directory')
             kw['executable']=str(executable)
+            if executable==(package/'runtime/python.exe').resolve() and '-B'not in argv:
+                argv=[argv[0],'-B',*argv[1:]]
+                if a:a=(argv,*a[1:])
+                else:kw['args']=argv
             emit('subprocess.selected',executable=str(executable),argv=list(argv))
             super().__init__(*a,**kw)
     subprocess.Popen=PinnedPopen;sys.addaudithook(audit);sys._alo_portable_policy=True

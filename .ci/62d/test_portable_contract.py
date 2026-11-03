@@ -16,6 +16,11 @@ class PolicyTests(unittest.TestCase):
             self.assertTrue(self.p.junction_command(['/d','/c','mklink','/J',str(r/'link'),str(r/'target')],r))
             self.assertFalse(self.p.junction_command(['/d','/c','del',str(r/'file')],r))
             self.assertFalse(self.p.junction_command(['/d','/c','mklink','/J',str(r/'link'),'C:/outside'],r))
+    def test_null_device_exception_is_not_a_path_allowlist(self):
+        self.assertTrue(self.p.null_device('nul'))
+        self.assertTrue(self.p.null_device('NUL'))
+        self.assertFalse(self.p.null_device('C:/outside/nul'))
+        self.assertFalse(self.p.null_device('private.mp3'))
     def test_summary_never_makes_missing_cases_pass(self):
         self.assertEqual(self.p.summary_status(['PASS']*145,145),'PASS')
         self.assertEqual(self.p.summary_status(['PASS'],145),'STOP')
