@@ -19,7 +19,17 @@ CASES=PLAN['selected']+EXTRA_CASES
 
 def write(path,value):path.write_text(json.dumps(value,indent=2)+'\n',encoding='utf-8')
 
-def bounded_child(cmd,env,folder):
+def timeout_process_snapshot(k,job):
+    """Read only the already-owned Job Object, never enumerate the desktop."""
+    class Pids(C.Structure):
+        _fields_=[('assigned',C.c_uint32),('listed',C.c_uint32),('ids',C.c_size_t*64)]
+    q=k.QueryInformationJobObject;q.argtypes=[C.c_void_p,C.c_int32,C.c_void_p,C.c_uint32,C.POINTER(C.c_uint32)];q.restype=C.c_int32
+    data=Pids();needed=C.c_uint32();ok=q(job,3,C.byref(data),C.sizeof(data),C.byref(needed))
+    return {'scope':'only owned test JobObject','complete':bool(ok)and data.listed<=64,
+        'winerror':0 if ok else C.get_last_error(),'assigned':data.assigned,
+        'active_process_ids_at_timeout':list(data.ids)[:min(data.listed,64)]}
+
+def bounded_child(cmd,env,folder,*,timeout_seconds=180):
     """Existing kill-on-close Job Object / GO gate, generalized to pytest."""
     k=C.WinDLL('kernel32',use_last_error=True);ptr=C.c_void_p;u32=C.c_uint32;boolean=C.c_int32
     def bind(name,args,result):
@@ -28,7 +38,7 @@ def bounded_child(cmd,env,folder):
     setinfo=bind('SetInformationJobObject',[ptr,C.c_int32,ptr,u32],boolean)
     assign=bind('AssignProcessToJobObject',[ptr,ptr],boolean)
     close=bind('CloseHandle',[ptr],boolean)
-    job=create(None,None);p=None
+    job=create(None,None);p=None;code=None;job_closed=False;reaped=False
     if not job:raise C.WinError(C.get_last_error())
     try:
         limits=job_types.EXTENDED_LIMIT();limits.BasicLimitInformation.LimitFlags=0x2000
@@ -38,19 +48,25 @@ def bounded_child(cmd,env,folder):
             p=subprocess.Popen(cmd,cwd=ROOT,env=env,stdin=subprocess.PIPE,stdout=out,stderr=err,text=True)
             if not assign(job,int(p._handle)):raise C.WinError(C.get_last_error())
             write(folder/'job.json',{'kill_on_close':True,'pid':p.pid,'assigned_before_GO':True,
-                'timeout_seconds':180,'scope':'only this test child and its descendants'})
-            try:p.communicate(input='GO\n',timeout=180);code=p.returncode
-            except subprocess.TimeoutExpired:code=124
+                'timeout_seconds':timeout_seconds,'scope':'only this test child and its descendants'})
+            try:p.communicate(input='GO\n',timeout=timeout_seconds);code=p.returncode
+            except subprocess.TimeoutExpired:
+                code=124;write(folder/'timeout-processes.json',timeout_process_snapshot(k,job))
         return code
     finally:
         try:
-            if not close(job):raise C.WinError(C.get_last_error())
+            job_closed=bool(close(job))
+            if not job_closed:raise C.WinError(C.get_last_error())
         finally:
             if p is not None:
-                if p.poll() is None:p.terminate()
-                p.wait(timeout=10)
-                if p.stdin and not p.stdin.closed:p.stdin.close()
-                p._handle.Close()
+                try:
+                    if p.poll() is None:p.terminate()
+                    p.wait(timeout=10);reaped=True
+                finally:
+                    if p.stdin and not p.stdin.closed:p.stdin.close()
+                    p._handle.Close()
+                    write(folder/'process-final.json',{'job_closed':job_closed,'process_reaped':reaped,
+                        'kill_on_close':True,'pid':p.pid,'native_exit':p.returncode,'runner_exit':code})
 
 def install_callback_observer(folder):
     errors=folder/'callback-exceptions.jsonl';errors.write_text('')

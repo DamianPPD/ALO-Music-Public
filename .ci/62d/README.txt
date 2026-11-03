@@ -1,33 +1,43 @@
-ALO MUSIC - KONCOWA WALIDACJA WINDOWS 11
+ALO MUSIC — WINDOWS 11 / KONTYNUACJA OD PRZYPADKU 39
 
-1. Rozpakuj CALY ZIP do nowego, lokalnego folderu.
-2. Kliknij dwukrotnie URUCHOM-TESTY.cmd (bez administratora).
-3. Po zakonczeniu przeslij ZIP wynikow i plik .sha256.txt z folderu wyniki.
+1. Rozpakuj CALY ZIP do nowego lokalnego folderu na NTFS.
+2. Kliknij URUCHOM-TESTY.cmd. Bez administratora, instalacji i internetu.
+3. Przeslij nowy ZIP wynikow i jego .sha256.txt z podfolderu wyniki.
 
-Nie potrzeba Pythona, instalacji bibliotek ani polaczenia z internetem.
-Nie uzywaj plikow bezposrednio z podgladu ZIP. Podczas testow moga pojawiac
-sie i automatycznie zamykac syntetyczne okna ALO. Nie zamykaj ich recznie.
-Nie trzeba poruszac mysza ani analizowac okien; to testy logiki/Qt.
+Paczka wykonuje tylko EN39 oraz 106 pozostalych przypadkow: 107 wybranych.
+Nie powtarza poprzednich 38 PASS. Wyniki historyczne BEA8 sa opisane osobno;
+nie sa dodawane do nowych PASS. Wszystkie pierwotne asercje pozostaly bez zmian.
 
-Produkt: TREE bea8fc4fbc128fbfd99f2c6c1a3d0b62493844ee, 425 plikow.
-CPython 3.11.9 x64, PySide6/Shiboken/Qt 6.10.3, pytest 8.4.2, Mutagen 1.47.0.
-Zestaw: 145 istniejacych przypadkow N2 (117 native/integracyjne/fault-injection,
-28 modeli protokolu). Nie zmieniono ich asercji ani kodu ALO.
-DACL/junction wymagaja odpowiednich warunkow na wlasnych danych syntetycznych.
-Gdy brakuje warunkow, przypadek otrzymuje BLOCKED, nie PASS. Historyczne testy
-symlink wymagajace dodatkowych uprawnien nie zostaly dodane do tych 145.
-FAIL/ERROR/SKIP/crash/timeout zatrzymuje dalsze przypadki i zachowuje dowody.
-Windows gate produktu nadal jest OFF. Testowy override dziala tylko w osobnych
-procesach diagnostycznych. Paczka nie uruchamia normalnej biblioteki uzytkownika.
+EN39 ma obserwacje testu, rzeczywistego MainWindow/Qt, SQLite, ochrony pary,
+sygnalow workera, odswiezania tabeli oraz zamykania okna i watku.
+Obserwator NIE ustawia wynikow, nie zamyka dialogow i nie podmienia Slot.
+Po 150 s zapisze stosy Pythonowych watkow. Watchdog pozostaje na 180 s.
+Przy timeoutie zapisze procesy tylko w prywatnym JobObject i dowod reaping.
+Nie ma skanowania procesow innych aplikacji ani zrzutu prywatnego pulpitu.
 
-Dane testowe powstaja w nowym, losowym katalogu ALO-W11-* w prywatnym TEMP.
-Ustawienia sa w osobnych INI; SQLite i MP3 sa syntetyczne. Nie ma automatycznego
-skanowania muzyki. Pliki wynikowe sa w nowym podfolderze wyniki obok launchera.
-Pozostawione dane syntetyczne nie sa automatycznie usuwane szerokim cleanup.
-Eksportowane logi maja zredagowane znane prefiksy sciezek i nazwe komputera.
+Jesli EN ponownie dostanie TIMEOUT, ERROR zostaje zachowany. Pozostale 106
+moze ruszyc tylko po potwierdzonym zamknieciu JobObject/reap, integralnosci
+oraz braku bledow callback/Qt/izolacji. Nie oznacza to naprawy EN ani PASS.
+Inny FAIL/ERROR/SKIP/crash zatrzymuje dalszy przebieg i zachowuje dowody.
+Brak bezpiecznych warunkow DACL/junction oznacza BLOCKED, nie PASS.
 
-Jesli preflight odrzuci filesystem, potrzeba lokalnego NTFS, a nie udzialu
-sieciowego lub katalogu reparse/OneDrive. Nie zmieniaj zabezpieczen systemu.
-STOP/BLOCKED nie jest dowodem uszkodzenia ALO ani zaliczeniem testow.
-Wyniki na Twoim Windows 11 pozostaja NOT RUN, dopoki nie uruchomisz paczki.
-Szczegoly kontroli gotowej paczki znajduja sie w PACKAGE-VALIDATION.txt.
+Wyniki zawsze sa w nowym, osobnym podfolderze wyniki:
+ALO-Music-Windows11-WYNIKI-KONTYNUACJA.zip
+ALO-Music-Windows11-WYNIKI-KONTYNUACJA.zip.sha256.txt
+Okno pozostaje otwarte do nacisniecia klawisza.
+
+Produkt BEA8 / 425 plikow pozostaje niezmieniony:
+bea8fc4fbc128fbfd99f2c6c1a3d0b62493844ee
+Prywatny CPython3.11.9 x64 i komplet dotychczasowych zaleznosci Qt6.10.3/FFmpeg.
+Brak pobierania runtime, pip ani bibliotek podczas testu. Bramka Windows OFF.
+Testowy override wystepuje tylko w dotychczasowych izolowanych testach.
+
+Wylacznie nowe syntetyczne MP3/SQLite/INI/TEMP. Nie otwiera rzeczywistej
+Biblioteki, nie skanuje muzyki, nie eksportuje prywatnych danych, nie zmienia
+rejestru ani globalnych zabezpieczen. Testowe okna moga pojawiac sie i zamykac.
+Nie zamykaj ich recznie. Nie potrzeba poruszania mysza.
+Logi eksportowane maja zredagowane znane prefiksy sciezek. Nie dolacza MP3/SQLite.
+
+Przyczyna pierwotnego timeoutu Windows11 pozostaje NIEUSTALONA do pomiaru.
+Paczka ma zebrac rozstrzygajace punkty kontrolne, a nie ukryc ten wynik.
+Natywny test na WindowsServer2022 nie oznacza Windows11 PASS.

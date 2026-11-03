@@ -2,8 +2,8 @@
 setlocal DisableDelayedExpansion
 "%SystemRoot%\System32\chcp.com" 65001 >nul
 cd /d "%~dp0"
-title ALO MUSIC — KOŃCOWA WALIDACJA WINDOWS 11
-echo ALO MUSIC — KOŃCOWA WALIDACJA WINDOWS 11
+title ALO MUSIC — WINDOWS 11 — KONTYNUACJA OD TESTU 39
+echo ALO MUSIC — WINDOWS 11 — KONTYNUACJA OD TESTU 39
 echo.
 set "ALO_PORTABLE_WORK="
 set "ALO_PORTABLE_PROFILE="

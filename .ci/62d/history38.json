@@ -1,0 +1,235 @@
+{
+  "tree": "bea8fc4fbc128fbfd99f2c6c1a3d0b62493844ee",
+  "scope": "Historical Windows11 build26300, original run; NOT executed in continuation",
+  "archive_sha256": "18b8fe411ed1a175f4a4acd62337b2939dc23adbe717d10addbbd3c4a80733a8",
+  "cases": [
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[write-0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[write-1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[same-size-0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[same-size-1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[restored-mtime-0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[restored-mtime-1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[delete-0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[delete-1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[rename-0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[rename-1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[replace-0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[replace-1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_existing_writer_refuses_entire_pair[0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_existing_writer_refuses_entire_pair[1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_writable_mapping_refuses_entire_pair[section-only-0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_writable_mapping_refuses_entire_pair[section-only-1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_writable_mapping_refuses_entire_pair[view-and-section-0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_writable_mapping_refuses_entire_pair[view-and-section-1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_writable_mapping_refuses_entire_pair[view-only-0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_writable_mapping_refuses_entire_pair[view-only-1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_hardlink_is_refused_without_modifying_either_alias",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_junction_is_refused_without_opening_the_target_leaf",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_native_partial_acquire_query_fault_closes_every_actual_handle",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_history_is_useful_non_authoritative_and_new_check_is_async[pl]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_history_is_useful_non_authoritative_and_new_check_is_async[en]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_failed_recheck_removes_old_history_and_uses_fallback[source]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_failed_recheck_removes_old_history_and_uses_fallback[managed]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_true_postrelease_same_size_restored_mtime_never_renews_authority[source]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_true_postrelease_same_size_restored_mtime_never_renews_authority[managed]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_two_bindings_only_assess_the_selected_record",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_abandoned_receiver_times_out_then_rejects_late_packet",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_worker_exception_closes_pair_and_never_publishes_history",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_close_while_delivery_is_active_revokes_and_finishes_thread",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_receiver_destruction_or_real_quit_releases_protection[destroy]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_receiver_destruction_or_real_quit_releases_protection[quit]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_release_gate_is_off_on_the_actual_windows_runtime",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_unc_is_refused_before_opening_any_network_object",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_real_mp3_worker_mainwindow_column_filter_sort[pl]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    }
+  ]
+}

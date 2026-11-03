@@ -5,6 +5,16 @@ from datetime import datetime,timezone
 HERE=Path(__file__).resolve().parent;APP=HERE.parents[1];PACKAGE=APP.parent
 TREE='bea8fc4fbc128fbfd99f2c6c1a3d0b62493844ee'
 
+def select_continuation(cases):
+    assert len(cases)==145 and len({r['case']for r in cases})==145
+    assert cases[38]['case'].endswith('column_filter_sort[en]')
+    return cases[38:]
+
+def safe_isolated_timeout(row,proof,integrity_ok,observers_ok):
+    return (row.get('exit')==124 and row.get('raw_outcome')=='STOP_PROCESS'
+        and all(proof.get(k)is True for k in('job_closed','process_reaped','kill_on_close'))
+        and integrity_ok is True and observers_ok is True)
+
 def write(path,value):path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(value,indent=2,default=str)+'\n',encoding='utf-8')
 def load():
     spec=importlib.util.spec_from_file_location('portable_n2',HERE/'n2final_run.py');n=importlib.util.module_from_spec(spec);spec.loader.exec_module(n);return n
@@ -71,7 +81,7 @@ def prerequisites(n,work):
 
 def archive_results(work,destination,report,redactions):
     write(work/'final-summary.json',report)
-    records=[];path=destination/('ALO-Music-Windows11-FINAL-WYNIKI-'+datetime.now().strftime('%Y%m%d-%H%M%S')+'.zip')
+    records=[];path=destination/'ALO-Music-Windows11-WYNIKI-KONTYNUACJA.zip'
     with zipfile.ZipFile(path,'x',zipfile.ZIP_DEFLATED)as z:
         for p in sorted(work.rglob('*')):
             rel=p.relative_to(work)
@@ -80,7 +90,9 @@ def archive_results(work,destination,report,redactions):
             if p.suffix!='.png':
                 s=b.decode('utf-8',errors='replace')
                 for source,replacement in sorted(redactions,key=lambda x:len(x[0]),reverse=True):
-                    if source:s=s.replace(json.dumps(source)[1:-1],replacement).replace(source,replacement)
+                    if source:
+                        for form in (source,source.replace('\\','/')):
+                            s=s.replace(json.dumps(form)[1:-1],replacement).replace(form,replacement)
                 b=s.encode('utf-8')
             name=rel.as_posix();z.writestr(name,b);records.append(dict(path=name,bytes=len(b),sha256=hashlib.sha256(b).hexdigest()))
         z.writestr('MANIFEST.json',json.dumps(records,indent=2))
@@ -102,8 +114,14 @@ def main():
     # Results are created after tests; no unknown contents are removed.
     original_out=os.environ.get('RUNNER_TEMP');os.environ['RUNNER_TEMP']=str(work)
     os.environ.update(TEMP=str(work),TMP=str(work),PYTEST_DISABLE_PLUGIN_AUTOLOAD='1')
-    planned=json.loads((HERE/'cases.json').read_text());cases=planned['cases'];rows=[dict(c,outcome='NOT RUN',exit=None)for c in cases]
-    report=dict(status='STOP',tree=TREE,planned=145,selected=0,executed=0,cases=rows,gate=False,source_before=False,source_after=False)
+    planned=json.loads((HERE/'cases.json').read_text());all_cases=planned['cases'];cases=select_continuation(all_cases)
+    mode=os.environ.get('ALO_TIMEOUT39_CI_TARGET')if os.environ.get('ALO_PACKAGE_CI_SMOKE')=='1'else None
+    if mode is not None:
+        assert mode in('pl','en');cases=[all_cases[37 if mode=='pl'else 38]]
+    rows=[dict(c,outcome='NOT RUN',exit=None)for c in cases]
+    report=dict(status='STOP',tree=TREE,planned=len(rows),selected=0,executed=0,cases=rows,gate=False,source_before=False,source_after=False,
+        scope='CI_DIAGNOSTIC_'+mode if mode else 'WINDOWS11_CONTINUATION_39_TO_145',historical_not_rerun=38,
+        historical_archive_sha256='18b8fe411ed1a175f4a4acd62337b2939dc23adbe717d10addbbd3c4a80733a8')
     class Tee:
         def __init__(self,stream,file):self.stream=stream;self.file=file
         def write(self,text):self.file.write(text);self.file.flush();return self.stream.write(text)
@@ -124,8 +142,16 @@ def main():
         blocked=prerequisites(n,work)
         for row in rows:
             if row['case']in blocked:row.update(outcome='BLOCKED',reason=blocked[row['case']])
-        n.base.PLAN['selected']=[c for c in n.base.PLAN['selected']if c not in blocked]
+        resumed_nodes={r['case']for r in rows}
+        # Retain the unexecuted prefix in the original runner's list so its
+        # start=38 offset remains exact even when a historical junction probe
+        # is unavailable. Only selected continuation cases can be filtered.
+        n.base.PLAN['selected']=[c for c in n.base.PLAN['selected']if c not in blocked or c not in resumed_nodes]
         n.NEW=[c for c in n.NEW if c not in blocked];n.ADDED=[c for c in n.ADDED if c not in blocked];n.TRANSPORT=[c for c in n.TRANSPORT if c not in blocked]
+        start=38
+        if mode:
+            target=cases[0]['case'];n1=[c for c in n.base.PLAN['selected']if 'test_native_owner_has_zero_process_handle_delta'in c]
+            assert len(n1)==1;n.base.PLAN['selected']=n1+[target];n.NEW=[];n.ADDED=[];n.TRANSPORT=[];start=0
         selected=[r['case']for r in rows if r['case']not in blocked];report['selected']=len(selected)
         write(n.base.ci.EVIDENCE/'prepared.json',{'python':str(PACKAGE/'runtime/python.exe'),'bin':str(PACKAGE/'tools'),'candidate_tree':TREE})
         bound=n.base.bounded_child;classify=n.base.classify
@@ -141,7 +167,7 @@ def main():
                     if event['kind']=='VIOLATION' or(event['kind']=='Qt.startup'and event['type']in(2,3)):
                         print('ISOLATION/Qt EVIDENCE:',json.dumps(event),flush=True)
                         outcome='ISOLATION_OR_QT_ERROR'
-            i=int(folder.name.split('-')[0])-201;node=selected[i]
+            i=int(folder.name.split('-')[0])-201-start;node=selected[i]
             row=next(r for r in rows if r['case']==node)
             row.update(outcome=outcome if outcome in('PASS','FAIL','ERROR','SKIP')else'ERROR',raw_outcome=outcome,exit=code)
             if code==124:row['failure_kind']='TIMEOUT'
@@ -156,8 +182,23 @@ def main():
         n.base.write=factual_write
         n.base.bounded_child=bounded;n.base.classify=classified
         sys.argv=[str(Path(__file__).resolve()),'final']
-        n.run(final=True)
-        report['status']=summary_status([r['outcome']for r in rows],145)
+        try:n.run(final=True,start=start)
+        except RuntimeError:
+            first=rows[0];folder=n.base.OUT/'239-case'
+            if mode or first.get('exit')!=124 or any(r['exit']is not None for r in rows[1:]):raise
+            proof=json.loads((folder/'process-final.json').read_text())if(folder/'process-final.json').is_file()else{}
+            n.base.ci.verify_sources();verify_package()
+            callbacks=folder/'callback-exceptions.jsonl'
+            messages=folder/'qt-messages.jsonl'
+            qt_ok=messages.is_file()and not any(json.loads(line).get('lifecycle_error')for line in messages.read_text().splitlines())
+            allowed=safe_isolated_timeout(first,proof,True,callbacks.is_file()and not callbacks.read_text().strip()and qt_ok)
+            write(work/'timeout-isolation-decision.json',{'continue_remaining_106':allowed,'proof':proof,'first_case_status':'ERROR/TIMEOUT — NOT PASS'})
+            if not allowed:raise
+            (n.base.OUT/'run-EN-timeout-before-resume.json').write_bytes((n.base.OUT/'run.json').read_bytes())
+            print('EN39 TIMEOUT zachowany. JobObject zamkniety, proces rozliczony; uruchamiam pozostale 106.',flush=True)
+            n.run(final=True,start=39)
+        report['status']=summary_status([r['outcome']for r in rows],len(rows))
+        if rows[0].get('exit')==124 and all(r['outcome']=='PASS'for r in rows[1:]):report['status']='CONTINUATION_COMPLETE_WITH_TIMEOUT'
     except BaseException as e:
         report['error']=type(e).__name__+': '+str(e);write(work/'runner-error.json',{'traceback':traceback.format_exc()})
         print('STOP:',e,flush=True)
@@ -186,5 +227,9 @@ def main():
 
 if __name__=='__main__':
     if len(sys.argv)>1 and sys.argv[1]=='pytest-wait':
-        sys.path[:0]=[str(APP/'src'),str(APP/'tests'),str(HERE)];n=load();sys.exit(n.base.child(sys.argv[2],Path(sys.argv[3])))
+        sys.path[:0]=[str(APP/'src'),str(APP/'tests'),str(HERE)];n=load()
+        if 'test_diagnostic_real_mp3_worker_mainwindow_column_filter_sort['in sys.argv[2]:
+            from timeout39_observer import instrument
+            instrument(n,Path(sys.argv[3]))
+        sys.exit(n.base.child(sys.argv[2],Path(sys.argv[3])))
     sys.exit(main())
