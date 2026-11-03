@@ -1,0 +1,877 @@
+{
+  "source_tree": "bea8fc4fbc128fbfd99f2c6c1a3d0b62493844ee",
+  "count": 145,
+  "cases": [
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[write-0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[write-1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[same-size-0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[same-size-1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[restored-mtime-0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[restored-mtime-1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[delete-0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[delete-1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[rename-0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[rename-1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[replace-0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_lease_blocks_content_and_namespace_mutation[replace-1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_existing_writer_refuses_entire_pair[0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_existing_writer_refuses_entire_pair[1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_writable_mapping_refuses_entire_pair[section-only-0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_writable_mapping_refuses_entire_pair[section-only-1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_writable_mapping_refuses_entire_pair[view-and-section-0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_writable_mapping_refuses_entire_pair[view-and-section-1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_writable_mapping_refuses_entire_pair[view-only-0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_writable_mapping_refuses_entire_pair[view-only-1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_hardlink_is_refused_without_modifying_either_alias",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_real_junction_is_refused_without_opening_the_target_leaf",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_native_partial_acquire_query_fault_closes_every_actual_handle",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_history_is_useful_non_authoritative_and_new_check_is_async[pl]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_history_is_useful_non_authoritative_and_new_check_is_async[en]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_failed_recheck_removes_old_history_and_uses_fallback[source]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_failed_recheck_removes_old_history_and_uses_fallback[managed]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_true_postrelease_same_size_restored_mtime_never_renews_authority[source]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_true_postrelease_same_size_restored_mtime_never_renews_authority[managed]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_two_bindings_only_assess_the_selected_record",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_abandoned_receiver_times_out_then_rejects_late_packet",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_worker_exception_closes_pair_and_never_publishes_history",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_close_while_delivery_is_active_revokes_and_finishes_thread",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_receiver_destruction_or_real_quit_releases_protection[destroy]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_output_contract_windows_v0427.py::test_receiver_destruction_or_real_quit_releases_protection[quit]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_release_gate_is_off_on_the_actual_windows_runtime",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_unc_is_refused_before_opening_any_network_object",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_real_mp3_worker_mainwindow_column_filter_sort[pl]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_real_mp3_worker_mainwindow_column_filter_sort[en]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[artist]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[title]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[album]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[bpm]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[cover]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[binding]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[source]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[policy]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[generation]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[cancel]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_real_queued_context_mutation_is_refused[output-bytes]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_same_size_restored_mtime_in_the_qt_queue_is_refused[source]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_same_size_restored_mtime_in_the_qt_queue_is_refused[managed]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_edit_and_recheck[artist-Changed artist]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_edit_and_recheck[title-Changed title]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_edit_and_recheck[album-Changed album]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_edit_and_recheck[bpm-131.0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_existing_session_safety[partial]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_existing_session_safety[late]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_existing_session_safety[foreign-library]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_existing_session_safety[restart-scope]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_existing_session_safety[watch]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_existing_session_safety[wal-context]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_existing_session_safety[busy-db]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_missing_watch_refuses_positive_delivery",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_native_v0427.py::test_diagnostic_ordinary_wal_cache_write_does_not_invalidate_context",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_ack_does_not_make_a_closed_lease_current_again",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_ack_revokes_before_owner_close_and_preserves_accepted_history",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_cancel_revokes_and_wakes_without_closing_in_a_foreign_thread",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_close_is_idempotent_and_never_retries_a_failed_close_blindly",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_delivery_deadline_cannot_be_missing_infinite_or_extended",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_duplicate_delivery_cannot_claim_twice",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_entire_selected_operation_has_a_cooperative_budget",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_late_ack_cannot_turn_an_expired_budget_into_delivery",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_material_or_path_mismatch_never_claims",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_only_acquiring_thread_may_close_native_handles",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_pair_retains_every_handle_until_owner_finishes",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_partial_acquire_closes_first_object_and_all_ancestors",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_partial_query_failure_keeps_failed_close_under_explicit_ownership",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_query_failure_closes_even_the_failing_handle",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_timeout_revokes_and_closes_without_any_receiver",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_uncertain_cleanup_quarantines_future_public_acquisition",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::LeaseProtocolTests::test_unsupported_objects_are_not_partial_positive_proofs",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_sqlite_delivery_boundaries[valid]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_sqlite_delivery_boundaries[read-only]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_sqlite_delivery_boundaries[write-denied]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_sqlite_delivery_boundaries[locked]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_sqlite_delivery_boundaries[unavailable]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_sqlite_delivery_boundaries[replace]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_sqlite_delivery_boundaries[binding]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_sqlite_delivery_boundaries[library-uuid]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_sqlite_delivery_boundaries[track-uuid]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_sqlite_delivery_boundaries[source-uuid]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_sqlite_delivery_boundaries[source-registry-uuid]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_sqlite_delivery_boundaries[wal]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_sqlite_delivery_boundaries[metadata]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_sqlite_delivery_boundaries[read-denied]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_new_interpreter_reopens_without_restoring_authority",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_active_qthread_boundaries[success]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_active_qthread_boundaries[cancel]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_active_qthread_boundaries[close]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_active_qthread_boundaries[receiver-destroy]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_active_qthread_boundaries[switch]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_active_qthread_boundaries[binding]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_active_qthread_boundaries[timeout]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_active_qthread_boundaries[exception]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_active_qthread_boundaries[quit]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_actual_dacl_refuses_pair_and_restores_access[0]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_actual_dacl_refuses_pair_and_restores_access[1]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_sqlite_connection_lifetimes_and_timings",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_actual_readtask_pool[success]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_actual_readtask_pool[source]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_actual_readtask_pool[cancel]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_actual_readtask_pool[receiver-destroy]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_actual_readtask_pool[reader-error]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_actual_invalid_close_api_and_missing_file",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_real_ffmpeg_stderr_and_bounded_sample_of_temp_disk",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_database_replaced_between_precheck_and_snapshot_is_refused",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_database_namespace_is_held_through_actual_snapshot",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::DatabaseGuardProtocolTests::test_database_guard_retains_mutable_handles_until_scope_exit",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::DatabaseGuardProtocolTests::test_database_guard_partial_query_failure_closes_all",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::DatabaseGuardProtocolTests::test_database_guard_close_failure_quarantines_further_acquisition",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_windows_output_lease_v0427.py::DatabaseGuardProtocolTests::test_database_guard_gate_off_opens_nothing",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_stderr_quota_refuses_large_real_producer",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_decode_transport_uses_real_ffmpeg_and_preserves_source",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_decode_transport_failure_reaps_and_closes[stderr]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_decode_transport_failure_reaps_and_closes[cancel]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_decode_transport_failure_reaps_and_closes[timeout]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_decode_transport_failure_reaps_and_closes[spawn-error]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_decode_transport_failure_reaps_and_closes[probe-error]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_decode_transport_reaps_real_child_on_stop[cancel]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_decode_transport_reaps_real_child_on_stop[deadline]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_stderr_real_stream_boundaries[empty]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_stderr_real_stream_boundaries[small]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_stderr_real_stream_boundaries[limit]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_stderr_real_stream_boundaries[overflow]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_stderr_real_stream_boundaries[continuous]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_stderr_real_stream_boundaries[closed-stderr]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_stderr_real_stream_boundaries[exit-error]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_stderr_active_child_is_reaped[cancel]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_stderr_active_child_is_reaped[timeout]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_stderr_active_child_is_reaped[read]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_stderr_active_child_is_reaped[peek]",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_stderr_closed_before_child_exit_keeps_deadline",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": "tests/test_audio_identity_v0427.py::test_windows_stderr_exit_between_probe_and_poll_is_not_lost",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "protocol-model"
+    },
+    {
+      "case": ".ci/62d/n2final_cases.py::test_windows_stderr_repeated_qthreads_have_no_dummy_or_handle_growth",
+      "exit": 0,
+      "outcome": "PASS",
+      "category": "native-or-controlled-fault"
+    }
+  ],
+  "desktop_policy": "No elevation; prerequisite refusals BLOCKED, real failures stop; no fabricated PASS"
+}
