@@ -1,6 +1,6 @@
 @echo off
 setlocal DisableDelayedExpansion
-chcp 65001 >nul
+"%SystemRoot%\System32\chcp.com" 65001 >nul
 cd /d "%~dp0"
 title ALO MUSIC — KOŃCOWA WALIDACJA WINDOWS 11
 echo ALO MUSIC — KOŃCOWA WALIDACJA WINDOWS 11

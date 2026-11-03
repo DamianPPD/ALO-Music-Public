@@ -29,10 +29,10 @@ def trial(name,corrupt=False):
     env=dict(clean_env(),ALO_PACKAGE_CI_SMOKE='1');cmd=Path(os.environ['SystemRoot'])/'System32/cmd.exe'
     with (OUT/(name+'.stdout.log')).open('wb')as out,(OUT/(name+'.stderr.log')).open('wb')as err:
         p=subprocess.run([str(cmd),'/d','/c',str(root/'URUCHOM-TESTY.cmd')],cwd=root,env=env,stdout=out,stderr=err,timeout=1800)
-    assert p.returncode==(2 if corrupt else 0),(name,p.returncode)
     results=list((root/'wyniki').rglob('*.zip'));assert len(results)==1,results
-    report=audit_results(results[0],'STOP'if corrupt else'PASS',p.returncode)
     for file in(results[0],Path(str(results[0])+'.sha256.txt')):shutil.copy2(file,OUT/(name+'-'+file.name))
+    assert p.returncode==(2 if corrupt else 0),(name,p.returncode)
+    report=audit_results(results[0],'STOP'if corrupt else'PASS',p.returncode)
     return report
 
 def failure_proof():

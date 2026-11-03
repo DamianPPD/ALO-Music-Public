@@ -138,7 +138,9 @@ def main():
             for log in work.glob('isolation-*.jsonl'):
                 for line in log.read_text().splitlines():
                     event=json.loads(line)
-                    if event['kind']=='VIOLATION' or(event['kind']=='Qt.startup'and event['type']in(2,3)):outcome='ISOLATION_OR_QT_ERROR'
+                    if event['kind']=='VIOLATION' or(event['kind']=='Qt.startup'and event['type']in(2,3)):
+                        print('ISOLATION/Qt EVIDENCE:',json.dumps(event),flush=True)
+                        outcome='ISOLATION_OR_QT_ERROR'
             i=int(folder.name.split('-')[0])-201;node=selected[i]
             row=next(r for r in rows if r['case']==node);row.update(outcome=outcome,exit=code)
             if code==124:row['failure_kind']='TIMEOUT'
