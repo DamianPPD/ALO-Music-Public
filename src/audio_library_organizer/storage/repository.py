@@ -34,6 +34,14 @@ class ScanSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
+class AdoptedAssessmentSnapshot:
+    library_id: str
+    track: TrackRecord | None
+    sources: tuple[SourceRoot, ...]
+    managed_bindings: tuple[ManagedBinding, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class FileCheckSnapshot:
     library_id: str
     sources: tuple[SourceRoot, ...]
@@ -74,6 +82,22 @@ class LibraryRepository:
 
     def read_context(self, library_root):
         return self.file_check_snapshot().read_context(library_root)
+
+    def adopted_assessment_snapshot(self, track_id: str, *, timeout=5.0) -> AdoptedAssessmentSnapshot:
+        """Coherent read-only single-record input; fixed SQL count, no cache N+1.
+
+        Retain all approved owners for the existing resolver's alias checks.
+        This is not a bulk assessment API and performs no physical file I/O.
+        """
+        with closing(sqlite3.connect(self.database_path.absolute().as_uri() + '?mode=ro', uri=True,
+                                     timeout=timeout)) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute('BEGIN')
+            require_current_schema(conn)
+            library_id = conn.execute('SELECT library_id FROM library_metadata WHERE singleton=1').fetchone()[0]
+            row = conn.execute('SELECT * FROM tracks WHERE track_id=?', (track_id,)).fetchone()
+            return AdoptedAssessmentSnapshot(library_id, self._row_to_track(row) if row else None,
+                                            tuple(list_sources(conn)), read_managed_bindings(conn))
 
     def save_file_facts(self, facts: FileFacts) -> FileStateEvaluation:
         """Atomically save prepared observations, never metadata or audio files."""
