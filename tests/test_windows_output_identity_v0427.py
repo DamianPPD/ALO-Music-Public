@@ -99,9 +99,14 @@ def test_database_mutable_fields_do_not_replace_its_object_identity():
     assert not m.same_database(p,replace(q,leaf=replace(q.leaf,file_id=b'new-db-object!!!')))
 
 
-def test_windows_positive_gate_is_closed_and_not_an_environment_switch(monkeypatch):
+def test_windows_positive_gate_is_windows_only_and_not_an_environment_switch(monkeypatch):
     m=api();monkeypatch.setenv('ALO_WINDOWS_OUTPUT_ACCEPTANCE','1')
-    assert m.WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED is False
+    assert m.WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED is True
+    monkeypatch.setattr(m,'on_windows',lambda:False)
+    assert not m.positive_acceptance_enabled()
+    monkeypatch.setattr(m,'on_windows',lambda:True)
+    assert m.positive_acceptance_enabled()
+    monkeypatch.setattr(m,'WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED',False)
     assert not m.positive_acceptance_enabled()
 
 

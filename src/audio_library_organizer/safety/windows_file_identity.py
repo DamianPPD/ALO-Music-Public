@@ -12,7 +12,7 @@ import re
 import sys
 
 
-WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED = False
+WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED = True
 
 
 def on_windows():

@@ -1,6 +1,6 @@
 """Native Windows/NTFS contract tests. Only real synthetic MP3 and SQLite.
 
-No system cursor, fake token, fake evaluator or production gate activation.
+No system cursor, fake token, fake evaluator or runtime gate override.
 Pure fault injections are identified separately from actual OS refusals.
 """
 from contextlib import contextmanager
@@ -39,9 +39,8 @@ def handle_count():
 
 
 @pytest.fixture
-def pair(tmp_path,mp3_samples,monkeypatch):
-    assert native.WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED is False
-    monkeypatch.setattr(native,'WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED',True)
+def pair(tmp_path,mp3_samples):
+    assert native.WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED is True
     return (copy_audio(mp3_samples['original'],tmp_path/'source'/'Source.mp3'),
         copy_audio(mp3_samples['original'],tmp_path/'library'/'GOTOWE'/'Managed.mp3'))
 
@@ -369,8 +368,7 @@ def test_receiver_destruction_or_real_quit_releases_protection(library,monkeypat
     repo,root,track,_=library;approve(library)
     app=QApplication.instance() or QApplication([])
     store=QSettings(str(tmp_path/'contract-only.ini'),QSettings.Format.IniFormat);AppPreferences().save(store)
-    assert native.WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED is False
-    monkeypatch.setattr(native,'WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED',True)
+    assert native.WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED is True
     window=main_window.MainWindow(AppSettings((),LibraryPaths(root)),store);window.show();app.processEvents()
     actual_init=FileReconciliationWorker.__init__;packets=[];finished=[];quit_seen=[]
     app.aboutToQuit.connect(lambda:quit_seen.append(True))

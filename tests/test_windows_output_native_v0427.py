@@ -1,9 +1,9 @@
 """Native Windows-only validation. All data is generated under pytest tmp_path.
 
-Positive Qt probes temporarily override ONLY the release gate in their test
-fixture. The real native API, QThread, adapter, SQLite and GUI guards run as-is.
-Such diagnostic PASS does not enable production; review of the actual Windows
-artifacts and a separate decision are required. Never run on a private library.
+Positive Qt probes require the candidate's enabled release gate without a test
+override. The real native API, QThread, adapter, SQLite and GUI guards run as-is.
+The explicit disabled-gate test preserves refusal coverage. Never run on a
+private library. Publication still requires a separate decision.
 """
 from contextlib import contextmanager
 from dataclasses import asdict
@@ -38,8 +38,9 @@ def sample(tmp_path):
     return p
 
 
-def test_release_gate_is_off_on_the_actual_windows_runtime(adopted_window):
+def test_disabled_release_gate_refuses_on_the_actual_windows_runtime(adopted_window,monkeypatch):
     assert native.on_windows() and ctypes.sizeof(ctypes.c_void_p)==8
+    monkeypatch.setattr(native,'WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED',False)
     assert native.WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED is False
     window,lib,_=adopted_window;ui.run_check(window)
     assert window.last_reconciliation_result.output_delivery is None
@@ -140,12 +141,10 @@ def test_unc_is_refused_before_opening_any_network_object():
 
 
 @pytest.fixture
-def diagnostic_window(adopted_window,monkeypatch):
-    assert native.on_windows() and native.WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED is False
-    # Only diagnostic tests may exercise the proposed positive route. No API,
-    # identity, evaluator, material check, context check or color is substituted.
-    monkeypatch.setattr(native,'WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED',True)
-    record('diagnostic-gate-override',test_only=True)
+def diagnostic_window(adopted_window):
+    assert native.on_windows() and native.WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED is True
+    # Exercise the candidate's default without replacing its release gate.
+    record('candidate-gate-default',enabled=True,test_override=False)
     yield adopted_window
 
 

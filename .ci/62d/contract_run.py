@@ -121,7 +121,7 @@ def child(case,folder):
     from audio_library_organizer.safety import windows_output_lease as lease_module
     with lease_module._QUARANTINE_LOCK:final['quarantined_owners']=len(lease_module._UNCERTAIN_OWNERS)
     write(folder/'child-final.json',final)
-    if final['gate'] is not False or final['quarantined_owners'] or errors.read_text().strip():return 2
+    if final['gate'] is not True or final['quarantined_owners'] or errors.read_text().strip():return 2
     return int(code)
 
 def audit_synthetic(folder):
@@ -147,7 +147,7 @@ def classify(folder,code):
     messages=[json.loads(line) for line in qtlog.read_text(encoding='utf-8').splitlines()]
     if any(qt_message_is_error(row['type'],row['message']) for row in messages):return 'QT_LIFECYCLE_ERROR'
     state=json.loads(final.read_text())
-    if state.get('gate') is not False or state.get('quarantined_owners')!=0 or state.get('pytest_exit')!=0:
+    if state.get('gate') is not True or state.get('quarantined_owners')!=0 or state.get('pytest_exit')!=0:
         return 'UNSAFE_CHILD_FINAL'
     return 'PASS'
 

@@ -1,5 +1,5 @@
-name: ALO BEA8 Timeout39 continuation package
-run-name: ALO Timeout39 targeted PL EN and watchdog / Windows Server2022 / ${{ github.sha }}
+name: ALO 6.2D isolated activation acceptance
+run-name: ALO default ON / 19 targeted cases / Windows Server2022 / ${{ github.sha }}
 on:
   push:
     branches: [ci/windows-62d-validation]
@@ -18,18 +18,18 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - name: Checkout existing isolated diagnostic branch
+      - name: Checkout isolated diagnostic branch only
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
           fetch-depth: 1
-      - name: Exact build interpreter
+      - name: Exact preparation interpreter
         uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
         with:
           python-version: '3.11.9'
           architecture: x64
           check-latest: false
-      - name: Reuse preserved verified offline runtime without reinstalling dependencies
+      - name: Reuse preserved verified runtime and FFmpeg
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           artifact-ids: '13197845647'
@@ -37,26 +37,15 @@ jobs:
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/portable-base
           merge-multiple: true
-      - name: Infrastructure selection tests and repackage exact BEA8
+      - name: Verify exact ON sources and run only activation acceptance
         run: |
-          python -B .ci/62d/test_timeout39_support.py
-          if ($LASTEXITCODE -ne 0) { throw 'Infrastructure contract failed' }
-          python -I .ci/62d/repack_timeout39.py
-          if ($LASTEXITCODE -ne 0) { throw 'Repack failed' }
-      - name: Only targeted native PL EN plus synthetic watchdog proof
-        run: |
-          python -I .ci/62d/smoke_timeout39.py
-          if ($LASTEXITCODE -ne 0) { throw 'Targeted package validation failed' }
-      - name: Preserve package and all available results even after STOP
+          python -I -B .ci/62d/activation_prepare.py
+          if ($LASTEXITCODE -ne 0) { throw 'Activation acceptance failed' }
+      - name: Preserve all available evidence including after STOP
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ALO-Timeout39-package-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/timeout39-delivery/*.zip
-            ${{ runner.temp }}/timeout39-delivery/*.txt
-            ${{ runner.temp }}/timeout39-delivery/*.json
-            ${{ runner.temp }}/timeout39-delivery/*.log
-          compression-level: 0
+          name: ALO-62D-activation-${{ github.run_id }}
+          path: ${{ runner.temp }}/alo-62d-evidence/
           retention-days: 30
           if-no-files-found: warn

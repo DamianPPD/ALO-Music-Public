@@ -12,7 +12,7 @@ ROOT=Path(__file__).resolve().parents[2]
 CONFIG=Path(__file__).resolve().parent
 EVIDENCE=Path(os.environ.get('RUNNER_TEMP',str(ROOT)))/'alo-62d-evidence'
 EVIDENCE.mkdir(parents=True,exist_ok=True)
-TREE='bea8fc4fbc128fbfd99f2c6c1a3d0b62493844ee'
+TREE='858ed7773b80cf73a65e889a5df4809c073e115a'
 
 
 def sha(raw):return hashlib.sha256(raw).hexdigest()
@@ -42,7 +42,7 @@ def verify_sources():
     spec=importlib.util.spec_from_file_location('original_runner',ROOT/'windows/run_windows.py')
     runner=importlib.util.module_from_spec(spec);spec.loader.exec_module(runner)
     assert runner.tree_id(manifest['files'])==TREE
-    assert 'WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED = False' in (ROOT/'src/audio_library_organizer/safety/windows_file_identity.py').read_text()
+    assert 'WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED = True' in (ROOT/'src/audio_library_organizer/safety/windows_file_identity.py').read_text()
     for name,expected in json.loads((CONFIG/'original-hashes.json').read_text()).items():
         assert sha((ROOT/name).read_bytes())==expected,name
     return manifest

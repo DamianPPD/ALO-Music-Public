@@ -46,7 +46,7 @@ def windows_required():
 def load_product():
     sys.path[:0] = [str(ROOT/'src'), str(ROOT/'tests')]
     from audio_library_organizer.safety import windows_file_identity as native
-    assert native.WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED is False
+    assert native.WINDOWS_POSITIVE_ACCEPTANCE_VERIFIED is True
     return native
 
 
