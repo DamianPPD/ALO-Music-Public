@@ -58,7 +58,11 @@ def test_registration_refuses_changed_context_and_preserves_published_file(prefl
             with sqlite3.connect(repo.database_path)as conn:conn.execute('UPDATE tracks SET source_id=NULL, source_relative_path=NULL WHERE track_id=?',(track.track_id,))
         elif fault=='library':
             from uuid import uuid4
-            with sqlite3.connect(repo.database_path)as conn:conn.execute('UPDATE library_metadata SET library_id=?',(str(uuid4()),))
+            replacement=str(uuid4())
+            with sqlite3.connect(repo.database_path)as conn:
+                conn.execute('UPDATE library_metadata SET library_id=?',(replacement,))
+                for table in ('sources','source_audio_references','legacy_adoption_runs','managed_bindings'):
+                    conn.execute(f'UPDATE {table} SET library_id=?',(replacement,))
         elif fault=='plan':track.title='Changed plan'
         elif fault in ('source_swap','output_swap'):
             path=track.path if fault=='source_swap'else event.destination
@@ -79,6 +83,9 @@ def test_registration_refuses_changed_context_and_preserves_published_file(prefl
         if blocker:blocker.rollback();blocker.close()
     assert not errors and len(results)==1
     result=results[0]
+    with sqlite3.connect(repo.database_path)as conn:
+        assert conn.execute('PRAGMA integrity_check').fetchall()==[('ok',)]
+        assert conn.execute('PRAGMA foreign_key_check').fetchall()==[]
     if fault=='cancel_registration' or attack_denied:
         assert result.created==1 and result.failed==0 and len(repo.list_managed_bindings())==1
         if fault=='cancel_registration':assert result.cancelled
