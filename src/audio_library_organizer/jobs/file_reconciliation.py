@@ -393,6 +393,14 @@ def check_library(repository, *, library_id=None, operation_id=None, checked_at=
     FileFacts('check-context', at)
     operation_id = operation_id or str(uuid4())
     snapshot = repository.file_check_snapshot()
+    if checked_at is None:
+        # Creation now seeds the cache. A Windows clock tick can cover both
+        # that receipt and the next check; distinct observations need strictly
+        # ordered timestamps. Keep explicit/stale inputs and cache guards intact.
+        watermarks = [state.facts.checked_at for _, state in snapshot.cached]
+        watermarks.extend(binding.adopted_at for binding in snapshot.managed_bindings)
+        at = max(at, max(watermarks, default=-1) + 1)
+        FileFacts('check-context', at)
     if before_output_check is not None and (output_request is None or not callable(before_output_check)):
         raise ValueError('Output protection requires an explicit pinned request and callable boundary.')
     if library_id is not None and library_id != snapshot.library_id:

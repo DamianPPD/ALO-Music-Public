@@ -1,11 +1,11 @@
-"""25 targeted producer integration cases; reuse established per-process N2 runner."""
+"""26 targeted producer integration cases; reuse established per-process N2 runner."""
 from pathlib import Path
 import hashlib,json,os,sys,traceback
 HERE=Path(__file__).resolve().parent
 sys.path[:0]=[str(HERE),str(HERE.parents[1]/'src'),str(HERE.parents[1]/'tests')]
 import contract_run as base
 CASES=json.loads((HERE/'activation-cases.json').read_text())['selected']
-assert len(CASES)==len(set(CASES))==25,'Exactly25 unique approved cases required'
+assert len(CASES)==len(set(CASES))==26,'Exactly26 unique approved cases required'
 base.CASES=CASES
 
 def run():
@@ -31,7 +31,7 @@ def run():
    print(str(i)+'/'+str(len(CASES))+' '+outcome+' '+case,flush=True)
    if outcome!='PASS':raise RuntimeError('STOP '+case+' / '+outcome)
    base.audit_synthetic(folder)
-  assert status['executed']==status['selected']==25 and all(c['outcome']=='PASS'and c['exit']==0 for c in status['cases'])
+  assert status['executed']==status['selected']==26 and all(c['outcome']=='PASS'and c['exit']==0 for c in status['cases'])
   status['status']='LIBRARY_INTEGRATION_PASS'
  finally:
   base.ci.verify_sources();status['source_after']=True

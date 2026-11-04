@@ -206,3 +206,21 @@ def test_missing_producer_output_uses_existing_missing_state(preflight):
     assert item.evaluation.state==FileState.MANAGED_FILE_MISSING
     assert repo.get_file_state(binding.track_id).evaluation.state==FileState.MANAGED_FILE_MISSING
     assert len(repo.list_managed_bindings())==2
+
+
+def test_automatic_check_follows_receipt_at_same_clock_tick(preflight,mp3_samples,monkeypatch):
+    import shutil
+    from audio_library_organizer.jobs import file_reconciliation as reconciliation
+    from audio_library_organizer.domain.file_state import FileState
+    _,repo,paths,worker,results,errors,_=preflight
+    worker.run();assert not errors
+    bindings=repo.list_managed_bindings();at=max(b.adopted_at for b in bindings)
+    binding=bindings[0]
+    shutil.copyfile(mp3_samples['different_tail'],binding.locator(paths.root))
+    monkeypatch.setattr(reconciliation.time,'time_ns',lambda:at)
+    result=reconciliation.check_library(repo,library_root=paths.root)
+    assert result.checked_at>at and result.cache_saved==2,(result.reason_codes,result.cache_saved)
+    assert repo.get_file_state(binding.track_id).evaluation.state==FileState.CONFLICT
+    explicit=reconciliation.check_library(repo,library_root=paths.root,checked_at=at)
+    assert explicit.checked_at==at and explicit.cache_saved==0
+    assert 'CACHE_WRITE_REJECTED'in explicit.reason_codes

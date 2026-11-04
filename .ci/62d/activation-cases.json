@@ -20,6 +20,7 @@
     "tests/test_created_output_registration_v0427.py::test_changed_producer_output_uses_existing_conflict_state",
     "tests/test_created_output_registration_v0427.py::test_touch_is_history_not_an_ownership_conflict",
     "tests/test_created_output_registration_v0427.py::test_missing_producer_output_uses_existing_missing_state",
+    "tests/test_created_output_registration_v0427.py::test_automatic_check_follows_receipt_at_same_clock_tick",
     "tests/test_output_session_ui_v0427.py::test_created_outputs_survive_cancel_and_restart_with_real_owners",
     "tests/test_output_session_ui_v0427.py::test_normal_check_reaches_all_rows_colors_filter_and_sort[pl]",
     "tests/test_output_session_ui_v0427.py::test_normal_check_reaches_all_rows_colors_filter_and_sort[en]",
