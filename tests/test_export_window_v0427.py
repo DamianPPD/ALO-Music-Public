@@ -8,6 +8,7 @@ from time import monotonic
 import pytest
 import sys
 from mutagen.id3 import ID3
+from audio_adoption_fixtures import mp3_samples, copy_audio
 from PySide6.QtCore import QThread, QCoreApplication, QEvent
 from PySide6.QtWidgets import QApplication, QMessageBox
 from shiboken6 import isValid
@@ -34,7 +35,7 @@ def until(predicate):
 
 
 @pytest.fixture
-def export_window(current_start_window, tmp_path, monkeypatch):
+def export_window(current_start_window, tmp_path, monkeypatch, mp3_samples):
     window = current_start_window
     source = tmp_path / 'synthetic'
     source.mkdir()
@@ -42,7 +43,7 @@ def export_window(current_start_window, tmp_path, monkeypatch):
     tracks = []
     for i in range(2):
         path = source / f'track-{i}.mp3'
-        ID3().save(path)
+        copy_audio(mp3_samples['original'], path)
         info = path.stat()
         track = TrackRecord(path=path, artist='Artist', title=f'Title {i}', year='2000',
                             genre='House', bpm=128, status='ready', locked_fields={'__status__'}, sha256=sha256_file(path),

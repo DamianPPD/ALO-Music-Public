@@ -12,7 +12,7 @@ ROOT=Path(__file__).resolve().parents[2]
 CONFIG=Path(__file__).resolve().parent
 EVIDENCE=Path(os.environ.get('RUNNER_TEMP',str(ROOT)))/'alo-62d-evidence'
 EVIDENCE.mkdir(parents=True,exist_ok=True)
-TREE='9a9850d87973159936b698f421acfdc52b67e21b'
+TREE='f37bb201464ed91ae61336b18cb4f9993e90c7aa'
 
 
 def sha(raw):return hashlib.sha256(raw).hexdigest()
@@ -32,7 +32,7 @@ def execute(cmd,name,*,env=None,timeout=300):
 
 def verify_sources():
     manifest=json.loads((ROOT/'candidate/SOURCE-MANIFEST.json').read_text())
-    assert manifest['tree']==TREE and len(manifest['files'])==425
+    assert manifest['tree']==TREE and len(manifest['files'])==427
     for f in manifest['files']:
         raw=(ROOT/f['path']).read_bytes()
         assert sha(raw)==f['sha256'],f['path']
@@ -59,7 +59,7 @@ def materialize_inputs(ref='HEAD'):
     raw=git('cat-file','blob',ref+':candidate/SOURCE-MANIFEST.json')
     hashes=json.loads((CONFIG/'original-hashes.json').read_text())
     assert sha(raw)==hashes['candidate/SOURCE-MANIFEST.json']
-    manifest=json.loads(raw);assert manifest['tree']==TREE and len(manifest['files'])==425
+    manifest=json.loads(raw);assert manifest['tree']==TREE and len(manifest['files'])==427
     actual={}
     for line in git('ls-tree','-r','-z',ref).split(b'\0'):
         if line:
@@ -78,7 +78,7 @@ def materialize_inputs(ref='HEAD'):
         data=stream.read(int(size));assert stream.read(1)==b'\n' and sha(data)==f['sha256'],f['path']
         path=ROOT/f['path'];path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
     assert not stream.read()
-    write('raw-source-materialization.json',{'candidate_tree':TREE,'source_files':425,
+    write('raw-source-materialization.json',{'candidate_tree':TREE,'source_files':427,
         'mechanism':'exact Git blobs; checkout text filters undone before tests','after_test_restore':False})
 
 

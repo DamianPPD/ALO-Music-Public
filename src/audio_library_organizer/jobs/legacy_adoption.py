@@ -685,7 +685,7 @@ def binding_facts(binding,track,root,*,at=None,current=False):
     # Missing/corrupt optional snapshot values stay unknown, never fabricated.
     value=binding.applied_snapshot.get('value')
     applied=OutputSnapshot(namespace,1,value) if isinstance(value,str) and value else None
-    return FileFacts(track.track_id,at,
+    facts = FileFacts(track.track_id,at,
         managed=FileObservation(track.track_id,binding.locator(root),FileAvailability.PRESENT,at,
                                 reason='APPROVED_ADOPTION_RECHECK_REQUIRED',is_current=current),
         managed_expected=True,ownership=Ownership.CONFIRMED,owner_track_id=track.track_id,
@@ -694,3 +694,19 @@ def binding_facts(binding,track,root,*,at=None,current=False):
         # specification stage. Keep that knowledge unknown instead of clean.
         desired=None,
         applied=applied,is_current=current)
+    if binding.evidence.get('producer') == 'alo-export/v1':
+        # An export receipt is a historical completed operation, not a live P
+        # assessment. Current policy/material must be checked by its producer.
+        from audio_library_organizer.domain.file_state import FileState
+        from audio_library_organizer.domain.output_spec import REQUIRED_FIELDS
+        spec = binding.applied_snapshot.get('producer_spec')
+        complete = (isinstance(spec, dict) and set(spec) == REQUIRED_FIELDS
+                    and all(isinstance(v, str) for v in spec.values())
+                    and metadata_revision(track) == binding.evidence.get('record_revision')
+                    and binding.source_binding.get('locator') == str(track.path)
+                    and binding.source_binding.get('source_id') == track.source_id
+                    and binding.source_binding.get('relative_path') == track.source_relative_path)
+        facts = replace(facts, is_current=False,
+            last_confirmed_state=FileState.IN_LIBRARY if complete else None,
+            last_confirmed_at=binding.adopted_at if complete else None)
+    return facts

@@ -378,7 +378,8 @@ def check_library(repository, *, library_id=None, operation_id=None, checked_at=
                   cancelled=None, progress=None, managed_roots=(), prepared_facts=(),
                   prepared_library_id=None, library_root=None, known_libraries=(),
                   include_adoption=False, output_request=None,
-                  current_output_request=None, before_output_check=None) -> ReconciliationResult:
+                  current_output_request=None, before_output_check=None,
+                  producer_policy=None) -> ReconciliationResult:
     """Check active registry scope and return candidates without accepting them.
 
     ``prepared_facts`` is an explicit current evidence boundary, never a cache
@@ -427,6 +428,17 @@ def check_library(repository, *, library_id=None, operation_id=None, checked_at=
                 raise ValueError('Prepared facts cannot replace persistent ownership.')
             track = records[binding.track_id]
             facts = binding_facts(binding, track, library_root, at=at, current=True)
+            from .created_output import is_producer, producer_check
+            if is_producer(binding):
+                facts = producer_check(binding, track, library_root, at=at,
+                    policy_revision=producer_policy, cancelled=is_cancelled)
+                from .legacy_adoption import _source_context
+                if binding.source_binding.get('source_context') != _source_context(track, snapshot.sources, snapshot.library_id):
+                    facts = replace(facts, desired=None, is_current=False,
+                                    last_confirmed_state=None, last_confirmed_at=None)
+                persistent[track.track_id] = facts
+                prepared[track.track_id] = facts
+                continue
             proof = recheck_read_path(resolve_read_path(track, context, ReadPurpose.AUDIO_PROPERTIES), cancelled=is_cancelled)
             if proof.is_verified:
                 managed = replace(facts.managed, reason='APPROVED_MANAGED_SHA_VERIFIED')

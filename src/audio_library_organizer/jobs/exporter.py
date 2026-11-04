@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from collections import Counter
 from time import perf_counter
+from contextlib import nullcontext
 
 from audio_library_organizer.domain.models import TrackRecord
 from audio_library_organizer.domain.settings import LibraryPaths
@@ -27,6 +28,8 @@ class ExportItem:
 class ExportPlan:
     items: tuple[ExportItem, ...]
     summary: dict[str, int]
+    folder_organization: str = 'none'
+    policy_revision: str = ''
 
     @classmethod
     def from_tracks(
@@ -64,7 +67,7 @@ class ExportPlan:
             'not_selected': counts.get('not_selected', 0),
             'review': counts.get('review', 0),
             'total': len(items),
-        })
+        }, folder_organization)
 
     def preview_metrics(self) -> dict[str, int]:
         destination_targets = [(item.destination_dir.resolve(), item.filename) for item in self.items]
@@ -255,7 +258,7 @@ def resolve_cover_for_export(track: TrackRecord, artwork, cover_cache: dict[str,
 
 
 def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
-                      cancelled=None, event=None) -> ExportResult:
+                      cancelled=None, event=None, registration=None) -> ExportResult:
     """Finish the current item safely; cancellation only prevents the next item."""
     started = perf_counter()
     cancelled = cancelled or (lambda: False)
@@ -283,6 +286,7 @@ def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
         raw_ok, final_size, final_sha = False, 0, ''
         stage = 'copy_error'
         source = Path(item.track.path)
+        receipt = None
 
         def prepare(staged):
             nonlocal stage, raw_ok, final_size, final_sha
@@ -294,6 +298,8 @@ def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
             emit('raw_verified', source, staged)
             stage = 'tag_error'
             cover = resolve_cover_for_export(item.track, artwork, cover_cache)
+            if receipt is not None:
+                receipt.cover = cover
             emit('tagging', source, staged)
             if cover:
                 write_resolved_tags(staged, item.track, cover_bytes=cover[0], cover_mime=cover[1], replace_cover=True)
@@ -308,6 +314,8 @@ def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
                 raise OSError('Plik końcowy nie istnieje lub ma zerowy rozmiar.')
             # Tags intentionally change the raw SHA; keep a separate final digest.
             final_sha = sha256_file(staged)
+            if receipt is not None:
+                receipt.final_sha = final_sha
             after_hash = staged.stat()
             fields = ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_ctime_ns')
             if tuple(getattr(after_hash, f) for f in fields) != tuple(getattr(final_stat, f) for f in fields):
@@ -316,8 +324,27 @@ def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
 
         emit('item_started', source)
         try:
-            target = copy_without_overwrite(source, item.destination_dir, item.filename,
-                                           prepare=prepare, on_warning=cleanup_warnings.append)
+            if registration is not None and item.track.track_id in registration.bindings:
+                outcomes.append(ExportOutcome(index, source, None, item.category, 'skipped',
+                    'Existing managed ownership retained; no file was overwritten.'))
+                emit('item_finished', source)
+                continue
+            context = (registration.item(item) if registration is not None and source.suffix.lower()=='.mp3'
+                       else nullcontext())
+            with context as receipt:
+                def publication(staged):
+                    from contextlib import contextmanager
+                    @contextmanager
+                    def guarded():
+                        with receipt.publication(staged) as register:
+                            def complete(path):
+                                emit('registering', source, path)
+                                register(path)
+                            yield complete
+                    return guarded()
+                target = copy_without_overwrite(source, item.destination_dir, item.filename,
+                    prepare=prepare, on_warning=cleanup_warnings.append,
+                    **({'publication':publication} if receipt is not None else {}))
             emit('final_verified', source, target)
             copied.append(target)
             verified.append(CopyVerification(source, target, True, True, final_size))
@@ -325,6 +352,12 @@ def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
                                           raw_verified=True, final_size_bytes=final_size, final_sha256=final_sha))
             emit('item_finished', source, target)
         except Exception as exc:
+            from audio_library_organizer.safety.copy_pipeline import PublishedCopyError
+            if isinstance(exc, PublishedCopyError):
+                target, stage = exc.destination, 'registration_error'
+            elif receipt is not None and target is not None:
+                stage = 'registration_error'
+                exc = OSError('Output registration cleanup failed: ' + str(exc))
             error = f'{source}: {exc}'
             (verification_errors if stage == 'verification_error' else errors).append(error)
             outcomes.append(ExportOutcome(index, source, target, item.category, stage, error,

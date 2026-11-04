@@ -6,6 +6,7 @@ import shutil
 import stat
 import tempfile
 import warnings
+from contextlib import nullcontext
 from pathlib import Path
 
 
@@ -55,8 +56,14 @@ def _publish_without_overwrite(staged: Path, target: Path) -> None:
         os.link(staged, target, follow_symlinks=False)
 
 
+class PublishedCopyError(OSError):
+    def __init__(self, destination, error):
+        self.destination = destination
+        super().__init__('Output registration failed: ' + str(error))
+
+
 def copy_without_overwrite(source: Path, destination_dir: Path, filename: str | None = None, *,
-                           prepare=None, on_warning=None) -> Path:
+                           prepare=None, on_warning=None, publication=None) -> Path:
     """Prepare a private copy, then publish it atomically under a free name.
 
     ``prepare`` can verify/write tags before publication. Cleanup is confined
@@ -88,13 +95,29 @@ def copy_without_overwrite(source: Path, destination_dir: Path, filename: str | 
         # Mutagen writes and Windows cleanup. Windows keeps its fresh creation ACL.
         if prepare is not None:
             prepare(staged)
-        while True:
-            target = _unique_path(destination_dir, name)
-            try:
-                _publish_without_overwrite(staged, target)
+        published = None
+        try:
+            with publication(staged) if publication is not None else nullcontext() as register:
+                while True:
+                    target = _unique_path(destination_dir, name)
+                    try:
+                        _publish_without_overwrite(staged, target)
+                        published = target
+                        break
+                    except FileExistsError:
+                        continue
+                if register is not None:
+                    # Retire only the POSIX private link, keeping its fd alive.
+                    if os.name != 'nt':
+                        staged.unlink()
+                    register(target)
                 return target
-            except FileExistsError:
-                continue
+        except Exception as exc:
+            # Include context-manager cleanup failures after publication too.
+            if published is not None:
+                raise PublishedCopyError(published, exc) from exc
+            raise
+
     finally:
         try:
             shutil.rmtree(working)

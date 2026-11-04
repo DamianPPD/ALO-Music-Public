@@ -1,5 +1,5 @@
-name: ALO Library integration acceptance
-run-name: ALO Library / 13 targeted cases / Windows Server2022 / ${{ github.sha }}
+name: ALO Library producer registration closure
+run-name: ALO Library / 25 targeted cases / Windows Server2022 / ${{ github.sha }}
 on:
   push:
     branches: [ci/windows-62d-validation]

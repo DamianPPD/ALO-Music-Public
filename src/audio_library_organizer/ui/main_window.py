@@ -2623,6 +2623,9 @@ class MainWindow(QMainWindow):
                 return
         cfg = ProviderSettings.from_store(self.qt_settings)
         plan = ExportPlan.from_tracks(deepcopy(tracks), self.app_settings.library, folder_organization=cfg.folder_organization)
+        from dataclasses import replace
+        from audio_library_organizer.jobs.output_session import output_policy
+        plan = replace(plan, policy_revision=output_policy(cfg))
         metrics = plan.preview_metrics()
         if not confirm_bulk_copy(self, {**plan.summary, **metrics}, examples=plan.preview_lines(6),
                                  folder_organization=cfg.folder_organization, plan=plan):
@@ -2710,6 +2713,7 @@ class MainWindow(QMainWindow):
                          elapsed_seconds=max(result.elapsed_seconds, perf_counter() - self._export_started))
         self._set_busy(False)
         self._pending_auto_identify = False
+        self._refresh_file_check_rows()
         self._set_action_highlight(self.review_btn if self.stack.currentIndex() == 1 else None)
         plan, library = self._export_plan, self._export_library
         tracks = [item.track for item in plan.items]

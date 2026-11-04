@@ -1,7 +1,8 @@
 {
   "head": "07932c5dc53b0fcfe2d811a9806c6e5dc4e1f1b9",
   "base_tree": "858ed7773b80cf73a65e889a5df4809c073e115a",
-  "tree": "9a9850d87973159936b698f421acfdc52b67e21b",
+  "previous_tree": "9a9850d87973159936b698f421acfdc52b67e21b",
+  "tree": "f37bb201464ed91ae61336b18cb4f9993e90c7aa",
   "files": [
     {
       "path": ".gitattributes",
@@ -1380,11 +1381,19 @@
       "base_blob": "3779025d7b1b41f8100f68d384c369cbe5843930"
     },
     {
+      "path": "src/audio_library_organizer/jobs/created_output.py",
+      "mode": "100644",
+      "blob": "898a5d5c0ab26a24fe8f58dba220a40dc4f997df",
+      "sha256": "fecc3593d4e853395be8739b583f023802322817980f6479004fecace4629167",
+      "bytes": 20216,
+      "base_blob": null
+    },
+    {
       "path": "src/audio_library_organizer/jobs/exporter.py",
       "mode": "100644",
-      "blob": "16fadf4d554f570416fab17c85b26a3f83d77be2",
-      "sha256": "e42522a3755dafa8e1eda21c53bd8316d63d603bfbff65460c906cc424242e41",
-      "bytes": 13256,
+      "blob": "ad31193d3a4f471318c99e63da4d0cb4d06333da",
+      "sha256": "58c729a08fa890089d63c40a0cbc012d2bc61ecd6c05833e39ee3aecca9b1d20",
+      "bytes": 15050,
       "base_blob": "16fadf4d554f570416fab17c85b26a3f83d77be2"
     },
     {
@@ -1398,9 +1407,9 @@
     {
       "path": "src/audio_library_organizer/jobs/file_reconciliation.py",
       "mode": "100644",
-      "blob": "5ce574c41287a8f5eee9d0a5eefba3923d0cf1ad",
-      "sha256": "ba2bb3e677b85360b626e8639f3577b97fe49fd8df66233a57673262994d3ee9",
-      "bytes": 34798,
+      "blob": "4120af7497c9579626433f4fd270302139e16ba5",
+      "sha256": "10e8895a459f794bae14ce3a19decd57aaef4b21333d4ac9b5cf7f58c0aa8ca8",
+      "bytes": 35574,
       "base_blob": "ece09ada97e84d2d4d7ca3080622d24f81552178"
     },
     {
@@ -1414,9 +1423,9 @@
     {
       "path": "src/audio_library_organizer/jobs/legacy_adoption.py",
       "mode": "100644",
-      "blob": "6e65a9531ae14d6172d83d29ec0e5e2fcbeb9a92",
-      "sha256": "e8be33e2bbfb092dfdaa214cbfd662709cb9e666c50d293801a5b65f2aa37805",
-      "bytes": 38343,
+      "blob": "1698b2c841a73e5a77c3a49e4287506f3608d157",
+      "sha256": "486916576666508838ee06cee277ab4d57bd3a74e012b9415c48ea880305cf66",
+      "bytes": 39490,
       "base_blob": "6e65a9531ae14d6172d83d29ec0e5e2fcbeb9a92"
     },
     {
@@ -1686,9 +1695,9 @@
     {
       "path": "src/audio_library_organizer/safety/copy_pipeline.py",
       "mode": "100644",
-      "blob": "289907179849b191a8d1dedbb185ae4c750b123c",
-      "sha256": "abf3391afbdc7d9d721130a0e77dd95623cba11f580f7ffe3a37430d9648f312",
-      "bytes": 4354,
+      "blob": "64f1a58a76ac518326afd60d49bf5b9cfd516455",
+      "sha256": "e62cee188e10fc87d2cea23e0cd1aa652b77071290ff13c24e8ffe416135ee2f",
+      "bytes": 5324,
       "base_blob": "289907179849b191a8d1dedbb185ae4c750b123c"
     },
     {
@@ -1758,9 +1767,9 @@
     {
       "path": "src/audio_library_organizer/storage/repository.py",
       "mode": "100644",
-      "blob": "6c2f421d9964e8757136ff00cdbcc9e4f741f22a",
-      "sha256": "b9bcf1f07f6b9cb70979d831a02f2feaf5ee6951adb08ea0d96208bb6fd63dbc",
-      "bytes": 31552,
+      "blob": "f8cee3799f1372bf640bd9118df2aa17f78fb7eb",
+      "sha256": "c95a91a086ccf793e867608a3ff074ac0d777dd08bc5cfb1939fe70a827b610b",
+      "bytes": 32060,
       "base_blob": "0fb037b2fa1b2874b2b1f464cf03ac47c6c86049"
     },
     {
@@ -1974,9 +1983,9 @@
     {
       "path": "src/audio_library_organizer/ui/main_window.py",
       "mode": "100644",
-      "blob": "747f4a1556e172252a3975a0dfd2d0d1d16d7097",
-      "sha256": "c30029b7077ae6445d4ab18703ca2f95290816a823dc0059b1c9c5ddaf6c9247",
-      "bytes": 172968,
+      "blob": "cee29c1906a04e1594d93d78a4ead8b71fa60e3d",
+      "sha256": "77b2a89891989df6280ae7f4dd28dbbcfefbd9004258031c793ce3a93245fbd6",
+      "bytes": 173191,
       "base_blob": "37ea19587f21db27b48148188b1846fd77be2c31"
     },
     {
@@ -2054,9 +2063,9 @@
     {
       "path": "src/audio_library_organizer/ui/workers.py",
       "mode": "100644",
-      "blob": "aa728dbec317fe0314bd18cb73888ecf732b56e5",
-      "sha256": "3d858d71d815639a0c7c6214e00629d9a0005294411446a7993f90bf55fe5c23",
-      "bytes": 16572,
+      "blob": "220a69d341df2f1b1d1bef8b9388d26ecb465e00",
+      "sha256": "0dd7ff3c0e283bc5cda41c3b2af4af687bcef4927e261d65dd77cb8f603b59b3",
+      "bytes": 18652,
       "base_blob": "aa728dbec317fe0314bd18cb73888ecf732b56e5"
     },
     {
@@ -2220,6 +2229,14 @@
       "base_blob": "848e2e8da57eecc82f72b176f058f96927dac492"
     },
     {
+      "path": "tests/test_created_output_registration_v0427.py",
+      "mode": "100644",
+      "blob": "b1e341c8a07d14796e7c1afdee4c26293b70b3c8",
+      "sha256": "4cc4dd6f35a92a386765844a9649c1ab5985bff10961f37ab1237ad9edf3a272",
+      "bytes": 10441,
+      "base_blob": null
+    },
+    {
       "path": "tests/test_creation_dialogs_v0427.py",
       "mode": "100644",
       "blob": "f4b94353f238d1e4331f61eb6fe0947586d52cb7",
@@ -2302,9 +2319,9 @@
     {
       "path": "tests/test_export_audit_v0427.py",
       "mode": "100644",
-      "blob": "836897ebd883138edfac8eaaf0a9cdb7df5da0f8",
-      "sha256": "57850c30952906b58ad5591c74e0382190b1415b749c3955e1be9045132f160c",
-      "bytes": 7465,
+      "blob": "ce7b3e5e8f16e5bdb2f3397c3ece1c980adf9838",
+      "sha256": "f41b74f46b51df507e7d4f65daf41fcd2b83025bc66a7fe3b8fbca0ae1770a0c",
+      "bytes": 7530,
       "base_blob": "127e459d0a26274eb8f51c28e19eb9c1c39e6775"
     },
     {
@@ -2366,9 +2383,9 @@
     {
       "path": "tests/test_export_window_v0427.py",
       "mode": "100644",
-      "blob": "3a4d3f475212a0dfd58fafd92227917c4824ee45",
-      "sha256": "3bae032a91e0cc7952ce35ebfda2aedb47c443687a6376ad146edcdab2b9cde3",
-      "bytes": 8529,
+      "blob": "69b44293fbafb20b39c0ee28031638c021c35039",
+      "sha256": "dbbf18a079f136bb001ae00118f9e5194ec51ad03daf6082a02843ac488aeba1",
+      "bytes": 8627,
       "base_blob": "3a4d3f475212a0dfd58fafd92227917c4824ee45"
     },
     {
@@ -2822,9 +2839,9 @@
     {
       "path": "tests/test_output_session_ui_v0427.py",
       "mode": "100644",
-      "blob": "94c93b6c8e87887feac9119a8dca83fbce66ae75",
-      "sha256": "ecbf71fe1142a7c420c4fc45f0467ad71764111fba6a7e898faa379b0d82819b",
-      "bytes": 30048,
+      "blob": "5568842a0a5564aa682d557fcad022afbfe3051a",
+      "sha256": "e88c305cfb1ab2905da1532cc66637cd9a06e5f19b449e277481d580f5633e64",
+      "bytes": 32275,
       "base_blob": "90d8f4bbf22fe15860e94e063ba3b87e351f1232"
     },
     {

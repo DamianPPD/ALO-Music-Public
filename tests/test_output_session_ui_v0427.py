@@ -454,7 +454,7 @@ def test_normal_check_reaches_all_rows_colors_filter_and_sort(scanned_integratio
 
 
 def test_created_outputs_survive_cancel_and_restart_with_real_owners(scanned_integration_window,tmp_path,monkeypatch):
-    """Acceptance test: deliberately stays FAIL while producer ownership is absent."""
+    """Acceptance: real producer ownership, cancellation and a new MainWindow process."""
     import subprocess,sys,textwrap
     from audio_library_organizer.ui import main_window,export_dialogs,workers
     window,paths,store=scanned_integration_window
@@ -488,10 +488,22 @@ def test_created_outputs_survive_cancel_and_restart_with_real_owners(scanned_int
     window.library.table.sortByColumn(10,Qt.SortOrder.AscendingOrder);QApplication.processEvents()
     observed={tid:item.text()for tid,item in _integration_cells(window).items()}
     assert len(observed)==10
-    # Repeat the real GUI operation: the existing legacy guard must refuse it,
-    # rather than suffix-copying around unassigned already-existing outputs.
+    from audio_library_organizer.ui.library_page import LIBRARY_SORT_ROLE
+    ranks=[window.library.model.item(i,10).data(LIBRARY_SORT_ROLE)for i in range(10)]
+    assert ranks==sorted(ranks)
+    for state,count in ((FileState.IN_LIBRARY,3),(FileState.SOURCE_ONLY,6),(FileState.SOURCE_UNAVAILABLE,1)):
+        window.library.file_filter.setCurrentIndex(window.library.file_filter.findData(state.value))
+        assert window.library.model.rowCount()==count
+    window.library.file_filter.setCurrentIndex(0)
+    missing=next(item for item in window.last_reconciliation_result.files if item.source.locator==str(completed_source))
+    from audio_library_organizer.domain.file_state import FileAvailability
+    assert missing.source.availability==FileAvailability.MISSING
+    assert missing.evaluation.state==FileState.IN_LIBRARY and not missing.evaluation.is_confirmed
+    # A genuinely unassigned file must still block a repeated GUI export.
+    alien=copy_audio(paths[1] if paths[1].exists() else paths[2],window.app_settings.library.ready/'unassigned.mp3')
     window.export_library();pump(lambda:window._thread is None,seconds=45)
     assert window._export_result.created==0 and window._export_result.fatal_error
+    alien.unlink()
     assert all(hashlib.sha256(Path(p).read_bytes()).hexdigest()==digest for p,digest in outputs.items())
     for p,digest in before.items():assert hashlib.sha256(held.get(p,Path(p)).read_bytes()).hexdigest()==digest
     library_root=window.app_settings.library.root
@@ -510,6 +522,10 @@ def test_created_outputs_survive_cancel_and_restart_with_real_owners(scanned_int
         sys.excepthook=lambda kind,value,tb:errors.append(str(value))
         w=main_window.MainWindow(AppSettings((),LibraryPaths(Path(sys.argv[2]))),QSettings(sys.argv[3],QSettings.Format.IniFormat))
         w.show();app.processEvents()
+        import time
+        w._check_library_clicked();deadline=time.monotonic()+45
+        while w._thread is not None and time.monotonic()<deadline:app.processEvents()
+        assert w._thread is None and w.last_reconciliation_result is not None
         cells={w.library.model.item(i,0).data(256).track_id:w.library.model.item(i,10).text()for i in range(w.library.model.rowCount())}
         bindings=[b.track_id for b in w.repository.list_managed_bindings()]
         w.close();app.processEvents();QThreadPool.globalInstance().waitForDone(5000)
@@ -528,3 +544,17 @@ def test_created_outputs_survive_cancel_and_restart_with_real_owners(scanned_int
     (target/'integration-full-flow.json').write_text(json.dumps(evidence,indent=2)+'\n')
     print(json.dumps(evidence,indent=2))
     assert len(restarted['bindings'])==3,'3 verified new outputs have no persistent producer-owned binding after restart'
+    from audio_library_organizer.ui.library_file_state import FILE_STATE_COLORS
+    completed={t.track_id for t in window.repository.list_tracks()if t.path in {o.source for o in result.outcomes}}
+    assert set(restarted['bindings'])==completed
+    for table in (observed,restarted['cells']):
+        assert sum(text.startswith('W bibliotece')for text in table.values())==3
+        assert sum(text.startswith('Tylko źródło')for text in table.values())==6
+        assert sum(text.startswith('Źródło niedostępne')for text in table.values())==1
+        assert all('Niepotwierdzony'in text for text in table.values())
+    for tid,item in _integration_cells(window).items():
+        if tid in completed:
+            assert item.foreground().color().name()==FILE_STATE_COLORS[FileState.IN_LIBRARY].accent
+            assert item.background().color().name()==FILE_STATE_COLORS[FileState.IN_LIBRARY].background
+    assert all(not presentation(window,t).confirmed for t in window.repository.list_tracks())
+    assert len(window.repository.list_tracks())==10
