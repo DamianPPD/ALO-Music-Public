@@ -47,7 +47,13 @@ def test_registration_refuses_changed_context_and_preserves_published_file(prefl
             Image.new('RGB',(8,8),'blue').save(track.manual_cover_path)
         elif fault=='track_id':
             from uuid import uuid4
-            with sqlite3.connect(repo.database_path)as conn:conn.execute('UPDATE tracks SET track_id=? WHERE track_id=?',(str(uuid4()),track.track_id))
+            replacement=str(uuid4())
+            with sqlite3.connect(repo.database_path)as conn:
+                conn.execute('UPDATE tracks SET track_id=? WHERE track_id=?',(replacement,track.track_id))
+                # A coherent synthetic external rebind, rather than orphaned FK
+                # rows that would make the runner's integrity audit fail.
+                for table in ('source_audio_references','file_state_cache','legacy_adoption_proposals'):
+                    conn.execute(f'UPDATE {table} SET track_id=? WHERE track_id=?',(replacement,track.track_id))
         elif fault=='source_binding':
             with sqlite3.connect(repo.database_path)as conn:conn.execute('UPDATE tracks SET source_id=NULL, source_relative_path=NULL WHERE track_id=?',(track.track_id,))
         elif fault=='library':
