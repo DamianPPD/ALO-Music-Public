@@ -356,12 +356,22 @@ def _facts(track, source, at, cached, prepared, managed_context, *, cancelled=Fa
                 facts = replace(facts, managed=replace(prepared.managed, availability=FileAvailability.UNKNOWN,
                                                       reason='MANAGED_SCOPE_UNAVAILABLE', checked_at=at))
         return facts
-    if cached is not None and cached.facts.checked_at <= at:
+    if cached is not None:
         # Preserve every historical managed input/observation exactly, including
         # its watermark. Updating a source stat cannot revalidate ownership or
         # desired/applied output. Cache history is taken from SQLite at commit.
-        return replace(cached.facts, checked_at=at, source=source, is_current=False)
-    return FileFacts(track.track_id, at, source=source)
+        previous = cached.facts
+        if previous.checked_at > at:
+            return FileFacts(track.track_id, at, source=source)
+        if (previous.managed_expected not in (None, False) or previous.managed is not None
+                or previous.ownership != Ownership.UNKNOWN or previous.owner_track_id is not None
+                or previous.desired is not None or previous.applied is not None or previous.conflict is not None
+                or previous.last_confirmed_state not in (None, FileState.SOURCE_ONLY, FileState.SOURCE_UNAVAILABLE)):
+            return replace(previous, checked_at=at, source=source, is_current=False)
+    # No prepared/persistent binding and no managed history: this snapshot
+    # establishes absence of an assignment, never ownership of a nearby file.
+    # The cache transaction still rejects a concurrent binding/context change.
+    return FileFacts(track.track_id, at, source=source, managed_expected=False)
 
 
 def check_library(repository, *, library_id=None, operation_id=None, checked_at=None,
@@ -527,6 +537,9 @@ def check_library(repository, *, library_id=None, operation_id=None, checked_at=
                 completed += 1
         facts = _facts(track, source, at, cached.get(track.track_id), prepared.get(track.track_id), managed_context,
                        cancelled=is_cancelled())
+        if track.track_id in damaged and track.track_id not in prepared:
+            # An unreadable cache is not evidence that managed history is absent.
+            facts = replace(facts, managed_expected=None)
         if track.track_id in persistent and not is_cancelled():
             verified = persistent[track.track_id]
             # A complete scoped inventory may prove absence; a hash/probe error

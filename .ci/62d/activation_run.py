@@ -1,11 +1,11 @@
-"""19 targeted default-ON cases; reuse established per-process N2 runner."""
+"""13 targeted Library integration cases; reuse established per-process N2 runner."""
 from pathlib import Path
 import hashlib,json,os,sys,traceback
 HERE=Path(__file__).resolve().parent
 sys.path[:0]=[str(HERE),str(HERE.parents[1]/'src'),str(HERE.parents[1]/'tests')]
 import contract_run as base
 CASES=json.loads((HERE/'activation-cases.json').read_text())['selected']
-assert len(CASES)==len(set(CASES))==19,'Exactly19 unique approved cases required'
+assert len(CASES)==len(set(CASES))==13,'Exactly13 unique approved cases required'
 base.CASES=CASES
 
 def run():
@@ -26,13 +26,13 @@ def run():
    env.update(ALO_62D_EVIDENCE=str(folder),STAGE62C_EVIDENCE=str(folder),APPDATA=str(profile),LOCALAPPDATA=str(profile),USERPROFILE=str(profile),PYTEST_DISABLE_PLUGIN_AUTOLOAD='1')
    code=base.bounded_child([p['python'],'-I','-B',str(Path(__file__).resolve()),'pytest-wait',case,str(folder)],env,folder)
    (folder/'exit.txt').write_text(str(code));outcome=base.classify(folder,code)
-   status['cases'].append({'case':case,'exit':code,'outcome':outcome,'category':'protocol-model'if i==1 else 'native-or-controlled-fault'})
+   status['cases'].append({'case':case,'exit':code,'outcome':outcome,'category':'SQLite-contract'if 'test_library_reconciliation' in case else 'native-Qt-real-audio'})
    status['executed']=len(status['cases']);base.write(base.OUT/'run.json',status);base.ci.verify_sources()
    print(str(i)+'/'+str(len(CASES))+' '+outcome+' '+case,flush=True)
    if outcome!='PASS':raise RuntimeError('STOP '+case+' / '+outcome)
    base.audit_synthetic(folder)
-  assert status['executed']==status['selected']==19 and all(c['outcome']=='PASS'and c['exit']==0 for c in status['cases'])
-  status['status']='TARGETED_DEFAULT_ON_PASS'
+  assert status['executed']==status['selected']==13 and all(c['outcome']=='PASS'and c['exit']==0 for c in status['cases'])
+  status['status']='LIBRARY_INTEGRATION_PASS'
  finally:
   base.ci.verify_sources();status['source_after']=True
   root=Path(p['runtime_root'])

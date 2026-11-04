@@ -80,7 +80,8 @@ def test_audit_repeat_worker_blocks_existing_outputs_while_low_level_copy_uses_u
     assert not list(paths.ready.glob('.alo-copy-*'))
 
 
-def test_audit_unbound_check_does_not_invent_source_only_state(export_window, mp3_samples):
+def test_audit_unbound_check_reports_source_without_inventing_ownership(export_window, mp3_samples):
+    from audio_library_organizer.domain.file_state import FileState
     window, tracks, summaries = export_window
     for track in tracks:
         copy_audio(mp3_samples['original'], track.path)
@@ -94,12 +95,15 @@ def test_audit_unbound_check_does_not_invent_source_only_state(export_window, mp
     window._check_library_clicked()
     until(lambda: window._thread is None)
     cached = window.repository.get_file_state(tracks[0].track_id)
-    assert cached and cached.facts.managed_expected is None
-    assert cached.evaluation.state is None
-    assert window.last_reconciliation_result.files[0].evaluation.reason == 'MANAGED_EXPECTATION_UNKNOWN'
-    assert window.library._file_presentation(tracks[0]).state is None
+    assert cached and cached.facts.managed_expected is False
+    assert cached.evaluation.state == FileState.SOURCE_ONLY
+    assert not cached.evaluation.is_confirmed
+    assert window.library._file_presentation(tracks[0]).state == FileState.SOURCE_ONLY
+    assert not window.library._file_presentation(tracks[0]).confirmed
+    assert not window.repository.list_managed_bindings()
     window.refresh_data()
-    assert window.library._file_presentation(tracks[0]).state is None
+    assert window.library._file_presentation(tracks[0]).state == FileState.SOURCE_ONLY
+    assert not window.library._file_presentation(tracks[0]).confirmed
 
 
 def test_audit_approved_adoption_keeps_desired_snapshot_unknown_in_real_check(export_window, mp3_samples):

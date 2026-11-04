@@ -413,8 +413,36 @@ def test_invalid_optional_cache_is_retained_without_blocking_other_tracks(tmp_pa
     result = api().check_library(repo)
     assert any(c.reason == 'INVALID_OPTIONAL_CACHE' and damaged.track_id in c.track_ids for c in result.unresolved)
     assert repo.get_file_state(good.track_id) is not None
+    assert observations(result)[damaged.track_id].evaluation.state is None
+    assert not observations(result)[damaged.track_id].evaluation.is_confirmed
     with sqlite3.connect(repo.database_path) as conn:
         assert conn.execute('SELECT facts_json FROM file_state_cache WHERE track_id=?', (damaged.track_id,)).fetchone()[0] == 'invalid'
+
+
+def test_plain_source_observation_is_renewed_without_managed_history(tmp_path):
+    repo, root = library(tmp_path)
+    track = record(repo, root / 'plain.mp3')
+    first = api().check_library(repo, checked_at=10)
+    assert observations(first)[track.track_id].evaluation.state == FileState.SOURCE_ONLY
+    track.path.rename(tmp_path / 'held.mp3')
+    second = api().check_library(repo, checked_at=20)
+    assert observations(second)[track.track_id].evaluation.state == FileState.SOURCE_UNAVAILABLE
+    cached = repo.get_file_state(track.track_id)
+    assert cached.facts.checked_at == 20 and not cached.evaluation.is_confirmed
+    assert cached.evaluation.state == FileState.SOURCE_UNAVAILABLE
+    assert not repo.list_managed_bindings()
+
+
+def test_future_cache_does_not_establish_absence_of_assignment(tmp_path):
+    repo, root = library(tmp_path)
+    track = record(repo, root / 'plain.mp3')
+    repo.save_file_facts(replace(attest(track, 200), source=FileObservation(
+        track.track_id, str(track.path), FileAvailability.PRESENT, 200, track.source_id)))
+    result = api().check_library(repo, checked_at=100)
+    item = observations(result)[track.track_id]
+    assert item.facts.managed_expected is None and not item.evaluation.is_confirmed
+    assert result.cache_saved == 0 and 'CACHE_WRITE_REJECTED' in result.reason_codes
+    assert repo.get_file_state(track.track_id).facts.checked_at == 200
 
 
 def wait_for(app, predicate, timeout=5):

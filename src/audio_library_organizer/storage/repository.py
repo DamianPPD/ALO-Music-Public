@@ -112,13 +112,14 @@ class LibraryRepository:
             require_current_schema(conn)
             return read_file_state(conn, track_id)
 
-    def file_check_snapshot(self) -> FileCheckSnapshot:
+    def file_check_snapshot(self, *, timeout=5.0) -> FileCheckSnapshot:
         """Pin registry/records/cache in one read transaction, without creating a DB.
 
         Records are fresh private copies, never objects borrowed from the GUI.
         A damaged optional cache row is retained and does not hide other tracks.
         """
-        with closing(sqlite3.connect(self.database_path.resolve().as_uri() + '?mode=ro', uri=True)) as conn:
+        with closing(sqlite3.connect(self.database_path.resolve().as_uri() + '?mode=ro', uri=True,
+                                     timeout=timeout)) as conn:
             conn.row_factory = sqlite3.Row
             conn.execute('BEGIN')
             require_current_schema(conn)

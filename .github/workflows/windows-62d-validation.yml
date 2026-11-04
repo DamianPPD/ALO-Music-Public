@@ -1,5 +1,5 @@
-name: ALO 6.2D isolated activation acceptance
-run-name: ALO default ON / 19 targeted cases / Windows Server2022 / ${{ github.sha }}
+name: ALO Library integration acceptance
+run-name: ALO Library / 13 targeted cases / Windows Server2022 / ${{ github.sha }}
 on:
   push:
     branches: [ci/windows-62d-validation]
@@ -37,7 +37,7 @@ jobs:
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/portable-base
           merge-multiple: true
-      - name: Verify exact ON sources and run only activation acceptance
+      - name: Verify exact sources and run Library integration
         run: |
           python -I -B .ci/62d/activation_prepare.py
           if ($LASTEXITCODE -ne 0) { throw 'Activation acceptance failed' }
@@ -45,7 +45,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ALO-62D-activation-${{ github.run_id }}
+          name: ALO-Library-integration-${{ github.run_id }}
           path: ${{ runner.temp }}/alo-62d-evidence/
           retention-days: 30
           if-no-files-found: warn
