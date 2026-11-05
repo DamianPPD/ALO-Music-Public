@@ -1,5 +1,5 @@
-name: ALO Library producer registration closure
-run-name: ALO Library / 26 targeted cases / Windows Server2022 / ${{ github.sha }}
+name: ALO legacy adoption optimization
+run-name: ALO legacy adoption / targeted cases / Windows Server2022 / ${{ github.sha }}
 on:
   push:
     branches: [ci/windows-62d-validation]
@@ -39,13 +39,13 @@ jobs:
           merge-multiple: true
       - name: Verify exact sources and run Library integration
         run: |
-          python -I -B .ci/62d/activation_prepare.py
+          python -I -B .ci/62d/legacy_prepare.py
           if ($LASTEXITCODE -ne 0) { throw 'Activation acceptance failed' }
       - name: Preserve all available evidence including after STOP
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ALO-Library-integration-${{ github.run_id }}
+          name: ALO-Legacy-adoption-${{ github.run_id }}
           path: ${{ runner.temp }}/alo-62d-evidence/
           retention-days: 30
           if-no-files-found: warn

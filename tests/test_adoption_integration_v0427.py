@@ -287,7 +287,11 @@ def test_check_and_adoption_terminal_lifecycle(library, app, tmp_path, monkeypat
         execution_threads.append(shiboken6.getCppPointer(QThread.currentThread())[0])
         entered.set()
         if ending in {'cancel', 'close', 'switch', 'quit'}:
-            assert kwargs['cancelled'].__self__.wait(5), 'Cancellation did not reach the worker'
+            # check workers pass a closure combining Event and lease cancellation.
+            deadline=monotonic()+5
+            while not kwargs['cancelled']() and monotonic()<deadline:
+                release.wait(0.01)
+            assert kwargs['cancelled'](), 'Cancellation did not reach the worker'
         else:
             assert release.wait(5), 'Test did not release its bounded backend barrier'
         if ending == 'error':
@@ -333,6 +337,9 @@ def test_check_and_adoption_terminal_lifecycle(library, app, tmp_path, monkeypat
         else:
             release.set()
         loop.exec()
+        # thread.finished and the queued terminal observer target different
+        # GUI receivers. Drain queued delivery before asserting both routes.
+        app.processEvents()
         assert window._thread is None and window._worker is None
         assert execution_threads == destroyed_threads == [worker_thread]
         assert gui_threads and set(gui_threads) == {shiboken6.getCppPointer(app.thread())[0]}
