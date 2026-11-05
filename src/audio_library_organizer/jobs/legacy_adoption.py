@@ -1,8 +1,8 @@
 """Read-only legacy output inventory and explicit, database-only adoption.
 
 CSV, names, markers and fingerprints never create ownership. A proposal needs
-one record, one verified MP3 and one matching source identity. Approval repeats
-the whole inventory, reserves all known library databases, and validates again.
+one record, one verified MP3 and one matching source identity. Approval re-reads the complete content manifest, reserves all known library
+databases, and decodes the selected pair again. Older evidence uses a full scan.
 Only SQLite is written; music is never copied, tagged, renamed or removed.
 """
 from __future__ import annotations
@@ -11,6 +11,7 @@ from collections import defaultdict
 from contextlib import closing
 from dataclasses import asdict, dataclass, replace
 import csv
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -20,7 +21,7 @@ import stat
 import time
 from uuid import UUID, uuid4
 
-from audio_library_organizer.audio.identity import ALGORITHM, inspect_audio, stat_identity
+from audio_library_organizer.audio.identity import ALGORITHM, inspect_audio, stat_identity, _opened_file_matches
 from audio_library_organizer.domain.settings import LibraryPaths
 from audio_library_organizer.jobs.managed_files import lexical_locator, source_material_revision
 from audio_library_organizer.metadata.change_history import metadata_revision
@@ -362,6 +363,7 @@ def inventory_legacy_outputs(repository, *, library_root, known_libraries=(), ca
     with closing(sqlite3.connect(repository.database_path.absolute().as_uri()+'?mode=ro',uri=True)) as conn:
         references={row[0]:(row[1],row[2]) for row in conn.execute('SELECT track_id,context_digest,evidence_json FROM source_audio_references')}
     trusted={}; fresh_references=[]
+    source_manifest=[]; reusable=True
     if phase: phase('sources')
     for i,track in enumerate(tracks):
         if cancelled(): break
@@ -370,8 +372,10 @@ def inventory_legacy_outputs(repository, *, library_root, known_libraries=(), ca
         source=next((s for s in sources if s.source_id==track.source_id and s.library_id==library_id),None)
         key=_source_context(track,sources,library_id)
         previous=references.get(track.track_id)
+        proof=None
         try:
             if source is None or not valid_digest(track.sha256):
+                reusable=False
                 if progress: progress(i+1,len(tracks),str(track.path))
                 continue
             if Path(track.path).exists():
@@ -394,6 +398,19 @@ def inventory_legacy_outputs(repository, *, library_root, known_libraries=(), ca
                     trusted[track.track_id]=ref
         except (OSError,ValueError,RuntimeError,TypeError):
             pass
+        # Reusable evidence is content-addressed, never a stat-only cache.
+        # Error/unavailable decoders require the original full scan on approval.
+        try:
+            if proof is not None and proof.status in ('VALID','UNSUPPORTED') and valid_digest(proof.full_sha256):
+                stamp=_guard_file(track.path,source.root_path)
+                if stamp!=proof.stat_identity: raise ValueError('Source changed during inventory.')
+                source_manifest.append((track.track_id,proof.full_sha256,stamp))
+            elif not Path(track.path).exists():
+                source_manifest.append((track.track_id,None,None))
+            else:
+                reusable=False
+        except (OSError,ValueError,RuntimeError):
+            reusable=False
         if progress: progress(i+1,len(tracks),str(track.path))
     if cancelled():
         return stopped()
@@ -499,14 +516,19 @@ def inventory_legacy_outputs(repository, *, library_root, known_libraries=(), ca
             if _context(repository,fresh_states,conn)[3]!=context:
                 raise ValueError('Library/record context changed during inventory.')
             if cancelled(): raise InterruptedError('Inventory cancelled before database commit.')
+            effective={key:(value[0],json.loads(value[1])) for key,value in references.items()}
+            effective.update({tid:(ref['source_context'],ref) for tid,ref in fresh_references})
+            snapshot={'version':1,'sources':source_manifest,'references':evidence_digest(effective)} if reusable else None
             conn.execute('INSERT INTO legacy_adoption_runs VALUES (?,?,?,?,?)',
                 (run_id,library_id,context,canonical_json({'known_libraries':[asdict(k) for k in descriptors],
-                    'root_observations':outcomes,'library_root':str(root)}),at))
+                    'root_observations':outcomes,'library_root':str(root),'approval_snapshot':snapshot}),at))
             for track_id,reference in fresh_references:
                 if cancelled(): raise InterruptedError('Inventory cancelled before database commit.')
                 conn.execute('INSERT INTO source_audio_references VALUES (?,?,?,?,?) ON CONFLICT(track_id) DO UPDATE SET '
                     'library_id=excluded.library_id,context_digest=excluded.context_digest,evidence_json=excluded.evidence_json,observed_at=excluded.observed_at',
                     (track_id,library_id,reference['source_context'],canonical_json(reference),at))
+            if snapshot and _reference_digest(conn)!=snapshot['references']:
+                raise ValueError('Source references changed during inventory.')
             for proposal in proposals:
                 if cancelled(): raise InterruptedError('Inventory cancelled before database commit.')
                 conn.execute('INSERT INTO legacy_adoption_proposals VALUES (?,?,?,?,?,?)',
@@ -544,12 +566,113 @@ def assert_legacy_export_allowed(inventory, tracks):
         raise ValueError('Historical outputs require adoption or managed materialization; creation blocked.')
 
 
+def _reference_digest(conn):
+    return evidence_digest({row[0]:(row[1],json.loads(row[2])) for row in conn.execute(
+        'SELECT track_id,context_digest,evidence_json FROM source_audio_references')})
+
+
+def _content_identity(path, root, cancelled):
+    """Fresh full SHA, including on Windows where Python ctime is creation time."""
+    before=Path(path).stat()
+    stamp=_guard_file(path,root)
+    digest=hashlib.sha256()
+    with Path(path).open('rb') as stream:
+        if not _opened_file_matches(before,os.fstat(stream.fileno())):
+            raise ValueError('File changed before opening.')
+        while chunk:=stream.read(1024*1024):
+            if cancelled(): raise InterruptedError('Adoption cancelled before database commit.')
+            digest.update(chunk)
+        if not _opened_file_matches(before,os.fstat(stream.fileno())):
+            raise ValueError('File changed while reading.')
+    if _guard_file(path,root)!=stamp or stat_identity(before)!=stamp:
+        raise ValueError('File changed while reading.')
+    return digest.hexdigest(),stamp
+
+
+def _verify_sources(manifest, tracks, sources, selected, cancelled, progress):
+    entries={tid:(sha,tuple(stamp) if stamp is not None else None) for tid,sha,stamp in manifest}
+    if len(entries)!=len(manifest) or set(entries)!={t.track_id for t in tracks}:
+        raise ValueError('Source inventory changed; check the library again.')
+    observed=[]
+    for i,track in enumerate(tracks):
+        progress(i,len(tracks),'sources')
+        expected=entries[track.track_id]
+        source=next((s for s in sources if s.source_id==track.source_id),None)
+        if source is None: raise ValueError('Source context changed.')
+        try:
+            actual=_content_identity(track.path,source.root_path,cancelled)
+        except FileNotFoundError:
+            actual=(None,None)
+        # Preserve supported offline adoption for the selected record only.
+        # Its trusted reference is checked in the reserved transaction below.
+        if actual!=expected and not (track.track_id==selected and actual==(None,None)):
+            raise ValueError('Source inventory changed; check the library again.')
+        observed.append((track.track_id,actual[0],actual[1]))
+        progress(i+1,len(tracks),'sources')
+    return observed
+
+
+def _focused_approval(repository, proposal, snapshot, saved_context, expected_context, descriptors,
+                      cancelled, progress):
+    with closing(_rw(repository)) as conn:
+        if _reference_digest(conn)!=snapshot['references']:
+            raise ValueError('Source references changed; check the library again.')
+        rows=conn.execute('SELECT proposal_json FROM legacy_adoption_proposals WHERE run_id=?',
+                          (proposal.run_id,)).fetchall()
+    proposals=[AdoptionProposal(**json.loads(row[0])) for row in rows]
+    output_entries={}
+    for item in proposals:
+        if not item.locator: continue
+        # Unsupported parser variants are deterministic for unchanged bytes.
+        # Transient decoder/read failures cannot supply reusable evidence.
+        if not valid_digest(item.full_sha256) or not item.stat_identity or (
+                not valid_digest(item.audio_digest) and item.status!='UNSUPPORTED'):
+            return None
+        value=(item.full_sha256,tuple(item.stat_identity))
+        if item.locator in output_entries and output_entries[item.locator]!=value:
+            raise ValueError('Conflicting saved output evidence.')
+        output_entries[item.locator]=value
+    progress(0,1,'owners')
+    states,_=_known_state(descriptors)
+    library_id,sources,tracks,context=_context(repository,states)
+    if context!=expected_context or library_id!=proposal.library_id:
+        raise ValueError('Library/record/ownership context changed; stale approval rejected.')
+    observed=_verify_sources(snapshot['sources'],tracks,sources,proposal.track_id,cancelled,progress)
+    membership=_output_membership(Path(proposal.library_root),cancelled)
+    expected_membership=(tuple(tuple(x) for x in saved_context['root_observations']),
+                         tuple(sorted((path,value[1]) for path,value in output_entries.items())))
+    if membership!=expected_membership:
+        raise ValueError('Output inventory changed; check the library again.')
+    for i,(path,expected) in enumerate(sorted(output_entries.items())):
+        progress(i,len(output_entries),'outputs')
+        if _content_identity(path,proposal.library_root,cancelled)!=expected:
+            raise ValueError('Output inventory changed; check the library again.')
+        progress(i+1,len(output_entries),'outputs')
+    track=next(t for t in tracks if t.track_id==proposal.track_id)
+    for stage,path in (('source',track.path),('output',Path(proposal.locator))):
+        progress(0,1,stage)
+        if stage=='source' and not path.exists(): continue
+        proof=inspect_audio(path,cancelled=cancelled)
+        if (proof.status!='VALID' or proof.audio_digest!=proposal.audio_digest
+                or proof.algorithm!=proposal.audio_algorithm
+                or proof.full_sha256!=(track.sha256 if stage=='source' else proposal.full_sha256)):
+            if cancelled(): raise InterruptedError('Adoption cancelled before database commit.')
+            raise ValueError('Selected source/output changed; stale approval rejected.')
+        progress(1,1,stage)
+    return expected_membership,observed,output_entries
+
+
 def adopt_legacy_output(repository, proposal_id, *, confirmed, library_root,
-                        known_libraries=None, cancelled=None) -> ManagedBinding:
+                        known_libraries=None, cancelled=None, progress=None) -> ManagedBinding:
     if confirmed is not True:
         raise ValueError('Explicit confirmation is required for adoption.')
     cancelled=cancelled or (lambda:False)
     if cancelled(): raise InterruptedError('Adoption cancelled before database commit.')
+    report=progress or (lambda *_:None)
+    def progress(current,total,stage):
+        report(current,total,stage)
+        if cancelled(): raise InterruptedError('Adoption cancelled before database commit.')
+    progress(0,1,'context')
     root=_active_root(repository,library_root)
     with closing(_rw(repository)) as conn:
         row=conn.execute('SELECT p.proposal_json,p.status,r.context_digest,r.context_json FROM legacy_adoption_proposals p '
@@ -563,19 +686,32 @@ def adopt_legacy_output(repository, proposal_id, *, confirmed, library_root,
     supplied=stored_known if known_libraries is None else _descriptors(repository,root,known_libraries)
     if _descriptors(repository,root,supplied)!=stored_known:
         raise ValueError('Known library context changed since approval.')
-    fresh=inventory_legacy_outputs(repository,library_root=root,known_libraries=supplied,
-                                   cancelled=cancelled,persist=False)
-    matches=[p for p in fresh.proposals if p.track_id==proposal.track_id and p.locator==proposal.locator]
-    if fresh.cancelled: raise InterruptedError('Adoption cancelled before database commit.')
-    if (fresh.context_digest!=row['context_digest'] or len(matches)!=1 or not matches[0].can_adopt
-            or matches[0].full_sha256!=proposal.full_sha256
-            or tuple(matches[0].stat_identity)!=tuple(proposal.stat_identity)
-            or matches[0].record_revision!=proposal.record_revision
-            or matches[0].source_context!=proposal.source_context):
-        raise ValueError('Candidate, record or library changed; stale approval rejected.')
-    current=matches[0]
-    expected_membership=(fresh.root_observations,tuple(sorted({p.locator:tuple(p.stat_identity)
-        for p in fresh.proposals if p.locator and p.stat_identity}.items())))
+    snapshot=saved_context.get('approval_snapshot')
+    focused=None
+    if snapshot and snapshot.get('version')==1:
+        focused=_focused_approval(repository,proposal,snapshot,saved_context,row['context_digest'],
+                                  supplied,cancelled,progress)
+    if focused is not None:
+        expected_membership,source_manifest,output_entries=focused
+        current=proposal
+        expected_context=row['context_digest']
+    else:
+        fresh=inventory_legacy_outputs(repository,library_root=root,known_libraries=supplied,
+                                       cancelled=cancelled,persist=False,
+                phase=lambda stage:progress(0,1,stage),
+                progress=lambda i,n,name:progress(i,n,'verification'))
+        matches=[p for p in fresh.proposals if p.track_id==proposal.track_id and p.locator==proposal.locator]
+        if fresh.cancelled: raise InterruptedError('Adoption cancelled before database commit.')
+        if (fresh.context_digest!=row['context_digest'] or len(matches)!=1 or not matches[0].can_adopt
+                or matches[0].full_sha256!=proposal.full_sha256
+                or tuple(matches[0].stat_identity)!=tuple(proposal.stat_identity)
+                or matches[0].record_revision!=proposal.record_revision
+                or matches[0].source_context!=proposal.source_context):
+            raise ValueError('Candidate, record or library changed; stale approval rejected.')
+        current=matches[0]
+        expected_membership=(fresh.root_observations,tuple(sorted({p.locator:tuple(p.stat_identity)
+            for p in fresh.proposals if p.locator and p.stat_identity}.items())))
+        expected_context=fresh.context_digest
     with closing(_rw(repository)) as conn,conn:
         aliases={}
         main=str(repository.database_path.resolve(strict=True))
@@ -585,10 +721,13 @@ def adopt_legacy_output(repository, proposal_id, *, confirmed, library_root,
                 alias=f'known_{i}'
                 conn.execute(f'ATTACH DATABASE ? AS {alias}',(Path(item.database).as_uri()+'?mode=rw',))
                 aliases[item.database]=alias
+        progress(0,1,'owners')
         conn.execute('BEGIN IMMEDIATE')
+        if focused is not None and _reference_digest(conn)!=snapshot['references']:
+            raise ValueError('Source references changed before adoption commit.')
         states,owners=_known_state(stored_known,conn=conn,aliases=aliases)
         library_id,sources,tracks,context=_context(repository,states,conn)
-        if context!=fresh.context_digest or library_id!=current.library_id:
+        if context!=expected_context or library_id!=current.library_id:
             raise ValueError('Library/ownership context changed before adoption commit.')
         track=next((t for t in tracks if t.track_id==current.track_id),None)
         if track is None: raise ValueError('Record changed or was removed.')
@@ -597,6 +736,7 @@ def adopt_legacy_output(repository, proposal_id, *, confirmed, library_root,
         source=next((s for s in sources if s.source_id==track.source_id and s.library_id==library_id),None)
         if source is None or _source_context(track,sources,library_id)!=current.source_context:
             raise ValueError('Source binding changed before adoption commit.')
+        progress(0,1,'source')
         source_stamp=None
         try:
             Path(track.path).lstat()
@@ -623,12 +763,16 @@ def adopt_legacy_output(repository, proposal_id, *, confirmed, library_root,
                     or source_proof.stat_identity!=source_stamp
                     or source_stamp[2:4]!=(track.size_bytes,track.mtime_ns)):
                 raise ValueError('Source changed before adoption commit.')
+        progress(1,1,'source')
+        progress(0,1,'output')
         before=_guard_file(current.locator,root)
         proof=inspect_audio(Path(current.locator),cancelled=cancelled)
+        if cancelled(): raise InterruptedError('Adoption cancelled before database commit.')
         if (proof.status!='VALID' or proof.full_sha256!=current.full_sha256
                 or proof.audio_digest!=current.audio_digest or proof.stat_identity!=before
                 or before!=tuple(current.stat_identity)):
             raise ValueError('Candidate changed before adoption commit.')
+        progress(1,1,'output')
         key=lexical_locator(current.locator)
         for owner_library,owner_track,owner_path,device,inode in owners:
             if key==lexical_locator(owner_path) or before[:2]==(device,inode):
@@ -636,6 +780,13 @@ def adopt_legacy_output(repository, proposal_id, *, confirmed, library_root,
         if cancelled(): raise InterruptedError('Adoption cancelled before database commit.')
         if _output_membership(root,cancelled)!=expected_membership:
             raise ValueError('Output inventory changed before database commit.')
+        if focused is not None:
+            _verify_sources(source_manifest,tracks,sources,None,cancelled,progress)
+            for i,(path,expected) in enumerate(sorted(output_entries.items())):
+                progress(i,len(output_entries),'outputs')
+                if _content_identity(path,root,cancelled)!=expected:
+                    raise ValueError('Output inventory changed before database commit.')
+                progress(i+1,len(output_entries),'outputs')
         final_states,_=_known_state(stored_known,conn=conn,aliases=aliases)
         if final_states!=states:
             raise ValueError('Known library ownership/material changed before database commit.')
@@ -649,10 +800,12 @@ def adopt_legacy_output(repository, proposal_id, *, confirmed, library_root,
         evidence={'confirmed':True,'proposal_id':proposal_id,'inventory_id':proposal.run_id,
                   'evidence_sources':current.evidence_sources,'record_revision':current.record_revision,
                   'known_context':context,'source_audio_digest':current.audio_digest}
+        progress(0,1,'saving')
         conn.execute('INSERT INTO managed_bindings VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             (track.track_id,library_id,binding_id,relative,key,proof.full_sha256,proof.algorithm,proof.audio_digest,
              before[0],before[1],canonical_json(before),canonical_json(source_binding),canonical_json(applied),canonical_json(evidence),at))
         conn.execute("UPDATE legacy_adoption_proposals SET status='ALREADY_BOUND' WHERE proposal_id=?",(proposal_id,))
+        progress(1,1,'saving')
         # A final no-follow observation detects replacement after the decoder.
         if _guard_file(current.locator,root)!=before: raise ValueError('Candidate changed before database commit.')
         if cancelled(): raise InterruptedError('Adoption cancelled before database commit.')
@@ -671,8 +824,20 @@ def adopt_legacy_output(repository, proposal_id, *, confirmed, library_root,
             else:
                 raise ValueError('Source became available during adoption; approval must be revalidated.')
         if cancelled(): raise InterruptedError('Adoption cancelled before database commit.')
+        if focused is not None:
+            # Close the membership/identity window after all expensive reads.
+            by_track={t.track_id:t for t in tracks}
+            by_source={s.source_id:s for s in sources}
+            for tid,sha,stamp in source_manifest:
+                selected_track=by_track[tid]
+                selected_source=by_source[selected_track.source_id]
+                try: final_stamp=_guard_file(selected_track.path,selected_source.root_path)
+                except FileNotFoundError: final_stamp=None
+                if final_stamp!=(tuple(stamp) if stamp is not None else None):
+                    raise ValueError('Source inventory changed before database commit.')
         if _output_membership(root,cancelled)!=expected_membership:
             raise ValueError('Output inventory changed before database commit.')
+        if cancelled(): raise InterruptedError('Adoption cancelled before database commit.')
         return binding
 
 

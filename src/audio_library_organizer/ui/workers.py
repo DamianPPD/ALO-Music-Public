@@ -188,11 +188,17 @@ class LegacyAdoptionWorker(FileReconciliationWorker):
                 raise ValueError('Library context changed before approval.')
             binding = adopt_legacy_output(self.repository, self.proposal_id, confirmed=True,
                 library_root=self.library_root, known_libraries=self.known_libraries,
-                cancelled=self._cancelled.is_set)
+                cancelled=self._cancelled.is_set,
+                progress=lambda current,total,stage:self.progress.emit(
+                    self.library_id,self.operation_id,current,total,stage))
             self.finished.emit(SimpleNamespace(library_id=self.library_id,
                 operation_id=self.operation_id, binding=binding))
+        except InterruptedError:
+            self.failed.emit(self.library_id,self.operation_id,'ADOPTION_CANCELLED')
+        except ValueError as exc:
+            self.failed.emit(self.library_id,self.operation_id,'ADOPTION_REFUSED: '+str(exc))
         except Exception as exc:
-            self.failed.emit(self.library_id, self.operation_id, str(exc))
+            self.failed.emit(self.library_id, self.operation_id, 'ADOPTION_ERROR: '+str(exc))
 
 
 class _GuiThreadRelay(QObject):

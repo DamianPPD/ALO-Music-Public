@@ -1877,9 +1877,10 @@ class MainWindow(QMainWindow):
             self._adoption_dialog.close()
         self._adoption_view_context = (inventory.library_id, self._file_check_generation, self.repository,
                                       str(self.app_settings.library.root), self._known_adoption_libraries())
-        dialog = LegacyAdoptionDialog(inventory, self, language=self.preferences.language)
+        dialog = LegacyAdoptionDialog(inventory, self, language=self.preferences.language, tracks=self.library._tracks)
         self._adoption_dialog = dialog
         dialog.approve_requested.connect(self._start_legacy_adoption)
+        dialog.cancel_requested.connect(self._cancel_legacy_adoption)
         dialog.open()
 
     @Slot(str)
@@ -1892,9 +1893,14 @@ class MainWindow(QMainWindow):
                 or context[4] != self._known_adoption_libraries()
                 or self.last_reconciliation_result is None
                 or dialog.inventory is not self.last_reconciliation_result.adoption_inventory):
+            if dialog is not None:
+                dialog.operation_failed('Approval expired; check the library again.' if self.preferences.language=='en'
+                                        else 'Zatwierdzenie wygasło. Ponów kontrolę Biblioteki.')
             return
         proposal = next((p for p in dialog.inventory.proposals if p.proposal_id == proposal_id), None)
         if proposal is None or not proposal.can_adopt:
+            dialog.operation_failed('Cannot assign this proposal.' if self.preferences.language=='en'
+                                    else 'Nie można przypisać tej propozycji.')
             return
         operation_id = str(uuid4())
         self._file_check_generation += 1
@@ -1909,9 +1915,16 @@ class MainWindow(QMainWindow):
         self.adoption_btn.setEnabled(False)
         thread.started.connect(worker.adopt)
         worker.finished.connect(self._legacy_adoption_finished, Qt.ConnectionType.QueuedConnection)
-        worker.failed.connect(self._file_check_failed, Qt.ConnectionType.QueuedConnection)
+        worker.progress.connect(self._legacy_adoption_progress, Qt.ConnectionType.QueuedConnection)
+        worker.failed.connect(self._legacy_adoption_failed, Qt.ConnectionType.QueuedConnection)
         worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
         worker.failed.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        from audio_library_organizer.safety import windows_file_identity as native
+        if native.on_windows():
+            def stop_before_children(*_):
+                worker.cancel(); thread.quit(); thread.wait()
+            destruction_connection=self.destroyed.connect(stop_before_children,Qt.ConnectionType.DirectConnection)
+            thread.finished.connect(partial(QObject.disconnect,destruction_connection),Qt.ConnectionType.DirectConnection)
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(self._file_check_thread_done)
         thread.finished.connect(thread.deleteLater)
@@ -1925,11 +1938,55 @@ class MainWindow(QMainWindow):
         self._adoption_view_context = None
         self.adoption_btn.hide()
         if self._adoption_dialog is not None:
-            self._adoption_dialog.close()
+            self._adoption_dialog.operation_succeeded()
             self._adoption_dialog = None
         self.refresh_data()
         self._show_operation('Output assignment saved. Music unchanged.' if self.preferences.language == 'en'
                              else 'Zapisano przypisanie pliku wynikowego. Muzyka pozostała nietknięta.')
+
+    @Slot()
+    def _cancel_legacy_adoption(self):
+        if isinstance(self._worker,LegacyAdoptionWorker):
+            self._worker.cancel()
+
+    @Slot(str,str,int,int,str)
+    def _legacy_adoption_progress(self,library_id,operation_id,current,total,stage):
+        if not self._file_check_matches(library_id,operation_id): return
+        labels={
+            'context':('Weryfikowanie kontekstu Biblioteki','Verifying library context'),
+            'sources':('Sprawdzanie zawartości źródeł','Checking source contents'),
+            'outputs':('Sprawdzanie zawartości wyników','Checking output contents'),
+            'source':('Weryfikowanie audio źródła','Verifying source audio'),
+            'output':('Weryfikowanie audio wyniku','Verifying output audio'),
+            'owners':('Kontrola istniejących właścicieli','Checking existing owners'),
+            'saving':('Zapisywanie powiązania','Saving assignment'),
+            'inventory':('Sprawdzanie zbioru plików','Checking file membership'),
+            'reports':('Odczytywanie dowodów historycznych','Reading historical evidence'),
+            'verification':('Ponowna pełna weryfikacja','Full revalidation')}
+        message=labels.get(stage,labels['verification'])[self.preferences.language=='en']
+        self.progress.setRange(0,max(1,total)); self.progress.setValue(current)
+        self._show_operation(f'{message}: {current} / {total}')
+        if self._adoption_dialog is not None:
+            self._adoption_dialog.operation_update(current,total,message)
+
+    @Slot(str,str,str)
+    def _legacy_adoption_failed(self,library_id,operation_id,message):
+        english=self.preferences.language=='en'
+        if message=='ADOPTION_CANCELLED':
+            text='Assignment cancelled. No binding was saved.' if english else 'Anulowano przypisywanie. Nie zapisano powiązania.'
+        elif message.startswith('ADOPTION_REFUSED:'):
+            reason=message.partition(': ')[2]
+            text=('Assignment refused — evidence or ownership changed. Check the library again.' if english else
+                  'Odmowa przypisania — zmieniły się dowody lub własność pliku. Ponów kontrolę Biblioteki.')
+            text+='\n'+reason
+        else:
+            text=('Assignment failed. Check file access and whether the database is busy.' if english else
+                  'Błąd przypisywania. Sprawdź dostęp do plików i czy baza nie jest zajęta.')
+            text+='\n'+message.partition(': ')[2]
+        if self._file_check_matches(library_id,operation_id) and self._adoption_view_context is not None:
+            old=self._adoption_view_context
+            self._adoption_view_context=(old[0],self._file_check_generation,*old[2:])
+        self._file_check_failed(library_id,operation_id,text)
 
     @Slot(str, str, str)
     def _file_check_failed(self, library_id, operation_id, message):
