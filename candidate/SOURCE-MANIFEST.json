@@ -1,7 +1,7 @@
 {
   "head": "20129b8fba67fb5ea183f8a5bc5dd6b955aec301",
   "base_tree": "d9706ba0dcbb2ec9be557a480217163a54e8bb93",
-  "tree": "489daaa85fdf31a4f81d03d07d3418a229608418",
+  "tree": "e8af09488e92aefd2b25efaa899ddcb7d3011dfb",
   "files": [
     {
       "path": ".gitattributes",
@@ -1245,9 +1245,9 @@
     {
       "path": "src/audio_library_organizer/jobs/legacy_adoption.py",
       "mode": "100644",
-      "blob": "856c9394492afdd03e0c6e18c8eb36a4af96ab0e",
-      "sha256": "fbf1efd2faf655fda21205c435fc788cb3222ead9a5e6315a559ed2a81b6b1d5",
-      "bytes": 48963
+      "blob": "e1e2b8ec795c57b35344fcc28ce64cdda028276d",
+      "sha256": "58e48a1bf02acf30da9f3a1b2af7d1401f95c3ea26fa5d6a486300b0e16d6170",
+      "bytes": 49056
     },
     {
       "path": "src/audio_library_organizer/jobs/library_service.py",
@@ -2183,9 +2183,9 @@
     {
       "path": "tests/test_legacy_adoption_optimization_v0427.py",
       "mode": "100644",
-      "blob": "9f6566a4f629a6274343b77f033ba6b4e248ec47",
-      "sha256": "45b6bce1adff1c8d8be7b8121314a16be23a1013a3d01237c3295f27921f88a9",
-      "bytes": 15673
+      "blob": "34542022581b16189fafd69a5504332a5db28e91",
+      "sha256": "f6dfc1b3eea54eaa420fa2406cdefd019fd3bed804d58188619bba33b38545d0",
+      "bytes": 16346
     },
     {
       "path": "tests/test_legacy_adoption_v0427.py",

@@ -767,6 +767,7 @@ def adopt_legacy_output(repository, proposal_id, *, confirmed, library_root,
         progress(0,1,'output')
         before=_guard_file(current.locator,root)
         proof=inspect_audio(Path(current.locator),cancelled=cancelled)
+        if cancelled(): raise InterruptedError('Adoption cancelled before database commit.')
         if (proof.status!='VALID' or proof.full_sha256!=current.full_sha256
                 or proof.audio_digest!=current.audio_digest or proof.stat_identity!=before
                 or before!=tuple(current.stat_identity)):

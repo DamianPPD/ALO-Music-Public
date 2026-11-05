@@ -16,6 +16,7 @@
     "tests/test_legacy_adoption_optimization_v0427.py::test_duplicate_appearing_during_final_hash_sweep_rolls_back",
     "tests/test_legacy_adoption_optimization_v0427.py::test_cancelled_dialog_can_retry_without_deadlock",
     "tests/test_legacy_adoption_optimization_v0427.py::test_cancellation_in_final_membership_does_not_commit",
+    "tests/test_legacy_adoption_optimization_v0427.py::test_cancel_inside_selected_output_decoder_is_cancelled_not_refused",
     "tests/test_legacy_adoption_v0427.py::test_adoption_survives_restart_without_changing_manual_work",
     "tests/test_legacy_adoption_v0427.py::test_stale_output_approval_is_rejected",
     "tests/test_legacy_adoption_v0427.py::test_stale_record_approval_preserves_new_manual_edit",

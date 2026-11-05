@@ -8,7 +8,7 @@ import legacy_support
 base.ci.TREE=legacy_support.ci.TREE
 base.ci.verify_sources=legacy_support.verify_sources
 CASES=json.loads((HERE/'legacy-cases.json').read_text())['selected']
-assert len(CASES)==len(set(CASES))==40
+assert len(CASES)==len(set(CASES))==41
 base.CASES=CASES
 
 def run():
@@ -34,7 +34,7 @@ def run():
    print(str(i)+'/'+str(len(CASES))+' '+outcome+' '+case,flush=True)
    if outcome!='PASS':raise RuntimeError('STOP '+case+' / '+outcome)
    base.audit_synthetic(folder)
-  assert status['executed']==status['selected']==40 and all(c['outcome']=='PASS'and c['exit']==0 for c in status['cases'])
+  assert status['executed']==status['selected']==41 and all(c['outcome']=='PASS'and c['exit']==0 for c in status['cases'])
   status['status']='LEGACY_ADOPTION_PASS'
  finally:
   base.ci.verify_sources();status['source_after']=True

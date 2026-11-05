@@ -297,3 +297,18 @@ def test_cancellation_in_final_membership_does_not_commit(library,monkeypatch):
     with pytest.raises(InterruptedError):
         api.adopt_legacy_output(repo,p.proposal_id,confirmed=True,library_root=root,cancelled=lambda:stopped)
     assert repo.list_managed_bindings()==()
+
+
+def test_cancel_inside_selected_output_decoder_is_cancelled_not_refused(library,monkeypatch):
+    repo,root,_,output=library;api=adoption_api();p=inventory(library).proposals[0]
+    original=api.inspect_audio;calls=0;stopped=False
+    def inspect(path,**kwargs):
+        nonlocal calls,stopped
+        if Path(path)==output:
+            calls+=1
+            if calls==2:stopped=True
+        return original(path,**kwargs)
+    monkeypatch.setattr(api,'inspect_audio',inspect)
+    with pytest.raises(InterruptedError):
+        api.adopt_legacy_output(repo,p.proposal_id,confirmed=True,library_root=root,cancelled=lambda:stopped)
+    assert repo.list_managed_bindings()==()
