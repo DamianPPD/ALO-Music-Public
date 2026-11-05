@@ -5,6 +5,8 @@ HERE=Path(__file__).resolve().parent
 sys.path[:0]=[str(HERE),str(HERE.parents[1]/'src'),str(HERE.parents[1]/'tests')]
 import contract_run as base
 import legacy_support
+base.ci.TREE=legacy_support.ci.TREE
+base.ci.verify_sources=legacy_support.verify_sources
 CASES=json.loads((HERE/'legacy-cases.json').read_text())['selected']
 assert len(CASES)==len(set(CASES))==40
 base.CASES=CASES

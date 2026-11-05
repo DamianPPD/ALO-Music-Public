@@ -50,6 +50,8 @@ class LegacyAdoptionDialog(QDialog):
             for j, value in enumerate((title, proposal.locator or '—', proposal.status)):
                 item = QTableWidgetItem(value); item.setToolTip(value)
                 self.table.setItem(i, j, item)
+        self.table.setColumnWidth(0,260)
+        self.table.setColumnWidth(1,360)
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
         self.details = QTextEdit(self); self.details.setReadOnly(True)

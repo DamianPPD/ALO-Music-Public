@@ -7,7 +7,7 @@ MANIFEST=ROOT/'candidate/SOURCE-MANIFEST.json'
 # This file itself is a committed diagnostic blob; product roots stay separate.
 def original_manifest():
     raw=MANIFEST.read_text(encoding='utf-8').encode('utf-8')
-    assert hashlib.sha256(raw).hexdigest()=='1d34868cc1dea87ba368533287772a14fe43ee73d617015c45e0e0f5a99c6945'
+    assert hashlib.sha256(raw).hexdigest()=='0929331f63816a3da5c50b831e416095a7c936684f6ab015edf302157e5bd035'
     return json.loads(raw)
 ci.TREE=original_manifest()['tree']
 def verify_sources():

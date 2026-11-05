@@ -1,7 +1,7 @@
 {
   "head": "20129b8fba67fb5ea183f8a5bc5dd6b955aec301",
   "base_tree": "d9706ba0dcbb2ec9be557a480217163a54e8bb93",
-  "tree": "8ff4803bbe5c5dbd69736b0db507da1a520223a9",
+  "tree": "489daaa85fdf31a4f81d03d07d3418a229608418",
   "files": [
     {
       "path": ".gitattributes",
@@ -1581,9 +1581,9 @@
     {
       "path": "src/audio_library_organizer/ui/adoption_dialog.py",
       "mode": "100644",
-      "blob": "f6c56b6a41a9e1f949f23204ff3222d5b863d3e6",
-      "sha256": "f202d9abebc1aa4ef8353658b465f2c02b04c187ccb26a1f419bca3c2a333f98",
-      "bytes": 10394
+      "blob": "ac66cd4ed54bf7961d19b51e2b0e1f33feecd262",
+      "sha256": "6c0d5e1555e05eae0536ac35c9dd00afc02fb17297fc913be09ef30259446913",
+      "bytes": 10476
     },
     {
       "path": "src/audio_library_organizer/ui/assets.py",
