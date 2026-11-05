@@ -6,7 +6,9 @@ ROOT=ci.ROOT
 MANIFEST=ROOT/'candidate/SOURCE-MANIFEST.json'
 # This file itself is a committed diagnostic blob; product roots stay separate.
 def original_manifest():
-    return json.loads(subprocess.check_output(['git','cat-file','blob','HEAD:candidate/SOURCE-MANIFEST.json'],cwd=ROOT))
+    raw=MANIFEST.read_text(encoding='utf-8').encode('utf-8')
+    assert hashlib.sha256(raw).hexdigest()=='1d34868cc1dea87ba368533287772a14fe43ee73d617015c45e0e0f5a99c6945'
+    return json.loads(raw)
 ci.TREE=original_manifest()['tree']
 def verify_sources():
     manifest=original_manifest()
@@ -25,7 +27,13 @@ def verify_sources():
 ci.verify_sources=verify_sources
 def materialize():
     # Only before tests: undo Windows checkout EOL filters with exact Git blobs.
-    manifest=original_manifest();files=manifest['files']
+    manifest=original_manifest();files=list(manifest['files'])
+    present={f['path'] for f in files}
+    hashes=json.loads((ci.CONFIG/'original-hashes.json').read_text())
+    for name,want in hashes.items():
+        if name in present or name=='candidate/SOURCE-MANIFEST.json':continue
+        blob=subprocess.check_output(['git','rev-parse','HEAD:'+name],cwd=ROOT).decode().strip()
+        files.append({'path':name,'blob':blob,'sha256':want})
     batch=subprocess.run(['git','cat-file','--batch'],cwd=ROOT,
         input=('\n'.join(f['blob'] for f in files)+'\n').encode(),capture_output=True,check=True).stdout
     stream=io.BytesIO(batch)
