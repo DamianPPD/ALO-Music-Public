@@ -1,11 +1,10 @@
-name: ALO legacy adoption optimization
-run-name: ALO legacy adoption / targeted cases / Windows Server2022 / ${{ github.sha }}
+name: ALO manual cover native validation
+run-name: ALO manual cover / Windows 2022 / CPython 3.12
 on:
   push:
     branches: [ci/windows-62d-validation]
 permissions:
   contents: read
-  actions: read
 concurrency:
   group: alo-62d-windows-validation
   cancel-in-progress: false
@@ -13,40 +12,52 @@ jobs:
   native-windows:
     if: github.repository == 'DamianPPD/ALO-Music-Public' && github.ref == 'refs/heads/ci/windows-62d-validation'
     runs-on: windows-2022
-    timeout-minutes: 15
+    timeout-minutes: 25
     defaults:
       run:
         shell: pwsh
+    env:
+      QT_QPA_PLATFORM: windows
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUTF8: '1'
     steps:
-      - name: Checkout isolated diagnostic branch only
+      - name: Checkout diagnostic files
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
-          fetch-depth: 1
-      - name: Exact preparation interpreter
+      - name: Install exact CPython
         uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
         with:
-          python-version: '3.11.9'
+          python-version: '3.12.10'
           architecture: x64
           check-latest: false
-      - name: Reuse preserved verified runtime and FFmpeg
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          artifact-ids: '13197845647'
-          run-id: '41560762508'
-          github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/portable-base
-          merge-multiple: true
-      - name: Verify exact sources and run Library integration
+      - name: Install test dependencies
         run: |
-          python -I -B .ci/62d/legacy_prepare.py
-          if ($LASTEXITCODE -ne 0) { throw 'Activation acceptance failed' }
-      - name: Preserve all available evidence including after STOP
+          python -m pip install --disable-pip-version-check PySide6==6.10.3 shiboken6==6.10.3 Pillow mutagen requests pytest
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
+          python -m pip check
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency integrity check failed' }
+      - name: Locate native FFmpeg
+        run: |
+          if (-not (Get-Command ffmpeg.exe -ErrorAction SilentlyContinue)) {
+            choco install ffmpeg -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'FFmpeg installation failed' }
+          }
+          ffmpeg.exe -version
+          if ($LASTEXITCODE -ne 0) { throw 'FFmpeg is unavailable' }
+      - name: Fetch exact product baseline
+        run: |
+          git fetch --no-tags --depth=1 origin a80207b5097e037bc90350cedc80bb1b87b3ea93
+          if ($LASTEXITCODE -ne 0) { throw 'Baseline fetch failed' }
+      - name: Verify exact Git trees, reproduce and run targeted tests
+        run: |
+          python -B .ci/manual-cover/validate.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Preserve native evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ALO-Legacy-adoption-${{ github.run_id }}
-          path: ${{ runner.temp }}/alo-62d-evidence/
+          name: ALO-manual-cover-Windows-${{ github.run_id }}
+          path: ${{ runner.temp }}/alo-cover-evidence/
           retention-days: 30
           if-no-files-found: warn
-          include-hidden-files: true
