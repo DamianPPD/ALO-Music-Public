@@ -108,7 +108,9 @@ class FileReconciliationWorker(QObject):
         lease=None
         try:
             if self.output_operation is not None:
-                self.output_request = self.output_operation.choose(self.repository.list_managed_bindings())
+                from audio_library_organizer.jobs.created_output import is_producer
+                self.output_request = self.output_operation.choose(tuple(b for b in
+                    self.repository.list_managed_bindings() if not is_producer(b)))
                 self.current_output_request = (self.output_operation.current_request
                     if self.output_request is not None else None)
             extra={}
@@ -142,6 +144,7 @@ class FileReconciliationWorker(QObject):
                 include_adoption=self.library_root is not None,
                 output_request=self.output_request,
                 current_output_request=self.current_output_request,
+                producer_policy=self.output_operation.policy_revision if self.output_operation is not None else None,
                 cancelled=is_cancelled,
                 progress=lambda current, total, name: self.progress.emit(
                     self.library_id, self.operation_id, current, total, name),**extra)
@@ -380,16 +383,39 @@ class ExportWorker(QObject):
                 if inventory.cancelled or self._cancelled.is_set():
                     stop_preflight()
                     return
-                assert_legacy_export_allowed(inventory, [item.track for item in self.plan.items])
+                # Producer receipts are existing ownership, never fresh adoption.
+                # Unassigned historical files retain the original refusal path.
+                from audio_library_organizer.jobs.created_output import is_producer
+                producer_bindings = tuple(b for b in self.adoption_repository.list_managed_bindings() if is_producer(b))
+                produced = {b.track_id for b in producer_bindings}
+                # Legacy audio matching may associate one already-owned output
+                # with several identical source recordings. A verified receipt
+                # resolves that path's ownership; it does not adopt other paths.
+                from audio_library_organizer.jobs.managed_files import lexical_locator
+                owned = {b.locator_key:b for b in producer_bindings}
+                def producer_owned(proposal):
+                    binding = owned.get(lexical_locator(proposal.locator)) if proposal.locator else None
+                    return (binding is not None and proposal.full_sha256 == binding.expected_sha256
+                        and proposal.audio_digest == binding.audio_digest
+                        and tuple(proposal.stat_identity) == binding.stat_identity)
+                inventory = replace(inventory, proposals=tuple(p for p in inventory.proposals if not producer_owned(p)))
+                assert_legacy_export_allowed(inventory, [item.track for item in self.plan.items
+                                                       if item.track.track_id not in produced])
             if self._cancelled.is_set():
                 stop_preflight()
                 return
             checking_preflight = False
+            registration = None
+            if self.adoption_repository is not None:
+                from audio_library_organizer.jobs.created_output import ProducerOperation
+                registration = ProducerOperation(self.adoption_repository, self.library_root,
+                    self.plan, self.known_libraries)
             result = execute_copy_plan(
                 self.plan,
                 progress=lambda current, total, name: self.progress.emit(current, total, name),
                 cancelled=self._cancelled.is_set,
                 event=self.phase.emit,
+                registration=registration,
             )
             finish(result)
         except InterruptedError as exc:

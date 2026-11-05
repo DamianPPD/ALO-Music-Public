@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import closing
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -59,7 +59,14 @@ class FileCheckSnapshot:
         facts = {track_id: state.facts for track_id, state in self.cached}
         tracks = {track.track_id: track for track in self.tracks}
         for binding in self.managed_bindings:
-            facts[binding.track_id] = binding_facts(binding, tracks[binding.track_id], library_root)
+            history = binding_facts(binding, tracks[binding.track_id], library_root)
+            if binding.evidence.get('producer') == 'alo-export/v1':
+                cached = facts.get(binding.track_id)
+                if (cached is not None and cached.checked_at >= binding.adopted_at
+                        and cached.managed is not None and cached.managed.locator == binding.locator(library_root)
+                        and cached.owner_track_id == binding.track_id):
+                    history = replace(cached, is_current=False, desired=None)
+            facts[binding.track_id] = history
         return ReadContext(self.library_id, str(library_root), self.sources,
             tuple(facts.values()), tuple(binding.read_proof(library_root) for binding in self.managed_bindings),
             tuple(SourceReadMaterial.from_track(track) for track in self.tracks))
@@ -112,13 +119,14 @@ class LibraryRepository:
             require_current_schema(conn)
             return read_file_state(conn, track_id)
 
-    def file_check_snapshot(self) -> FileCheckSnapshot:
+    def file_check_snapshot(self, *, timeout=5.0) -> FileCheckSnapshot:
         """Pin registry/records/cache in one read transaction, without creating a DB.
 
         Records are fresh private copies, never objects borrowed from the GUI.
         A damaged optional cache row is retained and does not hide other tracks.
         """
-        with closing(sqlite3.connect(self.database_path.resolve().as_uri() + '?mode=ro', uri=True)) as conn:
+        with closing(sqlite3.connect(self.database_path.resolve().as_uri() + '?mode=ro', uri=True,
+                                     timeout=timeout)) as conn:
             conn.row_factory = sqlite3.Row
             conn.execute('BEGIN')
             require_current_schema(conn)

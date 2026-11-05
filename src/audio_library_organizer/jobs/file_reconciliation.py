@@ -356,19 +356,30 @@ def _facts(track, source, at, cached, prepared, managed_context, *, cancelled=Fa
                 facts = replace(facts, managed=replace(prepared.managed, availability=FileAvailability.UNKNOWN,
                                                       reason='MANAGED_SCOPE_UNAVAILABLE', checked_at=at))
         return facts
-    if cached is not None and cached.facts.checked_at <= at:
+    if cached is not None:
         # Preserve every historical managed input/observation exactly, including
         # its watermark. Updating a source stat cannot revalidate ownership or
         # desired/applied output. Cache history is taken from SQLite at commit.
-        return replace(cached.facts, checked_at=at, source=source, is_current=False)
-    return FileFacts(track.track_id, at, source=source)
+        previous = cached.facts
+        if previous.checked_at > at:
+            return FileFacts(track.track_id, at, source=source)
+        if (previous.managed_expected not in (None, False) or previous.managed is not None
+                or previous.ownership != Ownership.UNKNOWN or previous.owner_track_id is not None
+                or previous.desired is not None or previous.applied is not None or previous.conflict is not None
+                or previous.last_confirmed_state not in (None, FileState.SOURCE_ONLY, FileState.SOURCE_UNAVAILABLE)):
+            return replace(previous, checked_at=at, source=source, is_current=False)
+    # No prepared/persistent binding and no managed history: this snapshot
+    # establishes absence of an assignment, never ownership of a nearby file.
+    # The cache transaction still rejects a concurrent binding/context change.
+    return FileFacts(track.track_id, at, source=source, managed_expected=False)
 
 
 def check_library(repository, *, library_id=None, operation_id=None, checked_at=None,
                   cancelled=None, progress=None, managed_roots=(), prepared_facts=(),
                   prepared_library_id=None, library_root=None, known_libraries=(),
                   include_adoption=False, output_request=None,
-                  current_output_request=None, before_output_check=None) -> ReconciliationResult:
+                  current_output_request=None, before_output_check=None,
+                  producer_policy=None) -> ReconciliationResult:
     """Check active registry scope and return candidates without accepting them.
 
     ``prepared_facts`` is an explicit current evidence boundary, never a cache
@@ -382,6 +393,14 @@ def check_library(repository, *, library_id=None, operation_id=None, checked_at=
     FileFacts('check-context', at)
     operation_id = operation_id or str(uuid4())
     snapshot = repository.file_check_snapshot()
+    if checked_at is None:
+        # Creation now seeds the cache. A Windows clock tick can cover both
+        # that receipt and the next check; distinct observations need strictly
+        # ordered timestamps. Keep explicit/stale inputs and cache guards intact.
+        watermarks = [state.facts.checked_at for _, state in snapshot.cached]
+        watermarks.extend(binding.adopted_at for binding in snapshot.managed_bindings)
+        at = max(at, max(watermarks, default=-1) + 1)
+        FileFacts('check-context', at)
     if before_output_check is not None and (output_request is None or not callable(before_output_check)):
         raise ValueError('Output protection requires an explicit pinned request and callable boundary.')
     if library_id is not None and library_id != snapshot.library_id:
@@ -417,6 +436,17 @@ def check_library(repository, *, library_id=None, operation_id=None, checked_at=
                 raise ValueError('Prepared facts cannot replace persistent ownership.')
             track = records[binding.track_id]
             facts = binding_facts(binding, track, library_root, at=at, current=True)
+            from .created_output import is_producer, producer_check
+            if is_producer(binding):
+                facts = producer_check(binding, track, library_root, at=at,
+                    policy_revision=producer_policy, cancelled=is_cancelled)
+                from .legacy_adoption import _source_context
+                if binding.source_binding.get('source_context') != _source_context(track, snapshot.sources, snapshot.library_id):
+                    facts = replace(facts, desired=None, is_current=False,
+                                    last_confirmed_state=None, last_confirmed_at=None)
+                persistent[track.track_id] = facts
+                prepared[track.track_id] = facts
+                continue
             proof = recheck_read_path(resolve_read_path(track, context, ReadPurpose.AUDIO_PROPERTIES), cancelled=is_cancelled)
             if proof.is_verified:
                 managed = replace(facts.managed, reason='APPROVED_MANAGED_SHA_VERIFIED')
@@ -527,6 +557,9 @@ def check_library(repository, *, library_id=None, operation_id=None, checked_at=
                 completed += 1
         facts = _facts(track, source, at, cached.get(track.track_id), prepared.get(track.track_id), managed_context,
                        cancelled=is_cancelled())
+        if track.track_id in damaged and track.track_id not in prepared:
+            # An unreadable cache is not evidence that managed history is absent.
+            facts = replace(facts, managed_expected=None)
         if track.track_id in persistent and not is_cancelled():
             verified = persistent[track.track_id]
             # A complete scoped inventory may prove absence; a hash/probe error

@@ -29,7 +29,8 @@ def test_audit_tags_are_written_only_in_fresh_private_copy_and_cleanup_finishes(
     assert not errors and results[0].created == 2 and len(inspected) == 2
     assert not list(paths.ready.glob('.alo-copy-*'))
     assert all(path.read_bytes() == data for path, data in before.items())
-    assert not repo.list_managed_bindings()  # A copy is not automatic ownership approval.
+    assert len(repo.list_managed_bindings()) == 2
+    assert all(b.evidence['producer']=='alo-export/v1' for b in repo.list_managed_bindings())
 
 
 def test_audit_tag_failure_plus_cleanup_failure_preserves_error_and_exposes_staging_to_inventory(preflight, monkeypatch):
@@ -70,9 +71,9 @@ def test_audit_repeat_worker_blocks_existing_outputs_while_low_level_copy_uses_u
     second.finished.connect(again.append)
     second.failed.connect(refusals.append)
     second.run()
-    assert not again and len(refusals) == 1 and 'creation blocked' in refusals[0]
+    assert not refusals and len(again)==1 and again[0].created==0 and again[0].skipped==2
     assert set(paths.ready.glob('*.mp3')) == set(first)
-    assert not repo.list_managed_bindings()
+    assert len(repo.list_managed_bindings())==2
     # This is a low-level engine contract, not a bypass used by MainWindow.
     raw_engine = exporter.execute_copy_plan(worker.plan)
     assert raw_engine.created == 2 and set(raw_engine.copied).isdisjoint(first)
@@ -80,7 +81,8 @@ def test_audit_repeat_worker_blocks_existing_outputs_while_low_level_copy_uses_u
     assert not list(paths.ready.glob('.alo-copy-*'))
 
 
-def test_audit_unbound_check_does_not_invent_source_only_state(export_window, mp3_samples):
+def test_audit_unbound_check_reports_source_without_inventing_ownership(export_window, mp3_samples):
+    from audio_library_organizer.domain.file_state import FileState
     window, tracks, summaries = export_window
     for track in tracks:
         copy_audio(mp3_samples['original'], track.path)
@@ -94,12 +96,15 @@ def test_audit_unbound_check_does_not_invent_source_only_state(export_window, mp
     window._check_library_clicked()
     until(lambda: window._thread is None)
     cached = window.repository.get_file_state(tracks[0].track_id)
-    assert cached and cached.facts.managed_expected is None
-    assert cached.evaluation.state is None
-    assert window.last_reconciliation_result.files[0].evaluation.reason == 'MANAGED_EXPECTATION_UNKNOWN'
-    assert window.library._file_presentation(tracks[0]).state is None
+    assert cached and cached.facts.managed_expected is False
+    assert cached.evaluation.state == FileState.SOURCE_ONLY
+    assert not cached.evaluation.is_confirmed
+    assert window.library._file_presentation(tracks[0]).state == FileState.SOURCE_ONLY
+    assert not window.library._file_presentation(tracks[0]).confirmed
+    assert not window.repository.list_managed_bindings()
     window.refresh_data()
-    assert window.library._file_presentation(tracks[0]).state is None
+    assert window.library._file_presentation(tracks[0]).state == FileState.SOURCE_ONLY
+    assert not window.library._file_presentation(tracks[0]).confirmed
 
 
 def test_audit_approved_adoption_keeps_desired_snapshot_unknown_in_real_check(export_window, mp3_samples):

@@ -1945,14 +1945,39 @@ class MainWindow(QMainWindow):
         # Python-owned worker before that cleanup can delete it from the GUI.
         if self._thread is not None:
             self._thread.wait()
+        result = self.last_reconciliation_result
+        refresh_rows = (result is not None
+                        and self._file_check_matches(result.library_id, result.operation_id))
         self._thread = None; self._worker = None
         self._file_check_context = None; self._file_check_repository = None
         if self._file_check_closing:
             self.close()
             return
+        if refresh_rows:
+            self._refresh_file_check_rows()
         self._set_busy(False)
         self.adoption_btn.setEnabled(True)
         self._set_action_highlight(self.review_btn if self.stack.currentIndex() == 1 else None)
+
+    def _refresh_file_check_rows(self):
+        # Read committed observations only after the worker/lease has ended.
+        # Unlike refresh_data, this does not propose or save metadata changes.
+        try:
+            snapshot = self.repository.file_check_snapshot(timeout=0.0)
+            if snapshot.library_id != self.library_registry.active.library_id:
+                return
+            read_context = snapshot.read_context(self.app_settings.library.root)
+        except (sqlite3.Error, OSError, ValueError):
+            self._show_operation('Check finished; library view could not be refreshed. Check again.'
+                                 if self.preferences.language == 'en' else
+                                 'Kontrola zakończona; nie można odświeżyć widoku biblioteki. Ponów kontrolę.')
+            return
+        self._read_context = read_context
+        self.player.set_read_context(self._read_context)
+        self.library.set_read_context(self._read_context)
+        self._output_baseline_evals = {tid: cached.evaluation for tid, cached in snapshot.cached}
+        self.library.set_file_state_evaluations(snapshot.library_id, self._output_evaluations(snapshot))
+        self.library.set_tracks(list(snapshot.tracks))
 
     @Slot()
     def _stop_file_check_on_quit(self):
@@ -2598,6 +2623,9 @@ class MainWindow(QMainWindow):
                 return
         cfg = ProviderSettings.from_store(self.qt_settings)
         plan = ExportPlan.from_tracks(deepcopy(tracks), self.app_settings.library, folder_organization=cfg.folder_organization)
+        from dataclasses import replace
+        from audio_library_organizer.jobs.output_session import output_policy
+        plan = replace(plan, policy_revision=output_policy(cfg))
         metrics = plan.preview_metrics()
         if not confirm_bulk_copy(self, {**plan.summary, **metrics}, examples=plan.preview_lines(6),
                                  folder_organization=cfg.folder_organization, plan=plan):
@@ -2685,6 +2713,7 @@ class MainWindow(QMainWindow):
                          elapsed_seconds=max(result.elapsed_seconds, perf_counter() - self._export_started))
         self._set_busy(False)
         self._pending_auto_identify = False
+        self._refresh_file_check_rows()
         self._set_action_highlight(self.review_btn if self.stack.currentIndex() == 1 else None)
         plan, library = self._export_plan, self._export_library
         tracks = [item.track for item in plan.items]
