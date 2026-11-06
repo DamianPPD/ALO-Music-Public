@@ -57,7 +57,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ALO-NTFS-SQLite-Windows-${{ github.run_id }}
+          name: ALO-NTFS-SQLite-Windows-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/alo-ntfs-evidence/
           retention-days: 30
           if-no-files-found: warn
