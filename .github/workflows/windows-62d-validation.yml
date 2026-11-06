@@ -1,5 +1,5 @@
-name: ALO manual cover native validation
-run-name: ALO manual cover / Windows 2022 / CPython 3.12
+name: ALO NTFS SQLite native validation
+run-name: ALO NTFS SQLite / Windows 2022 / CPython 3.12
 on:
   push:
     branches: [ci/windows-62d-validation]
@@ -12,7 +12,7 @@ jobs:
   native-windows:
     if: github.repository == 'DamianPPD/ALO-Music-Public' && github.ref == 'refs/heads/ci/windows-62d-validation'
     runs-on: windows-2022
-    timeout-minutes: 25
+    timeout-minutes: 28
     defaults:
       run:
         shell: pwsh
@@ -51,13 +51,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Baseline fetch failed' }
       - name: Verify exact Git trees, reproduce and run targeted tests
         run: |
-          python -B .ci/manual-cover/validate.py
+          python -B .ci/ntfs-sqlite/validate.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Preserve native evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ALO-manual-cover-Windows-${{ github.run_id }}
-          path: ${{ runner.temp }}/alo-cover-evidence/
+          name: ALO-NTFS-SQLite-Windows-${{ github.run_id }}
+          path: ${{ runner.temp }}/alo-ntfs-evidence/
           retention-days: 30
           if-no-files-found: warn

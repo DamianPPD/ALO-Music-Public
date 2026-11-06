@@ -1,0 +1,1308 @@
+diff --git a/src/audio_library_organizer/jobs/created_output.py b/src/audio_library_organizer/jobs/created_output.py
+index 898a5d5c0ab26a24fe8f58dba220a40dc4f997df..e1457a7de2c3bb81de568fc0af78fed258628a8f 100644
+--- a/src/audio_library_organizer/jobs/created_output.py
++++ b/src/audio_library_organizer/jobs/created_output.py
+@@ -8,6 +8,7 @@ from contextlib import contextmanager, ExitStack, closing
+ from dataclasses import asdict, replace
+ import ctypes
+ import hashlib
++import io
+ import os
+ from pathlib import Path
+ import sqlite3
+@@ -15,17 +16,22 @@ import time
+ from uuid import uuid4
+ 
+ from mutagen.id3 import ID3
++from PIL import Image
+ from audio_library_organizer.audio.identity import inspect_audio, stat_identity, _tags
+ from audio_library_organizer.domain.file_state import OutputSnapshot, FileState
+ from audio_library_organizer.domain.output_spec import OutputSpec, OutputField, FieldAction, compare_specs
+ from audio_library_organizer.domain.settings import LibraryPaths
++from audio_library_organizer.metadata.artwork import MAX_ARTWORK_BYTES, prepare_cover_image
+ from audio_library_organizer.metadata.change_history import metadata_revision
+ from audio_library_organizer.metadata.mp3_output import build_mp3_spec
+-from audio_library_organizer.storage.managed_bindings import canonical_json, evidence_digest, read_managed_bindings, safe_relative
++from audio_library_organizer.storage.managed_bindings import (
++    canonical_json, evidence_digest, read_managed_bindings, safe_relative, sqlite_file_ids,
++)
+ from audio_library_organizer.storage.source_registry import list_sources
+ from audio_library_organizer.storage.database import require_current_schema
+ from audio_library_organizer.safety import windows_file_identity as native
+ from audio_library_organizer.safety.windows_output_lease import WindowsOutputLease, guard_database_identity
++from .exporter import ManualCoverError
+ from .legacy_adoption import (_active_root, _descriptors, _known_state, _source_context,
+                               _guard_file, _snapshot_value, binding_facts)
+ 
+@@ -96,8 +102,14 @@ def _plan_key(plan):
+         'summary':plan.summary,'folder':plan.folder_organization,'policy':plan.policy_revision})
+ 
+ 
++def _read_manual_stream(stream, size, track):
++    if size > MAX_ARTWORK_BYTES:
++        raise ManualCoverError(track, 'too_large')
++    return stream.read(size + 1)
++
++
+ class ProducerOperation:
+-    def __init__(self, repository, root, plan, known_libraries=()):
++    def __init__(self, repository, root, plan, known_libraries=(), *, cancelled=None):
+         self.repository=repository;self.root=_active_root(repository,root)
+         self.plan=plan;self.plan_key=_plan_key(plan);self.operation_id=str(uuid4())
+         snapshot=repository.file_check_snapshot(timeout=0)
+@@ -107,18 +119,86 @@ class ProducerOperation:
+         self.bindings={b.track_id:b for b in snapshot.managed_bindings}
+         self.database_token=stat_identity(repository.database_path.stat())[:2]
+         self.native_database=native.capture(repository.database_path,mutable=True) if native.on_windows() else None
+-        self.manual_inputs={t.track_id:self.manual_input(t) for t in snapshot.tracks if t.manual_cover_path}
+-        for item in plan.items:self.validate_item(item)
++        self.manual_inputs = {}
++        self.manual_problems = {}
++        for item in plan.items:
++            if cancelled is not None and cancelled():
++                raise InterruptedError('Export preparation cancelled.')
++            track = self.validate_item(item)
++            choice = (track.cover_choice or 'auto').casefold()
++            if (track.track_id in self.bindings or track.path.suffix.lower() != '.mp3'
++                    or choice == 'placeholder' or (not track.manual_cover_path and choice != 'manual')):
++                continue
++            try:
++                proof, _ = self.manual_input(track)
++            except ManualCoverError as exc:
++                self.manual_problems[track.track_id] = (exc.reason, exc.detail)
++            else:
++                self.manual_inputs[track.track_id] = proof
+ 
+     @staticmethod
+     def manual_input(track):
+-        path=Path(track.manual_cover_path)
+-        if not path.is_file():return None
+-        with path.open('rb') as stream:
+-            before=stat_identity(os.fstat(stream.fileno()))
+-            digest=hashlib.sha256(stream.read()).hexdigest()
+-            if stat_identity(path.stat())!=before:raise ValueError('Manual cover changed while reading.')
+-        return before,digest
++        if not track.manual_cover_path:
++            raise ManualCoverError(track, 'missing')
++        try:
++            path = Path(track.manual_cover_path).absolute()
++            if native.on_windows():
++                import msvcrt
++
++                # The lease pins the NTFS leaf and ancestors and denies writes
++                # and deletion. Query the actual reader using the same Win32 API.
++                with protected_file(path) as (pin, proof), path.open('rb') as stream:
++                    api, _ = pin
++                    handle = msvcrt.get_osfhandle(stream.fileno())
++                    if api.query(handle) != proof.leaf:
++                        raise ManualCoverError(track, 'changed')
++                    size = proof.leaf.size
++                    data = _read_manual_stream(stream, size, track)
++                    if api.query(handle) != proof.leaf:
++                        raise ManualCoverError(track, 'changed')
++                    identity = (proof.ancestors, proof.leaf.object_identity)
++            else:
++                before = _guard_file(path, Path(path.anchor))
++
++                def open_regular(name, flags):
++                    return os.open(name, flags | os.O_NOFOLLOW | os.O_NONBLOCK)
++
++                try:
++                    stream = io.open(path, 'rb', opener=open_regular)
++                except FileNotFoundError as exc:
++                    raise ManualCoverError(track, 'changed', str(exc)) from exc
++                with stream:
++                    if stat_identity(os.fstat(stream.fileno())) != before:
++                        raise ManualCoverError(track, 'changed')
++                    size = before[2]
++                    data = _read_manual_stream(stream, size, track)
++                    try:
++                        current_path = _guard_file(path, Path(path.anchor))
++                    except (OSError, ValueError) as exc:
++                        raise ManualCoverError(track, 'changed', str(exc)) from exc
++                    if stat_identity(os.fstat(stream.fileno())) != before or current_path != before:
++                        raise ManualCoverError(track, 'changed')
++                    identity = before[:2]
++            if len(data) != size:
++                raise ManualCoverError(track, 'changed')
++            return (identity, hashlib.sha256(data).hexdigest()), data
++        except ManualCoverError:
++            raise
++        except FileNotFoundError as exc:
++            raise ManualCoverError(track, 'missing', str(exc)) from exc
++        except (OSError, ValueError, OverflowError) as exc:
++            raise ManualCoverError(track, 'unverified', str(exc)) from exc
++
++    def verified_manual_bytes(self, track):
++        if track.track_id in self.manual_problems:
++            raise ManualCoverError(track, *self.manual_problems[track.track_id])
++        expected = self.manual_inputs.get(track.track_id)
++        if expected is None:
++            raise ManualCoverError(track, 'unverified')
++        proof, data = self.manual_input(track)
++        if proof != expected:
++            raise ManualCoverError(track, 'changed')
++        return data
+ 
+     def validate_item(self,item,conn=None):
+         if _plan_key(self.plan)!=self.plan_key:raise ValueError('Export plan changed.')
+@@ -138,8 +218,6 @@ class ProducerOperation:
+                 or _source_context(current,sources,library_id)!=_source_context(original,self.sources,self.library_id)
+                 or _source_context(track,sources,library_id)!=_source_context(original,self.sources,self.library_id)):
+             raise ValueError('Pinned library, track, metadata or source binding changed.')
+-        if current.manual_cover_path and self.manual_input(current)!=self.manual_inputs[current.track_id]:
+-            raise ValueError('Pinned manual cover changed.')
+         from .exporter import ExportPlan
+         expected=ExportPlan.from_tracks([current],LibraryPaths(self.root),folder_organization=self.plan.folder_organization).items[0]
+         if (item.destination_dir,item.filename,item.category)!=(expected.destination_dir,expected.filename,expected.category):
+@@ -153,7 +231,10 @@ class ProducerOperation:
+ 
+     @contextmanager
+     def item(self,item):
+-        self.validate_item(item)
++        track = self.validate_item(item)
++        choice = (track.cover_choice or 'auto').casefold()
++        if choice == 'manual' and track.track_id in self.manual_problems:
++            raise ManualCoverError(track, *self.manual_problems[track.track_id])
+         with protected_file(item.track.path) as source_pin:
+             source=next(s for s in self.sources if s.source_id==item.track.source_id and s.active)
+             stamp=_guard_file(item.track.path,source.root_path)
+@@ -170,6 +251,29 @@ class Receipt:
+         self.operation=operation;self.item=item;self.source=source;self.source_proof=proof
+         self.cover=None;self.final_sha='';self.binding=None
+         self.source_pin=source_pin
++        self.uses_manual_cover = False
++
++    def manual_cover(self):
++        track = self.item.track
++        explicit = (track.cover_choice or 'auto').casefold() == 'manual'
++        if not track.manual_cover_path and not explicit:
++            return None
++        try:
++            data = self.operation.verified_manual_bytes(track)
++        except ManualCoverError as exc:
++            # Preserve the configured fallback order when manual was not chosen.
++            # An observed change or loss of an already pinned input is a refusal.
++            if explicit or exc.reason == 'changed' or track.track_id in self.operation.manual_inputs:
++                raise
++            return None
++        try:
++            prepared, mime, _ = prepare_cover_image(data)
++        except (OSError, ValueError, Image.DecompressionBombError) as exc:
++            if not explicit:
++                return None
++            raise ManualCoverError(track, 'invalid_image', str(exc)) from exc
++        self.uses_manual_cover = True
++        return prepared, mime
+ 
+     @contextmanager
+     def publication(self,staged):
+@@ -192,10 +296,27 @@ class Receipt:
+                 raise ValueError('Produced OutputSpec differs from the pinned writer policy.')
+             yield lambda target:self.register(target,pin)
+ 
++    @contextmanager
++    def cover_guard(self):
++        """Recheck the selected cover at publication and pin it on NTFS."""
++        with ExitStack() as guards:
++            if self.uses_manual_cover:
++                track = self.item.track
++                if native.on_windows():
++                    try:
++                        guards.enter_context(protected_file(Path(track.manual_cover_path).absolute()))
++                    except FileNotFoundError as exc:
++                        raise ManualCoverError(track, 'missing', str(exc)) from exc
++                    except (OSError, ValueError) as exc:
++                        raise ManualCoverError(track, 'unverified', str(exc)) from exc
++                self.operation.verified_manual_bytes(track)
++            yield
++
+     def register(self,target,pin):
+         op=self.operation;repo=op.repository;target=Path(target)
+         # Hand off the still-open producer object to final-path deny-delete/write.
+         with ExitStack() as guards:
++            guards.enter_context(self.cover_guard())
+             final_pin=guards.enter_context(protected_file(target))
+             if native.on_windows():
+                 api,h=pin[0];produced=api.query(h);final=native.capture(target)
+@@ -253,7 +374,7 @@ class Receipt:
+                 if native.on_windows():evidence['native_object']=_native_object(final)
+                 conn.execute('INSERT INTO managed_bindings VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                     (current.track_id,op.library_id,binding_id,relative,key,proof.full_sha256,proof.algorithm,
+-                     proof.audio_digest,stamp[0],stamp[1],canonical_json(stamp),canonical_json(source_binding),
++                     proof.audio_digest,*sqlite_file_ids(*stamp[:2]),canonical_json(stamp),canonical_json(source_binding),
+                      canonical_json(applied),canonical_json(evidence),at))
+                 binding=next(b for b in read_managed_bindings(conn)if b.track_id==current.track_id)
+                 from audio_library_organizer.storage.file_state_cache import write_file_facts
+@@ -274,6 +395,8 @@ class Receipt:
+                         or stat_identity(os.fstat(final_pin[0]))!=stamp
+                         or stat_identity(os.fstat(self.source_pin[0]))!=source_now.stat_identity):
+                     raise ValueError('Producer descriptors changed before ownership commit.')
++                if self.uses_manual_cover:
++                    op.verified_manual_bytes(current)
+                 conn.commit()  # Still inside every source, produced-file and DB guard.
+                 self.binding=binding
+ 
+diff --git a/src/audio_library_organizer/jobs/exporter.py b/src/audio_library_organizer/jobs/exporter.py
+index ad31193d3a4f471318c99e63da4d0cb4d06333da..0377f98177495a39df462cb08a850a9209196e1d 100644
+--- a/src/audio_library_organizer/jobs/exporter.py
++++ b/src/audio_library_organizer/jobs/exporter.py
+@@ -113,6 +113,7 @@ class ExportOutcome:
+     raw_verified: bool = False
+     final_size_bytes: int = 0
+     final_sha256: str = ''
++    manual_cover_issue: bool = False
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+@@ -183,6 +184,44 @@ class ExportResult:
+         return 'success'
+ 
+ 
++class ManualCoverError(ValueError):
++    """Refusal limited to a track's configured artwork."""
++
++    def __init__(self, track, reason, detail=''):
++        self.track_name = ' – '.join(part for part in (track.artist, track.title) if part) or track.filename
++        self.cover_path = track.manual_cover_path or '—'
++        self.reason = reason
++        self.detail = detail
++        super().__init__(self.describe('en', details=True))
++
++    def describe(self, language, *, details=False, published=False, continues=False):
++        english = language == 'en'
++        messages = {
++            'missing': ('Okładka jest niedostępna.', 'The cover is unavailable.'),
++            'changed': ('Zmieniła się zawartość lub tożsamość okładki.', 'The cover contents or identity changed.'),
++            'unverified': ('Odczyt lub weryfikacja tożsamości nie powiodły się.',
++                           'The cover could not be read or its identity verified.'),
++            'invalid_image': ('Plik nie zawiera poprawnego obrazu.', 'The file is not a valid image.'),
++            'too_large': ('Okładka przekracza limit 32 MiB.', 'The cover exceeds the 32 MiB limit.'),
++        }
++        if english:
++            message = f'Cannot verify the manual cover for “{self.track_name}”.'
++            outcome = 'The output remains unregistered.' if published else 'Track skipped.'
++            continuation = ' Export continues with the remaining tracks.' if continues else ''
++            location = f' Cover path: {self.cover_path}.'
++        else:
++            message = f'Nie można zweryfikować ręcznej okładki dla utworu „{self.track_name}”.'
++            outcome = 'Wynik pozostał bez powiązania.' if published else 'Utwór pominięto.'
++            continuation = ' Eksport jest kontynuowany dla pozostałych utworów.' if continues else ''
++            location = f' Ścieżka okładki: {self.cover_path}.'
++        result = f'{message} {messages[self.reason][english]} {outcome}{continuation}'
++        if details:
++            result += location
++            if self.detail:
++                result += f' ({self.detail})'
++        return result
++
++
+ def _prepared_source_cover(track: TrackRecord):
+     embedded = extract_embedded_cover(track.path)
+     if not embedded:
+@@ -235,10 +274,11 @@ def _manual_cover(track: TrackRecord):
+         return None
+ 
+ 
+-def resolve_cover_for_export(track: TrackRecord, artwork, cover_cache: dict[str, tuple[bytes, str] | None]):
++def resolve_cover_for_export(track: TrackRecord, artwork, cover_cache: dict[str, tuple[bytes, str] | None],
++                             *, manual_provider=None):
+     """Always return the best available cover, honoring an explicit user choice."""
+     choice = (track.cover_choice or 'auto').casefold()
+-    manual = lambda: _manual_cover(track)
++    manual = manual_provider if manual_provider is not None else lambda: _manual_cover(track)
+     external = lambda: _external_cover(track, artwork, cover_cache)
+     source = lambda: _prepared_source_cover(track)
+     placeholder = _prepared_placeholder_cover
+@@ -258,7 +298,7 @@ def resolve_cover_for_export(track: TrackRecord, artwork, cover_cache: dict[str,
+ 
+ 
+ def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
+-                      cancelled=None, event=None, registration=None) -> ExportResult:
++                      cancelled=None, event=None, registration=None, language='pl') -> ExportResult:
+     """Finish the current item safely; cancellation only prevents the next item."""
+     started = perf_counter()
+     cancelled = cancelled or (lambda: False)
+@@ -274,8 +314,9 @@ def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
+     def emit(phase, source=None, destination=None, message=''):
+         if event is not None:
+             event(ExportEvent(phase, total, len(outcomes), len(verified),
+-                              sum(o.status != 'verified' for o in outcomes),
+-                              source, destination, message))
++                              sum(o.status not in {'verified', 'skipped'} for o in outcomes),
++                              source, destination, message,
++                              skipped=sum(o.status == 'skipped' for o in outcomes)))
+ 
+     emit('operation_started')
+     cleanup_warnings: list[str] = []
+@@ -297,9 +338,12 @@ def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
+             raw_ok = True
+             emit('raw_verified', source, staged)
+             stage = 'tag_error'
+-            cover = resolve_cover_for_export(item.track, artwork, cover_cache)
+             if receipt is not None:
++                cover = resolve_cover_for_export(
++                    item.track, artwork, cover_cache, manual_provider=receipt.manual_cover)
+                 receipt.cover = cover
++            else:
++                cover = resolve_cover_for_export(item.track, artwork, cover_cache)
+             emit('tagging', source, staged)
+             if cover:
+                 write_resolved_tags(staged, item.track, cover_bytes=cover[0], cover_mime=cover[1], replace_cover=True)
+@@ -342,27 +386,44 @@ def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
+                                 register(path)
+                             yield complete
+                     return guarded()
++                publication_options = {}
++                if receipt is not None:
++                    publication_options = {'publication': publication, 'publication_guard': receipt.cover_guard}
+                 target = copy_without_overwrite(source, item.destination_dir, item.filename,
+-                    prepare=prepare, on_warning=cleanup_warnings.append,
+-                    **({'publication':publication} if receipt is not None else {}))
++                    prepare=prepare, on_warning=cleanup_warnings.append, **publication_options)
+             emit('final_verified', source, target)
+             copied.append(target)
+             verified.append(CopyVerification(source, target, True, True, final_size))
+             outcomes.append(ExportOutcome(index, source, target, item.category, 'verified',
+                                           raw_verified=True, final_size_bytes=final_size, final_sha256=final_sha))
+             emit('item_finished', source, target)
++        except ManualCoverError as exc:
++            continues = index < total and not cancelled()
++            error = exc.describe(language, details=True, continues=continues)
++            outcomes.append(ExportOutcome(index, source, None, item.category, 'skipped', error,
++                                          raw_ok, manual_cover_issue=True))
++            emit('item_skipped', source, message=exc.describe(language, continues=continues))
+         except Exception as exc:
+             from audio_library_organizer.safety.copy_pipeline import PublishedCopyError
++            cover_error = None
+             if isinstance(exc, PublishedCopyError):
++                if isinstance(exc.__cause__, ManualCoverError):
++                    cover_error = exc.__cause__
+                 target, stage = exc.destination, 'registration_error'
+             elif receipt is not None and target is not None:
+                 stage = 'registration_error'
+                 exc = OSError('Output registration cleanup failed: ' + str(exc))
+             error = f'{source}: {exc}'
++            message = error
++            if cover_error is not None:
++                continues = index < total and not cancelled()
++                message = cover_error.describe(language, published=True, continues=continues)
++                error = cover_error.describe(language, details=True, published=True, continues=continues)
++                error = f'{error} [{stage}]'
+             (verification_errors if stage == 'verification_error' else errors).append(error)
+             outcomes.append(ExportOutcome(index, source, target, item.category, stage, error,
+-                                          raw_ok, final_size, final_sha))
+-            emit('item_failed', source, target, error)
++                                          raw_ok, final_size, final_sha, manual_cover_issue=cover_error is not None))
++            emit('item_failed', source, target, message)
+         finally:
+             if progress is not None:
+                 progress(index, total, item.track.filename)
+diff --git a/src/audio_library_organizer/jobs/legacy_adoption.py b/src/audio_library_organizer/jobs/legacy_adoption.py
+index e1e2b8ec795c57b35344fcc28ce64cdda028276d..1234fc97a712012ae6a7eeb58f4e198433dce4c8 100644
+--- a/src/audio_library_organizer/jobs/legacy_adoption.py
++++ b/src/audio_library_organizer/jobs/legacy_adoption.py
+@@ -27,7 +27,8 @@ from audio_library_organizer.jobs.managed_files import lexical_locator, source_m
+ from audio_library_organizer.metadata.change_history import metadata_revision
+ from audio_library_organizer.storage.database import require_current_schema
+ from audio_library_organizer.storage.managed_bindings import (
+-    ManagedBinding, canonical_json, evidence_digest, read_managed_bindings, safe_relative, valid_digest,
++    ManagedBinding, binding_stat_identity, canonical_json, evidence_digest, read_managed_bindings, safe_relative,
++    sqlite_file_ids, valid_digest,
+ )
+ from audio_library_organizer.storage.source_registry import list_sources
+ 
+@@ -220,7 +221,8 @@ def _known_state(descriptors, *, conn=None, aliases=None):
+                 locator = str(Path(item.root).joinpath(*safe_relative(row['relative_path']).parts))
+                 if lexical_locator(locator)!=row['locator_key']:
+                     raise ValueError('Known managed binding belongs to another library root.')
+-                owners.append((library_id,row['track_id'],locator,row['device'],row['inode']))
++                device, inode = binding_stat_identity(row)[:2]
++                owners.append((library_id,row['track_id'],locator,device,inode))
+                 try:
+                     token=_guard_file(locator,item.root)
+                 except FileNotFoundError:
+@@ -803,7 +805,7 @@ def adopt_legacy_output(repository, proposal_id, *, confirmed, library_root,
+         progress(0,1,'saving')
+         conn.execute('INSERT INTO managed_bindings VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+             (track.track_id,library_id,binding_id,relative,key,proof.full_sha256,proof.algorithm,proof.audio_digest,
+-             before[0],before[1],canonical_json(before),canonical_json(source_binding),canonical_json(applied),canonical_json(evidence),at))
++             *sqlite_file_ids(*before[:2]),canonical_json(before),canonical_json(source_binding),canonical_json(applied),canonical_json(evidence),at))
+         conn.execute("UPDATE legacy_adoption_proposals SET status='ALREADY_BOUND' WHERE proposal_id=?",(proposal_id,))
+         progress(1,1,'saving')
+         # A final no-follow observation detects replacement after the decoder.
+diff --git a/src/audio_library_organizer/jobs/reporting.py b/src/audio_library_organizer/jobs/reporting.py
+index 040fb521aca25d277bb8210613bf4956fa6bd454..394ee0038825925cb24060192c2fda9f707bf9c0 100644
+--- a/src/audio_library_organizer/jobs/reporting.py
++++ b/src/audio_library_organizer/jobs/reporting.py
+@@ -180,7 +180,9 @@ def export_verification_csv(result, path: Path, *, plan=None) -> Path:
+                 'status': outcome.status if outcome else 'not_started',
+                 'destination_path': str(outcome.destination) if outcome and outcome.destination else '',
+                 'raw_copy_sha256_match': bool(outcome and outcome.raw_verified),
+-                'final_file_exists': bool(outcome and outcome.status == 'verified'),
++                # A destination records successful publication, including a
++                # file preserved after a refused ownership registration.
++                'final_file_exists': bool(outcome and outcome.destination),
+                 'final_size_bytes': outcome.final_size_bytes if outcome else 0,
+                 'verified': bool(outcome and outcome.status == 'verified'),
+                 'error': outcome.error if outcome else '',
+diff --git a/src/audio_library_organizer/metadata/artwork.py b/src/audio_library_organizer/metadata/artwork.py
+index e2f9b89809cc720191c19bebbba03c3e46bae9e9..56796db56da221be7c853093f429ae265598bd84 100644
+--- a/src/audio_library_organizer/metadata/artwork.py
++++ b/src/audio_library_organizer/metadata/artwork.py
+@@ -5,6 +5,9 @@ from io import BytesIO
+ from PIL import Image
+ 
+ 
++MAX_ARTWORK_BYTES = 32 * 1024 * 1024
++
++
+ def prepare_cover_image(data: bytes, *, max_size: int = 1000) -> tuple[bytes, str, tuple[int,int]]:
+     with Image.open(BytesIO(data)) as img:
+         img = img.convert('RGB')
+@@ -85,5 +88,5 @@ def extract_embedded_cover(path) -> tuple[bytes, str] | None:
+ def read_artwork_bytes(path) -> bytes | None:
+     """Worker-only read of an explicitly selected image, without writing it."""
+     with path.open('rb') as stream:
+-        data = stream.read(32 * 1024 * 1024 + 1)
+-    return data if len(data) <= 32 * 1024 * 1024 else None
++        data = stream.read(MAX_ARTWORK_BYTES + 1)
++    return data if len(data) <= MAX_ARTWORK_BYTES else None
+diff --git a/src/audio_library_organizer/safety/copy_pipeline.py b/src/audio_library_organizer/safety/copy_pipeline.py
+index 64f1a58a76ac518326afd60d49bf5b9cfd516455..ba236fc954e74cb3705310d936e3ae8c533a90f3 100644
+--- a/src/audio_library_organizer/safety/copy_pipeline.py
++++ b/src/audio_library_organizer/safety/copy_pipeline.py
+@@ -63,11 +63,12 @@ class PublishedCopyError(OSError):
+ 
+ 
+ def copy_without_overwrite(source: Path, destination_dir: Path, filename: str | None = None, *,
+-                           prepare=None, on_warning=None, publication=None) -> Path:
++                           prepare=None, on_warning=None, publication=None, publication_guard=None) -> Path:
+     """Prepare a private copy, then publish it atomically under a free name.
+ 
+     ``prepare`` can verify/write tags before publication. Cleanup is confined
+     to this operation's fresh temporary directory, never a shared final path.
++    An optional publication guard surrounds the atomic rename/link attempt.
+     """
+     source = Path(source)
+     destination_dir = Path(destination_dir)
+@@ -100,12 +101,14 @@ def copy_without_overwrite(source: Path, destination_dir: Path, filename: str |
+             with publication(staged) if publication is not None else nullcontext() as register:
+                 while True:
+                     target = _unique_path(destination_dir, name)
+-                    try:
+-                        _publish_without_overwrite(staged, target)
++                    guard = publication_guard() if publication_guard is not None else nullcontext()
++                    with guard:
++                        try:
++                            _publish_without_overwrite(staged, target)
++                        except FileExistsError:
++                            continue
+                         published = target
+-                        break
+-                    except FileExistsError:
+-                        continue
++                    break
+                 if register is not None:
+                     # Retire only the POSIX private link, keeping its fd alive.
+                     if os.name != 'nt':
+diff --git a/src/audio_library_organizer/storage/managed_bindings.py b/src/audio_library_organizer/storage/managed_bindings.py
+index 690db2ed2827cfb19d5440f864e997aed69429ec..cb473fd0b65bd57da6da381543961463d4840206 100644
+--- a/src/audio_library_organizer/storage/managed_bindings.py
++++ b/src/audio_library_organizer/storage/managed_bindings.py
+@@ -50,6 +50,28 @@ TABLE_SQL = {
+ }
+ 
+ 
++def _sqlite_file_id(value):
++    """Store the bits of an unsigned file ID in a signed SQLite INTEGER."""
++    if type(value) is not int or not 0 <= value < (1 << 64):
++        raise ValueError('Unsupported physical file identifier.')
++    return value if value < (1 << 63) else value - (1 << 64)
++
++
++def sqlite_file_ids(device, inode):
++    return _sqlite_file_id(device), _sqlite_file_id(inode)
++
++
++def binding_stat_identity(row):
++    """Return raw stat evidence after checking its indexed representation."""
++    token = json.loads(row['stat_json'])
++    stored = row['device'], row['inode']
++    if (not isinstance(token, list) or len(token) != 6
++            or not all(type(value) is int for value in (*token, *stored))
++            or sqlite_file_ids(*token[:2]) != stored):
++        raise ValueError('Invalid adopted binding physical evidence.')
++    return tuple(token)
++
++
+ def canonical_json(value):
+     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False)
+ 
+@@ -124,9 +146,7 @@ def read_managed_bindings(conn):
+         safe_relative(row['relative_path'])
+         if row['library_id'] != library_id or not valid_digest(row['expected_sha256']) or not valid_digest(row['audio_digest']):
+             raise ValueError('Invalid adopted binding identity/digest.')
+-        token = tuple(json.loads(row['stat_json']))
+-        if len(token) != 6 or not all(type(v) is int for v in token) or token[:2] != (row['device'], row['inode']):
+-            raise ValueError('Invalid adopted binding physical evidence.')
++        token = binding_stat_identity(row)
+         payloads = [json.loads(row[name]) for name in ('source_binding_json','applied_snapshot_json','evidence_json')]
+         if not all(isinstance(v, dict) for v in payloads):
+             raise ValueError('Invalid adopted binding snapshot/evidence.')
+diff --git a/src/audio_library_organizer/ui/export_dialogs.py b/src/audio_library_organizer/ui/export_dialogs.py
+index bced4c16c23cf1ac0e26fda5a80bf0ea163af12a..0351efc63e5d35c4b4d5b61ae271bbc084f04eec 100644
+--- a/src/audio_library_organizer/ui/export_dialogs.py
++++ b/src/audio_library_organizer/ui/export_dialogs.py
+@@ -401,6 +401,8 @@ class ExportProgressDialog(_ExportDialog):
+             'preflight_reports': ('FAZA 1 — Sprawdzanie bezpieczeństwa: odczyt wcześniejszych raportów', 'PHASE 1 — Library safety checks: reading previous reports'),
+             'preflight_outputs': ('FAZA 1 — Sprawdzanie bezpieczeństwa: weryfikacja istniejących wyników', 'PHASE 1 — Library safety checks: verifying existing outputs'),
+             'preflight_saving': ('FAZA 1 — Sprawdzanie bezpieczeństwa: kończenie transakcji SQLite', 'PHASE 1 — Library safety checks: completing the SQLite transaction'),
++            'preflight_covers': ('FAZA 1 — Sprawdzanie planu i ręcznych okładek',
++                                 'PHASE 1 — Checking the plan and manual covers'),
+             'operation_started': ('FAZA 2 — Tworzenie plików', 'PHASE 2 — Creating files'),
+             'item_started': ('Kopiowanie', 'Copying'),
+             'copied': ('Skopiowano plik — kontrola SHA-256', 'File copied — checking SHA-256'),
+@@ -410,6 +412,7 @@ class ExportProgressDialog(_ExportDialog):
+             'final_verifying': ('Końcowa kontrola pliku', 'Final file verification'),
+             'final_verified': ('Plik końcowy zweryfikowany', 'Final file verified'),
+             'item_finished': ('Zakończono przetwarzanie pliku', 'File completed'),
++            'item_skipped': ('Pominięto plik', 'File skipped'),
+             'item_failed': ('Błąd przetwarzania pliku', 'File failed'),
+             'operation_finished': ('Oczekiwanie na zakończenie workera…', 'Waiting for worker shutdown…'),
+             'operation_finishing': ('FAZA 3 — Kończenie zadania i przygotowanie raportu…', 'PHASE 3 — Finishing the task and preparing the report…'),
+@@ -496,7 +499,13 @@ class ExportSummaryDialog(_ExportDialog):
+             self.body_layout.addWidget(self.label(self.tr(
+                 'Poprawne kopie pozostały w bibliotece. Ponowne uruchomienie może utworzyć kolejne kopie z unikalnymi nazwami.',
+                 'Completed copies remain in the library. Running again may create additional copies with unique names.'), color=AMBER))
+-        self.notice = self.label('\n'.join(filter(None, [result.fatal_error, *result.cleanup_warnings, *report_errors])), color=AMBER)
++        cover_issues = sum(outcome.manual_cover_issue for outcome in result.outcomes)
++        cover_notice = self.tr(
++            f'Pozycje z odmową weryfikacji ręcznej okładki: {cover_issues}. Szczegóły w raporcie.',
++            f'Tracks with unverified manual covers: {cover_issues}. See the report for details.',
++        ) if cover_issues else ''
++        self.notice = self.label('\n'.join(filter(None, [result.fatal_error, cover_notice,
++            *result.cleanup_warnings, *report_errors])), color=AMBER)
+         if result.cancelled and result.stop_phase == 'preflight' and not result.fatal_error:
+             prefix = self.tr('Zatrzymano przed rozpoczęciem kopiowania. Wszystkie pozycje pozostały nieprzetworzone.',
+                              'Stopped before copying began. All items remain unprocessed.')
+diff --git a/src/audio_library_organizer/ui/main_window.py b/src/audio_library_organizer/ui/main_window.py
+index f2033f19d157868a66dda6f2de70b780c0c55659..76852246321969cdc04135141a1000936c2118c7 100644
+--- a/src/audio_library_organizer/ui/main_window.py
++++ b/src/audio_library_organizer/ui/main_window.py
+@@ -2703,7 +2703,8 @@ class MainWindow(QMainWindow):
+         self._export_dialog.stop_requested.connect(self._request_export_stop)
+         thread = QThread(self)
+         worker = ExportWorker(plan, adoption_repository=self.repository,
+-            library_root=self._export_library.root, known_libraries=self._known_adoption_libraries())
++            library_root=self._export_library.root, known_libraries=self._known_adoption_libraries(),
++            language=self._export_language)
+         worker.moveToThread(thread)
+         thread.started.connect(worker.run)
+         worker.progress.connect(self._export_progress, Qt.ConnectionType.QueuedConnection)
+diff --git a/src/audio_library_organizer/ui/workers.py b/src/audio_library_organizer/ui/workers.py
+index c8a375423c4790150f6b95fa7f0da8402bc09e87..c7f357cb69c4c5a29ae330b249b79706714a1d99 100644
+--- a/src/audio_library_organizer/ui/workers.py
++++ b/src/audio_library_organizer/ui/workers.py
+@@ -332,9 +332,10 @@ class ExportWorker(QObject):
+     progress = Signal(int, int, str)
+     phase = Signal(object)
+ 
+-    def __init__(self, plan, *, adoption_repository=None, library_root=None, known_libraries=()):
++    def __init__(self, plan, *, adoption_repository=None, library_root=None, known_libraries=(), language='pl'):
+         super().__init__()
+         self.plan = plan
++        self.language = language
+         self.adoption_repository = adoption_repository
+         self.library_root = library_root
+         self.known_libraries = tuple(known_libraries)
+@@ -410,18 +411,23 @@ class ExportWorker(QObject):
+             if self._cancelled.is_set():
+                 stop_preflight()
+                 return
+-            checking_preflight = False
+             registration = None
+             if self.adoption_repository is not None:
+                 from audio_library_organizer.jobs.created_output import ProducerOperation
++                self._preflight_phase('covers')
+                 registration = ProducerOperation(self.adoption_repository, self.library_root,
+-                    self.plan, self.known_libraries)
++                    self.plan, self.known_libraries, cancelled=self._cancelled.is_set)
++            if self._cancelled.is_set():
++                stop_preflight()
++                return
++            checking_preflight = False
+             result = execute_copy_plan(
+                 self.plan,
+                 progress=lambda current, total, name: self.progress.emit(current, total, name),
+                 cancelled=self._cancelled.is_set,
+                 event=self.phase.emit,
+                 registration=registration,
++                language=self.language,
+             )
+             finish(result)
+         except InterruptedError as exc:
+diff --git a/tests/test_managed_binding_file_ids_v0427.py b/tests/test_managed_binding_file_ids_v0427.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..28ac8c176273012fd52421c4147d9fdc424c8a02
+--- /dev/null
++++ b/tests/test_managed_binding_file_ids_v0427.py
+@@ -0,0 +1,173 @@
++"""The SQLite ownership boundary for real producer and adoption operations."""
++import hashlib
++import json
++from pathlib import Path
++import sqlite3
++
++import pytest
++
++from audio_adoption_fixtures import copy_audio, mp3_samples
++from audio_library_organizer.audio import identity
++from audio_library_organizer.domain.models import TrackRecord
++from audio_library_organizer.jobs import created_output, legacy_adoption
++from audio_library_organizer.storage.repository import LibraryRepository
++from audio_library_organizer.ui.workers import ExportWorker
++from test_export_preflight_v0427 import preflight
++from test_legacy_adoption_v0427 import inventory, library
++
++
++WINDOWS_DEVICE = 13418630465436060951
++HIGH_BIT = 1 << 63
++MODULUS = 1 << 64
++
++
++@pytest.fixture
++def large_file_ids(monkeypatch):
++    original = identity.stat_identity
++
++    def observed(info):
++        _, inode, *rest = original(info)
++        return WINDOWS_DEVICE, inode | HIGH_BIT, *rest
++
++    # Supply the same observed IDs at every stat-token boundary. All MP3, Qt
++    # worker, database transactions and no-follow filesystem checks stay real.
++    for module in (identity, created_output, legacy_adoption):
++        monkeypatch.setattr(module, 'stat_identity', observed)
++    return observed
++
++
++def assert_binding_round_trip(repo, track_id, output, expected):
++    reopened = LibraryRepository(repo.database_path)
++    reopened.initialize()
++    binding = next(b for b in reopened.list_managed_bindings() if b.track_id == track_id)
++    assert binding.stat_identity == expected
++    assert binding.expected_sha256 == hashlib.sha256(output.read_bytes()).hexdigest()
++    assert binding.audio_digest == identity.inspect_audio(output).audio_digest
++    with sqlite3.connect(repo.database_path) as conn:
++        dev, ino, token = conn.execute(
++            'SELECT device,inode,stat_json FROM managed_bindings WHERE track_id=?', (track_id,)).fetchone()
++        assert (dev, ino) == tuple(value - MODULUS if value >= HIGH_BIT else value for value in expected[:2])
++        assert tuple(json.loads(token)) == expected
++        assert conn.execute('PRAGMA integrity_check').fetchall() == [('ok',)]
++        assert not conn.execute('PRAGMA foreign_key_check').fetchall()
++    return binding
++
++
++def test_producer_registers_large_device_and_inode(preflight, large_file_ids):
++    _, repo, _, worker, results, errors, _ = preflight
++    worker.run()
++    assert not errors and len(results) == 1
++    result = results[0]
++    assert result.created == 2, result.errors
++    tracks = {track.path: track for track in repo.list_tracks()}
++    for outcome in result.outcomes:
++        track = tracks[outcome.source]
++        assert_binding_round_trip(repo, track.track_id, outcome.destination,
++                                  large_file_ids(outcome.destination.stat()))
++
++
++def test_adoption_registers_large_device_and_inode(library, large_file_ids):
++    repo, root, track, output = library
++    proposal = inventory(library).proposals[0]
++    assert proposal.status == 'CANDIDATE' and not repo.list_managed_bindings()
++    with pytest.raises(ValueError, match='confirmation'):
++        legacy_adoption.adopt_legacy_output(repo, proposal.proposal_id, confirmed=False, library_root=root)
++    saved = legacy_adoption.adopt_legacy_output(repo, proposal.proposal_id, confirmed=True, library_root=root)
++    assert saved == assert_binding_round_trip(repo, track.track_id, output, large_file_ids(output.stat()))
++    with pytest.raises(ValueError):
++        legacy_adoption.adopt_legacy_output(repo, proposal.proposal_id, confirmed=True, library_root=root)
++    assert repo.list_managed_bindings() == (saved,)
++
++
++def test_known_missing_locator_still_reserves_physical_file(library, tmp_path, large_file_ids):
++    owner, owner_root, track, output = library
++    proposal = inventory(library).proposals[0]
++    saved = legacy_adoption.adopt_legacy_output(owner, proposal.proposal_id, confirmed=True, library_root=owner_root)
++
++    other_root = tmp_path / 'other-library'
++    other = LibraryRepository(other_root / '.alo' / 'library.sqlite3')
++    other.initialize()
++    other.bootstrap_sources([track.path.parent])
++    replacement = TrackRecord(path=track.path, size_bytes=track.size_bytes, mtime_ns=track.mtime_ns,
++                              sha256=track.sha256, artist=track.artist, title=track.title, status='duplicate')
++    other.upsert_track(replacement)
++    target = other_root / 'GOTOWE' / output.name
++    target.parent.mkdir()
++    output.rename(target)
++    assert not output.exists() and large_file_ids(target.stat())[:2] == saved.stat_identity[:2]
++
++    known = legacy_adoption.KnownLibrary(str(owner_root), str(owner.database_path), owner.library_id)
++    report = legacy_adoption.inventory_legacy_outputs(other, library_root=other_root, known_libraries=(known,))
++    assert report.proposals[0].status == 'CONFLICT'
++    assert not report.proposals[0].can_adopt and not other.list_managed_bindings()
++    assert owner.list_managed_bindings() == (saved,)
++
++
++@pytest.mark.parametrize('raw', [0, 1, HIGH_BIT - 1, HIGH_BIT, MODULUS - 1, WINDOWS_DEVICE])
++def test_sqlite_file_id_boundaries_are_lossless_and_unique(raw):
++    from audio_library_organizer.storage.managed_bindings import binding_stat_identity, sqlite_file_ids
++
++    values = [0, 1, HIGH_BIT - 1, HIGH_BIT, MODULUS - 1, WINDOWS_DEVICE]
++    other = values[(values.index(raw) + 1) % len(values)]
++    device, inode = sqlite_file_ids(raw, other)
++    assert -(1 << 63) <= device < HIGH_BIT and -(1 << 63) <= inode < HIGH_BIT
++    assert len({sqlite_file_ids(value, 1)[0] for value in values}) == len(values)
++    token = (raw, other, 3, 4, 5, 1)
++    with sqlite3.connect(':memory:') as conn:
++        conn.row_factory = sqlite3.Row
++        conn.execute('CREATE TABLE proof(device INTEGER, inode INTEGER, stat_json TEXT, UNIQUE(device,inode))')
++        conn.execute('INSERT INTO proof VALUES (?, ?, ?)', (device, inode, json.dumps(token)))
++        with pytest.raises(sqlite3.IntegrityError):
++            conn.execute('INSERT INTO proof VALUES (?, ?, ?)', (device, inode, json.dumps(token)))
++        assert binding_stat_identity(conn.execute('SELECT * FROM proof').fetchone()) == token
++
++
++@pytest.mark.parametrize('bad', [-1, -HIGH_BIT, MODULUS, MODULUS + 1, True, '1', 1.0, None])
++def test_rejects_invalid_raw_identifiers(bad):
++    from audio_library_organizer.storage.managed_bindings import sqlite_file_ids
++
++    for pair in ((bad, 1), (1, bad)):
++        with pytest.raises(ValueError, match='Unsupported physical file identifier'):
++            sqlite_file_ids(*pair)
++
++
++@pytest.mark.parametrize('device,raw', [(-1, -1), (-1, MODULUS), (1, MODULUS - 1), ('x', 1), (1, True)])
++def test_rejects_corrupt_binding_identity(device, raw):
++    from audio_library_organizer.storage.managed_bindings import binding_stat_identity
++
++    row = dict(device=device, inode=1, stat_json=json.dumps([raw, 1, 3, 4, 5, 1]))
++    with pytest.raises(ValueError):
++        binding_stat_identity(row)
++
++
++def test_retry_cannot_overwrite_a_published_file_without_binding(preflight):
++    from dataclasses import replace
++
++    _, repo, paths, worker, results, errors, _ = preflight
++    worker.plan = replace(worker.plan, items=worker.plan.items[:1])
++    source = worker.plan.items[0].track.path
++    source_bytes = source.read_bytes()
++    with sqlite3.connect(repo.database_path) as conn:
++        conn.execute("CREATE TRIGGER deny_binding BEFORE INSERT ON managed_bindings "
++                     "BEGIN SELECT RAISE(ABORT, 'injected registration failure'); END")
++    worker.run()
++    assert not errors and len(results) == 1
++    result = results[0]
++    assert result.created == 0 and result.failed == 1 and not repo.list_managed_bindings()
++    outcome = result.outcomes[0]
++    assert outcome.status == 'registration_error' and outcome.raw_verified
++    target = outcome.destination
++    assert target is not None and target.is_file()
++    output_bytes = target.read_bytes()
++    assert hashlib.sha256(output_bytes).hexdigest() == outcome.final_sha256
++    with sqlite3.connect(repo.database_path) as conn:
++        conn.execute('DROP TRIGGER deny_binding')
++
++    retry = ExportWorker(worker.plan, adoption_repository=repo, library_root=paths.root)
++    finished = []
++    retry.finished.connect(finished.append)
++    retry.failed.connect(errors.append)
++    retry.run()
++    assert len(errors) == 1 and not finished
++    assert not repo.list_managed_bindings() and list(paths.root.rglob('*.mp3')) == [target]
++    assert target.read_bytes() == output_bytes and source.read_bytes() == source_bytes
+diff --git a/tests/test_manual_cover_export_v0427.py b/tests/test_manual_cover_export_v0427.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..fc9353e93e4eed5ffbe107f4b2d53ec56964275a
+--- /dev/null
++++ b/tests/test_manual_cover_export_v0427.py
+@@ -0,0 +1,479 @@
++"""Real producer, image bytes, SQLite and Qt export boundaries."""
++import csv
++from dataclasses import asdict
++import hashlib
++import io
++import os
++from pathlib import Path
++import sqlite3
++from threading import Event
++from time import monotonic
++
++import pytest
++from mutagen.id3 import ID3
++from PIL import Image
++from PySide6.QtCore import QCoreApplication, QEvent
++from shiboken6 import isValid
++
++from audio_adoption_fixtures import copy_audio, mp3_samples
++from audio_library_organizer.audio.identity import inspect_audio
++from audio_library_organizer.domain.models import TrackRecord
++from audio_library_organizer.jobs import exporter
++from audio_library_organizer.safety.copy_pipeline import sha256_file
++from audio_library_organizer.storage.repository import LibraryRepository
++from test_export_preflight_v0427 import preflight
++from test_export_window_v0427 import export_window, no_unhandled_qt_errors
++
++
++def set_cover(repo, track, path, *, color=None):
++    if color is not None:
++        Image.new('RGB', (12, 12), color).save(path)
++    track.manual_cover_path = str(path)
++    track.cover_choice = 'manual'
++    repo.upsert_track(track)
++
++
++def assert_embedded_color(path, expected):
++    (picture,) = ID3(path).getall('APIC')
++    assert picture.mime == 'image/jpeg'
++    with Image.open(io.BytesIO(picture.data)) as image:
++        actual = image.getpixel((0, 0))
++    assert all(abs(a - b) <= 3 for a, b in zip(actual, expected))
++
++
++def wait_for_export(window):
++    deadline = monotonic() + 45
++    idle = Event()
++    while window._thread is not None and monotonic() < deadline:
++        QCoreApplication.processEvents()
++        idle.wait(0.005)
++    assert window._thread is None, 'Export did not tear down its worker within 45 seconds'
++    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
++
++
++@pytest.mark.parametrize('stop_after', [None, 3])
++def test_empty_output_library_isolates_missing_cover_and_persists_bindings(
++        export_window, tmp_path, mp3_samples, monkeypatch, stop_after):
++    window, tracks, summaries = export_window
++    repo = window.repository
++    paths = window.app_settings.library
++    for i in range(2, 14):
++        path = copy_audio(mp3_samples['original'], tracks[0].path.parent / f'track-{i:02}.mp3')
++        stat = path.stat()
++        track = TrackRecord(path=path, artist='Artist', title=f'Title {i:02}', year='2000',
++                            genre='House', bpm=128, status='ready', locked_fields={'__status__'},
++                            sha256=sha256_file(path), size_bytes=stat.st_size, mtime_ns=stat.st_mtime_ns)
++        repo.upsert_track(track)
++        tracks.append(track)
++    set_cover(repo, tracks[0], tmp_path / 'red.jpg', color=(255, 0, 0))
++    set_cover(repo, tracks[1], tmp_path / 'green.png', color=(0, 255, 0))
++    missing = tmp_path / 'missing-manual.png'
++    # The middle record is the only one with unavailable artwork.
++    set_cover(repo, tracks[7], missing)
++    window.refresh_data()
++    assert all(not list(root.iterdir()) for root in (paths.ready, paths.review, paths.not_selected))
++    before = {track.track_id: asdict(repo.get_track(track.track_id)) for track in tracks}
++    originals = {track.path: (track.path.read_bytes(), track.path.stat().st_mtime_ns) for track in tracks}
++
++    if stop_after is not None:
++        original_execute = exporter.execute_copy_plan
++
++        def execute(plan, **kwargs):
++            send = kwargs['event']
++
++            def observe(event):
++                send(event)
++                if event.phase == 'item_finished' and event.created == stop_after:
++                    window._worker.cancel()
++
++            return original_execute(plan, **{**kwargs, 'event': observe})
++
++        monkeypatch.setattr(exporter, 'execute_copy_plan', execute)
++    window.export_library()
++    thread, worker = window._thread, window._worker
++    assert thread is not None and worker is not None
++    try:
++        wait_for_export(window)
++    finally:
++        if window._thread is not None:
++            window._request_export_stop()
++            wait_for_export(window)
++    result = window._export_result
++    assert not isValid(thread) and not isValid(worker)
++    assert not result.fatal_error and len(summaries) == 1
++    assert result.planned == 14
++    assert result.created == (13 if stop_after is None else stop_after)
++    assert result.failed == 0
++    assert not list(paths.root.rglob('.alo-copy-*'))
++    if stop_after is None:
++        assert (result.processed, result.remaining, result.skipped) == (14, 0, 1)
++        omitted = next(outcome for outcome in result.outcomes if outcome.source == tracks[7].path)
++        assert omitted.status == 'skipped' and omitted.destination is None
++        assert 'Nie można zweryfikować ręcznej okładki' in omitted.error
++        assert tracks[7].title in omitted.error and str(missing) in omitted.error
++        assert 'pominięto' in omitted.error.lower()
++        assert summaries[0][0].outcome == 'problems'
++        assert 'okładk' in summaries[0][0].notice_text
++        assert str(missing) not in summaries[0][0].notice_text
++        with summaries[0][0].report.open(encoding='utf-8-sig', newline='') as stream:
++            rows = list(csv.DictReader(stream))
++        assert len(rows) == 14 and sum(row['status'] == 'skipped' for row in rows) == 1
++        assert any(str(missing) in row['error'] for row in rows)
++    else:
++        assert result.cancelled and result.remaining > 0 and summaries[0][0].outcome == 'cancelled'
++
++    reopened = LibraryRepository(paths.database)
++    reopened.initialize()
++    bindings = {binding.track_id: binding for binding in reopened.list_managed_bindings()}
++    by_source = {track.path: track for track in tracks}
++    verified = {by_source[item.source].track_id: item for item in result.outcomes if item.status == 'verified'}
++    assert bindings.keys() == verified.keys()
++    assert tracks[7].track_id not in bindings
++    from audio_library_organizer.domain.file_state import FileState
++    from audio_library_organizer.jobs.file_reconciliation import check_library
++
++    checked = check_library(reopened, library_root=paths.root)
++    persisted = {entry.track_id: entry for entry in checked.files}
++    for track_id in bindings:
++        assert persisted[track_id].evaluation.state == FileState.IN_LIBRARY
++        assert persisted[track_id].facts.managed_expected
++        assert not persisted[track_id].evaluation.is_confirmed
++    assert not persisted[tracks[7].track_id].facts.managed_expected
++    assert set(paths.root.rglob('*.mp3')) == set(result.copied)
++    for track_id, item in verified.items():
++        binding = bindings[track_id]
++        target = Path(binding.locator(paths.root))
++        proof = inspect_audio(target)
++        assert target == item.destination
++        assert proof.status == 'VALID' and proof.full_sha256 == binding.expected_sha256 == item.final_sha256
++        assert proof.audio_digest == binding.audio_digest == inspect_audio(item.source).audio_digest
++    if stop_after is None:
++        assert_embedded_color(verified[tracks[0].track_id].destination, (255, 0, 0))
++        assert_embedded_color(verified[tracks[1].track_id].destination, (0, 255, 0))
++        assert verified[tracks[2].track_id].destination.is_file()
++    assert {track.track_id: asdict(reopened.get_track(track.track_id)) for track in tracks} == before
++    assert all((path.read_bytes(), path.stat().st_mtime_ns) == value for path, value in originals.items())
++    with sqlite3.connect(paths.database) as conn:
++        assert conn.execute('PRAGMA integrity_check').fetchall() == [('ok',)]
++        assert not conn.execute('PRAGMA foreign_key_check').fetchall()
++
++
++@pytest.mark.parametrize('action', ['bytes', 'replace_same_bytes', 'metadata_only', 'corrupt_image', 'late_change'])
++def test_manual_cover_changes_are_checked_at_the_correct_boundary(preflight, tmp_path, action):
++    _, repo, paths, worker, results, errors, _ = preflight
++    track = worker.plan.items[0].track
++    cover = tmp_path / 'manual.png'
++    set_cover(repo, track, cover, color=(255, 0, 0))
++    if action == 'corrupt_image':
++        cover.write_bytes(b'not an image')
++    triggered = []
++
++    def inject(event):
++        phase = 'tags_written' if action == 'late_change' else 'item_started'
++        if triggered or event.phase != phase or event.source != track.path:
++            return
++        triggered.append(True)
++        if action in ('bytes', 'late_change'):
++            Image.new('RGB', (12, 12), (0, 0, 255)).save(cover)
++        elif action == 'replace_same_bytes':
++            replacement = cover.with_name('replacement.png')
++            replacement.write_bytes(cover.read_bytes())
++            replacement.replace(cover)
++        elif action == 'metadata_only':
++            info = cover.stat()
++            os.utime(cover, ns=(info.st_atime_ns, info.st_mtime_ns + 1_000_000_000))
++
++    worker.phase.connect(inject)
++    worker.run()
++    assert triggered and not errors and len(results) == 1
++    result = results[0]
++    if action == 'metadata_only':
++        assert result.created == 2 and result.skipped == 0
++        assert_embedded_color(result.outcomes[0].destination, (255, 0, 0))
++    else:
++        assert result.created == 1 and result.skipped == 1 and result.failed == 0
++        assert result.outcomes[0].status == 'skipped' and result.outcomes[0].destination is None
++        assert str(cover) in result.outcomes[0].error
++        assert not any(b.track_id == track.track_id for b in repo.list_managed_bindings())
++        assert len(list(paths.root.rglob('*.mp3'))) == 1
++
++
++@pytest.mark.parametrize('action', ['write', 'rename_parent'])
++def test_change_during_manual_cover_read_is_denied_or_rejected(preflight, tmp_path, monkeypatch, action):
++    _, repo, paths, worker, results, errors, _ = preflight
++    track = worker.plan.items[0].track
++    cover_dir = tmp_path / 'covers'
++    cover_dir.mkdir()
++    cover = cover_dir / 'manual.png'
++    set_cover(repo, track, cover, color=(255, 0, 0))
++    if action == 'rename_parent':
++        track.cover_choice = 'auto'
++        repo.upsert_track(track)
++    replacement = tmp_path / 'blue.png'
++    Image.new('RGB', (12, 12), (0, 0, 255)).save(replacement)
++    blue = replacement.read_bytes()
++    attempt = []
++    original_open = io.open
++
++    class RacingRead:
++        def __init__(self, stream):
++            self.stream = stream
++
++        def __enter__(self):
++            return self
++
++        def __exit__(self, *args):
++            return self.stream.__exit__(*args)
++
++        def fileno(self):
++            return self.stream.fileno()
++
++        def read(self, *args):
++            data = self.stream.read(*args)
++            if not attempt:
++                try:
++                    if action == 'rename_parent':
++                        cover_dir.rename(tmp_path / 'moved-covers')
++                    else:
++                        with original_open(cover, 'wb') as writer:
++                            writer.write(blue)
++                except PermissionError:
++                    attempt.append('denied')
++                else:
++                    attempt.append('changed')
++            return data
++
++    def observed_open(path, mode='r', *args, **kwargs):
++        stream = original_open(path, mode, *args, **kwargs)
++        if path == cover and mode == 'rb':
++            return RacingRead(stream)
++        return stream
++
++    monkeypatch.setattr(io, 'open', observed_open)
++    worker.run()
++    assert not errors and attempt and len(results) == 1
++    result = results[0]
++    if os.name == 'nt':
++        assert attempt == ['denied'] and result.created == 2
++        assert_embedded_color(result.outcomes[0].destination, (255, 0, 0))
++    else:
++        assert attempt == ['changed'] and result.created == 1 and result.skipped == 1
++        assert result.outcomes[0].destination is None
++        assert len(list(paths.root.rglob('*.mp3'))) == len(repo.list_managed_bindings()) == 1
++
++
++def test_unplanned_record_does_not_open_its_manual_cover(preflight, tmp_path, monkeypatch):
++    _, repo, _, worker, results, errors, _ = preflight
++    source = worker.plan.items[0].track.path
++    path = copy_audio(source, source.with_name('out-of-plan.mp3'))
++    info = path.stat()
++    outside = TrackRecord(path=path, sha256=sha256_file(path), size_bytes=info.st_size,
++                          mtime_ns=info.st_mtime_ns)
++    cover = tmp_path / 'unplanned.png'
++    set_cover(repo, outside, cover, color=(255, 0, 0))
++    original_open = io.open
++
++    def observed_open(path, mode='r', *args, **kwargs):
++        if path == cover and mode == 'rb':
++            raise PermissionError('out-of-plan cover is not readable')
++        return original_open(path, mode, *args, **kwargs)
++
++    monkeypatch.setattr(io, 'open', observed_open)
++    worker.run()
++    assert not errors and results[0].created == 2
++    assert outside.track_id not in {binding.track_id for binding in repo.list_managed_bindings()}
++
++
++@pytest.mark.parametrize('choice', ['source', 'auto'])
++def test_non_manual_selection_preserves_available_source_cover(preflight, tmp_path, choice):
++    _, repo, _, worker, results, errors, _ = preflight
++    track = worker.plan.items[0].track
++    copy_audio(track.path, track.path.with_name('with-cover.mp3'), cover=True).replace(track.path)
++    info = track.path.stat()
++    track.size_bytes, track.mtime_ns = info.st_size, info.st_mtime_ns
++    track.sha256 = sha256_file(track.path)
++    track.cover_choice = choice
++    track.manual_cover_path = str(tmp_path / 'unused-missing.png')
++    repo.upsert_track(track)
++    worker.run()
++    assert not errors and results[0].created == 2 and results[0].skipped == 0
++    assert_embedded_color(results[0].outcomes[0].destination, (20, 40, 80))
++
++
++def test_manual_cover_preflight_can_stop_before_copying(preflight, tmp_path):
++    _, repo, paths, worker, results, errors, _ = preflight
++    track = worker.plan.items[0].track
++    set_cover(repo, track, tmp_path / 'red.png', color=(255, 0, 0))
++    worker.phase.connect(lambda event: worker.cancel() if event.phase == 'preflight_covers' else None)
++    worker.run()
++    assert not errors and len(results) == 1 and results[0].cancelled
++    assert results[0].stop_phase == 'preflight'
++    assert results[0].created == results[0].processed == 0
++    assert not list(paths.root.rglob('*.mp3')) and not repo.list_managed_bindings()
++
++
++def test_missing_cover_english_log_and_report(preflight, tmp_path):
++    _, repo, _, worker, results, errors, events = preflight
++    worker.language = 'en'
++    track = worker.plan.items[0].track
++    path = tmp_path / 'missing.png'
++    set_cover(repo, track, path)
++    worker.run()
++    assert not errors and results[0].created == 1 and results[0].skipped == 1
++    event = next(event for event in events if event.phase == 'item_skipped')
++    assert 'Cannot verify the manual cover' in event.message
++    assert 'Export continues' in event.message and str(path) not in event.message
++    outcome = results[0].outcomes[0]
++    assert str(path) in outcome.error and 'Track skipped.' in outcome.error
++    assert event.processed == 1 and event.failed == 0 and event.skipped == 1
++
++
++def test_manual_cover_export_never_overwrites_a_late_occupied_name(preflight, tmp_path, mp3_samples):
++    _, repo, paths, worker, results, errors, _ = preflight
++    item = worker.plan.items[0]
++    set_cover(repo, item.track, tmp_path / 'red.jpg', color=(255, 0, 0))
++    occupied = item.destination_dir / item.filename
++    existing = mp3_samples['different_tail'].read_bytes()
++
++    def occupy(event):
++        if event.phase == 'item_started' and event.source == item.track.path:
++            assert not occupied.exists()
++            occupied.write_bytes(existing)
++
++    worker.phase.connect(occupy)
++    worker.run()
++    assert not errors and results[0].created == 2
++    assert occupied.read_bytes() == existing
++    outcome = results[0].outcomes[0]
++    assert outcome.destination != occupied and outcome.destination.is_file()
++    assert_embedded_color(outcome.destination, (255, 0, 0))
++    assert all(Path(binding.locator(paths.root)) != occupied for binding in repo.list_managed_bindings())
++
++
++def test_cover_changed_when_choosing_destination_cannot_publish_stale_artwork(
++        preflight, tmp_path, monkeypatch):
++    from audio_library_organizer.safety import copy_pipeline
++
++    _, repo, paths, worker, results, errors, _ = preflight
++    item = worker.plan.items[0]
++    cover = tmp_path / 'manual.png'
++    set_cover(repo, item.track, cover, color=(255, 0, 0))
++    original = copy_pipeline._unique_path
++    changed = []
++
++    def choose(directory, filename):
++        if filename == item.filename and not changed:
++            Image.new('RGB', (12, 12), (0, 0, 255)).save(cover)
++            changed.append(True)
++        return original(directory, filename)
++
++    monkeypatch.setattr(copy_pipeline, '_unique_path', choose)
++    worker.run()
++    assert changed and not errors
++    assert results[0].created == 1 and results[0].skipped == 1
++    assert results[0].outcomes[0].destination is None
++    assert len(list(paths.root.rglob('*.mp3'))) == len(repo.list_managed_bindings()) == 1
++
++
++def test_oversized_cover_is_omitted_before_reading_its_payload(preflight, tmp_path, monkeypatch):
++    _, repo, _, worker, results, errors, _ = preflight
++    track = worker.plan.items[0].track
++    cover = tmp_path / 'oversized.png'
++    with cover.open('wb') as stream:
++        stream.truncate(32 * 1024 * 1024 + 1)
++    set_cover(repo, track, cover)
++    original_open = io.open
++
++    class LimitProbe:
++        def __init__(self, stream):
++            self.stream = stream
++
++        def __enter__(self):
++            return self
++
++        def __exit__(self, *args):
++            return self.stream.__exit__(*args)
++
++        def fileno(self):
++            return self.stream.fileno()
++
++        def read(self, *args):
++            pytest.fail('Oversized artwork payload must not be read')
++
++    def observed_open(path, mode='r', *args, **kwargs):
++        stream = original_open(path, mode, *args, **kwargs)
++        return LimitProbe(stream) if path == cover and mode == 'rb' else stream
++
++    monkeypatch.setattr(io, 'open', observed_open)
++    worker.run()
++    assert not errors and results[0].created == 1 and results[0].skipped == 1
++    assert '32 MiB' in results[0].outcomes[0].error
++
++
++def test_late_cover_refusal_records_published_but_unverified_output(preflight, tmp_path):
++    from audio_library_organizer.jobs.reporting import export_verification_csv
++
++    _, repo, paths, worker, results, errors, _ = preflight
++    item = worker.plan.items[0]
++    cover = tmp_path / 'manual.png'
++    set_cover(repo, item.track, cover, color=(255, 0, 0))
++
++    def change(event):
++        if event.phase == 'registering' and event.source == item.track.path:
++            Image.new('RGB', (12, 12), (0, 0, 255)).save(cover)
++
++    worker.phase.connect(change)
++    worker.run()
++    assert not errors and results[0].created == 1 and results[0].failed == 1
++    outcome = results[0].outcomes[0]
++    assert outcome.status == 'registration_error' and outcome.destination.is_file()
++    assert inspect_audio(outcome.destination).status == 'VALID'
++    assert str(cover) in outcome.error and 'bez powiązania' in outcome.error
++    assert item.track.track_id not in {binding.track_id for binding in repo.list_managed_bindings()}
++    report = export_verification_csv(results[0], paths.reports / 'audit.csv', plan=worker.plan)
++    with report.open(encoding='utf-8-sig', newline='') as stream:
++        row = next(csv.DictReader(stream))
++    assert row['destination_path'] == str(outcome.destination)
++    assert row['final_file_exists'] == 'True' and row['verified'] == 'False'
++
++
++@pytest.mark.skipif(os.name != 'nt', reason='Requires native Windows and local NTFS')
++def test_ntfs_deny_write_through_publication_and_commit(preflight, tmp_path, monkeypatch):
++    from audio_library_organizer.jobs import created_output
++    from audio_library_organizer.safety import copy_pipeline, windows_file_identity
++
++    _, repo, _, worker, results, errors, _ = preflight
++    item = worker.plan.items[0]
++    cover = tmp_path / 'manual.png'
++    set_cover(repo, item.track, cover, color=(255, 0, 0))
++    assert windows_file_identity.capture(cover).leaf.filesystem == 'NTFS'
++    original_bytes = cover.read_bytes()
++    denied = set()
++
++    def try_write(boundary):
++        with pytest.raises(PermissionError):
++            with cover.open('wb') as stream:
++                stream.write(b'foreign data')
++        denied.add(boundary)
++
++    publish = copy_pipeline._publish_without_overwrite
++    validate = created_output.ProducerOperation.validate_item
++
++    def observe_publish(staged, target):
++        if target.name == item.filename:
++            try_write('publish')
++        return publish(staged, target)
++
++    def observe_validate(operation, current_item, conn=None):
++        if conn is not None and current_item.track.track_id == item.track.track_id:
++            try_write('commit')
++        return validate(operation, current_item, conn)
++
++    monkeypatch.setattr(copy_pipeline, '_publish_without_overwrite', observe_publish)
++    monkeypatch.setattr(created_output.ProducerOperation, 'validate_item', observe_validate)
++    worker.run()
++    assert denied == {'publish', 'commit'}
++    assert not errors and results[0].created == 2
++    assert cover.read_bytes() == original_bytes
++    assert_embedded_color(results[0].outcomes[0].destination, (255, 0, 0))
++    assert len(repo.list_managed_bindings()) == 2
