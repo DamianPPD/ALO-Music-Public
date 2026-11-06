@@ -1,5 +1,5 @@
 name: ALO APEv2 native validation
-run-name: ALO APEv2 / Windows Server 2022 / CPython 3.12
+run-name: ALO APEv2 / isolated Windows lease and Qt recheck
 on:
   push:
     branches: [ci/windows-62d-validation]
@@ -51,7 +51,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Baseline fetch failed' }
       - name: Verify sealed trees and run native RED, GREEN and regressions
         run: |
-          python -B .ci/apev2/validate.py
+          python -B .ci/apev2/validate.py lease-recheck
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Preserve native evidence
         if: always()

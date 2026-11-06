@@ -294,7 +294,7 @@ def prepare_native(repo, evidence, private):
     return red, green
 
 
-def pytest_stage(name, phase, root, tests, evidence, private):
+def pytest_stage(name, phase, root, tests, evidence, private, *, timeout=600):
     junit = evidence / f'{name}.xml'
     log = evidence / f'{name}.log'
     env = os.environ | dict(
@@ -302,6 +302,7 @@ def pytest_stage(name, phase, root, tests, evidence, private):
         ALO_EVIDENCE=str(evidence), ALO_PHASE=phase, ALO_62D_EVIDENCE=str(evidence),
     )
     command = [sys.executable, '-B', '-m', 'pytest', '-vv', '-ra', '--tb=short',
+               '-o', 'faulthandler_timeout=90',
                '--basetemp', str(private / name), '--junitxml', str(junit), *tests]
     print(f'Running {name}: {tests}', flush=True)
     summary = dict(stage=name, targets=list(tests))
@@ -309,10 +310,10 @@ def pytest_stage(name, phase, root, tests, evidence, private):
         try:
             summary['exit_code'] = subprocess.run(command, cwd=root, env=env,
                                                   stdout=out, stderr=subprocess.STDOUT,
-                                                  timeout=600).returncode
+                                                  timeout=timeout).returncode
         except subprocess.TimeoutExpired:
             summary['exit_code'] = 124
-            out.write(b'\nHarness timeout after 600 seconds\n')
+            out.write(f'\nHarness timeout after {timeout} seconds\n'.encode())
     print(log.read_text(encoding='utf-8', errors='replace')[-30000:], flush=True)
     try:
         suite = ET.parse(junit).getroot().find('testsuite')
@@ -385,7 +386,7 @@ def finish(evidence, stages, error=None):
     return 0 if summary['success'] else 1
 
 
-def run_native():
+def run_native(*, lease_recheck=False):
     repo = HERE.parents[1]
     evidence = Path(os.environ['RUNNER_TEMP']) / 'alo-apev2-evidence'
     evidence.mkdir()
@@ -396,6 +397,23 @@ def run_native():
         private = select_volume(evidence)
         native_environment(evidence, private, repo)
         red, green = prepare_native(repo, evidence, private)
+        if lease_recheck:
+            contract = 'tests/test_output_contract_windows_v0427.py'
+            selected = f'{contract}::test_two_bindings_only_assess_the_selected_record'
+            isolated = (
+                ('native-selected-binding-recheck', green, (selected,), 120),
+                ('native-selected-binding-base', red, (selected,), 120),
+                ('native-output-contract-recheck', green, (contract, '--deselect=' + selected), 360),
+                ('native-metadata-lease-recheck', green,
+                 ('tests/test_windows_output_identity_v0427.py',
+                  'tests/test_windows_output_lease_v0427.py',
+                  'tests/test_windows_output_native_v0427.py'), 360),
+                ('native-qt-lifecycle-recheck', green, ('tests/test_identification_qt_lifecycle_v0427.py',), 300),
+            )
+            for name, root, targets, timeout in isolated:
+                suite = pytest_stage(name, 'recheck', root, targets, evidence, private, timeout=timeout)
+                stages.append((suite, green_ok(suite)))
+            return finish(evidence, stages)
         baseline = pytest_stage('native-red', 'red', red, (TEST,), evidence, private)
         red_result = red_checks(baseline)
         record(evidence, 'native-red-expected', red_result)
@@ -424,11 +442,12 @@ def main():
     seal.add_argument('--repo', type=Path, required=True)
     seal.add_argument('--patch', type=Path, required=True)
     seal.add_argument('--output', type=Path, required=True)
+    subcommands.add_parser('lease-recheck', help='Isolate the timed-out Windows regression stages')
     args = parser.parse_args()
     if args.command == 'seal':
         local_seal(args)
         return 0
-    return run_native()
+    return run_native(lease_recheck=args.command == 'lease-recheck')
 
 
 if __name__ == '__main__':
