@@ -5,6 +5,9 @@ from io import BytesIO
 from PIL import Image
 
 
+MAX_ARTWORK_BYTES = 32 * 1024 * 1024
+
+
 def prepare_cover_image(data: bytes, *, max_size: int = 1000) -> tuple[bytes, str, tuple[int,int]]:
     with Image.open(BytesIO(data)) as img:
         img = img.convert('RGB')
@@ -85,5 +88,5 @@ def extract_embedded_cover(path) -> tuple[bytes, str] | None:
 def read_artwork_bytes(path) -> bytes | None:
     """Worker-only read of an explicitly selected image, without writing it."""
     with path.open('rb') as stream:
-        data = stream.read(32 * 1024 * 1024 + 1)
-    return data if len(data) <= 32 * 1024 * 1024 else None
+        data = stream.read(MAX_ARTWORK_BYTES + 1)
+    return data if len(data) <= MAX_ARTWORK_BYTES else None

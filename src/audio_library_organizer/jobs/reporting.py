@@ -180,7 +180,9 @@ def export_verification_csv(result, path: Path, *, plan=None) -> Path:
                 'status': outcome.status if outcome else 'not_started',
                 'destination_path': str(outcome.destination) if outcome and outcome.destination else '',
                 'raw_copy_sha256_match': bool(outcome and outcome.raw_verified),
-                'final_file_exists': bool(outcome and outcome.status == 'verified'),
+                # A destination records successful publication, including a
+                # file preserved after a refused ownership registration.
+                'final_file_exists': bool(outcome and outcome.destination),
                 'final_size_bytes': outcome.final_size_bytes if outcome else 0,
                 'verified': bool(outcome and outcome.status == 'verified'),
                 'error': outcome.error if outcome else '',

@@ -8,6 +8,7 @@ from contextlib import contextmanager, ExitStack, closing
 from dataclasses import asdict, replace
 import ctypes
 import hashlib
+import io
 import os
 from pathlib import Path
 import sqlite3
@@ -15,17 +16,22 @@ import time
 from uuid import uuid4
 
 from mutagen.id3 import ID3
+from PIL import Image
 from audio_library_organizer.audio.identity import inspect_audio, stat_identity, _tags
 from audio_library_organizer.domain.file_state import OutputSnapshot, FileState
 from audio_library_organizer.domain.output_spec import OutputSpec, OutputField, FieldAction, compare_specs
 from audio_library_organizer.domain.settings import LibraryPaths
+from audio_library_organizer.metadata.artwork import MAX_ARTWORK_BYTES, prepare_cover_image
 from audio_library_organizer.metadata.change_history import metadata_revision
 from audio_library_organizer.metadata.mp3_output import build_mp3_spec
-from audio_library_organizer.storage.managed_bindings import canonical_json, evidence_digest, read_managed_bindings, safe_relative
+from audio_library_organizer.storage.managed_bindings import (
+    canonical_json, evidence_digest, read_managed_bindings, safe_relative, sqlite_file_ids,
+)
 from audio_library_organizer.storage.source_registry import list_sources
 from audio_library_organizer.storage.database import require_current_schema
 from audio_library_organizer.safety import windows_file_identity as native
 from audio_library_organizer.safety.windows_output_lease import WindowsOutputLease, guard_database_identity
+from .exporter import ManualCoverError
 from .legacy_adoption import (_active_root, _descriptors, _known_state, _source_context,
                               _guard_file, _snapshot_value, binding_facts)
 
@@ -96,8 +102,14 @@ def _plan_key(plan):
         'summary':plan.summary,'folder':plan.folder_organization,'policy':plan.policy_revision})
 
 
+def _read_manual_stream(stream, size, track):
+    if size > MAX_ARTWORK_BYTES:
+        raise ManualCoverError(track, 'too_large')
+    return stream.read(size + 1)
+
+
 class ProducerOperation:
-    def __init__(self, repository, root, plan, known_libraries=()):
+    def __init__(self, repository, root, plan, known_libraries=(), *, cancelled=None):
         self.repository=repository;self.root=_active_root(repository,root)
         self.plan=plan;self.plan_key=_plan_key(plan);self.operation_id=str(uuid4())
         snapshot=repository.file_check_snapshot(timeout=0)
@@ -107,18 +119,86 @@ class ProducerOperation:
         self.bindings={b.track_id:b for b in snapshot.managed_bindings}
         self.database_token=stat_identity(repository.database_path.stat())[:2]
         self.native_database=native.capture(repository.database_path,mutable=True) if native.on_windows() else None
-        self.manual_inputs={t.track_id:self.manual_input(t) for t in snapshot.tracks if t.manual_cover_path}
-        for item in plan.items:self.validate_item(item)
+        self.manual_inputs = {}
+        self.manual_problems = {}
+        for item in plan.items:
+            if cancelled is not None and cancelled():
+                raise InterruptedError('Export preparation cancelled.')
+            track = self.validate_item(item)
+            choice = (track.cover_choice or 'auto').casefold()
+            if (track.track_id in self.bindings or track.path.suffix.lower() != '.mp3'
+                    or choice == 'placeholder' or (not track.manual_cover_path and choice != 'manual')):
+                continue
+            try:
+                proof, _ = self.manual_input(track)
+            except ManualCoverError as exc:
+                self.manual_problems[track.track_id] = (exc.reason, exc.detail)
+            else:
+                self.manual_inputs[track.track_id] = proof
 
     @staticmethod
     def manual_input(track):
-        path=Path(track.manual_cover_path)
-        if not path.is_file():return None
-        with path.open('rb') as stream:
-            before=stat_identity(os.fstat(stream.fileno()))
-            digest=hashlib.sha256(stream.read()).hexdigest()
-            if stat_identity(path.stat())!=before:raise ValueError('Manual cover changed while reading.')
-        return before,digest
+        if not track.manual_cover_path:
+            raise ManualCoverError(track, 'missing')
+        try:
+            path = Path(track.manual_cover_path).absolute()
+            if native.on_windows():
+                import msvcrt
+
+                # The lease pins the NTFS leaf and ancestors and denies writes
+                # and deletion. Query the actual reader using the same Win32 API.
+                with protected_file(path) as (pin, proof), path.open('rb') as stream:
+                    api, _ = pin
+                    handle = msvcrt.get_osfhandle(stream.fileno())
+                    if api.query(handle) != proof.leaf:
+                        raise ManualCoverError(track, 'changed')
+                    size = proof.leaf.size
+                    data = _read_manual_stream(stream, size, track)
+                    if api.query(handle) != proof.leaf:
+                        raise ManualCoverError(track, 'changed')
+                    identity = (proof.ancestors, proof.leaf.object_identity)
+            else:
+                before = _guard_file(path, Path(path.anchor))
+
+                def open_regular(name, flags):
+                    return os.open(name, flags | os.O_NOFOLLOW | os.O_NONBLOCK)
+
+                try:
+                    stream = io.open(path, 'rb', opener=open_regular)
+                except FileNotFoundError as exc:
+                    raise ManualCoverError(track, 'changed', str(exc)) from exc
+                with stream:
+                    if stat_identity(os.fstat(stream.fileno())) != before:
+                        raise ManualCoverError(track, 'changed')
+                    size = before[2]
+                    data = _read_manual_stream(stream, size, track)
+                    try:
+                        current_path = _guard_file(path, Path(path.anchor))
+                    except (OSError, ValueError) as exc:
+                        raise ManualCoverError(track, 'changed', str(exc)) from exc
+                    if stat_identity(os.fstat(stream.fileno())) != before or current_path != before:
+                        raise ManualCoverError(track, 'changed')
+                    identity = before[:2]
+            if len(data) != size:
+                raise ManualCoverError(track, 'changed')
+            return (identity, hashlib.sha256(data).hexdigest()), data
+        except ManualCoverError:
+            raise
+        except FileNotFoundError as exc:
+            raise ManualCoverError(track, 'missing', str(exc)) from exc
+        except (OSError, ValueError, OverflowError) as exc:
+            raise ManualCoverError(track, 'unverified', str(exc)) from exc
+
+    def verified_manual_bytes(self, track):
+        if track.track_id in self.manual_problems:
+            raise ManualCoverError(track, *self.manual_problems[track.track_id])
+        expected = self.manual_inputs.get(track.track_id)
+        if expected is None:
+            raise ManualCoverError(track, 'unverified')
+        proof, data = self.manual_input(track)
+        if proof != expected:
+            raise ManualCoverError(track, 'changed')
+        return data
 
     def validate_item(self,item,conn=None):
         if _plan_key(self.plan)!=self.plan_key:raise ValueError('Export plan changed.')
@@ -138,8 +218,6 @@ class ProducerOperation:
                 or _source_context(current,sources,library_id)!=_source_context(original,self.sources,self.library_id)
                 or _source_context(track,sources,library_id)!=_source_context(original,self.sources,self.library_id)):
             raise ValueError('Pinned library, track, metadata or source binding changed.')
-        if current.manual_cover_path and self.manual_input(current)!=self.manual_inputs[current.track_id]:
-            raise ValueError('Pinned manual cover changed.')
         from .exporter import ExportPlan
         expected=ExportPlan.from_tracks([current],LibraryPaths(self.root),folder_organization=self.plan.folder_organization).items[0]
         if (item.destination_dir,item.filename,item.category)!=(expected.destination_dir,expected.filename,expected.category):
@@ -153,7 +231,10 @@ class ProducerOperation:
 
     @contextmanager
     def item(self,item):
-        self.validate_item(item)
+        track = self.validate_item(item)
+        choice = (track.cover_choice or 'auto').casefold()
+        if choice == 'manual' and track.track_id in self.manual_problems:
+            raise ManualCoverError(track, *self.manual_problems[track.track_id])
         with protected_file(item.track.path) as source_pin:
             source=next(s for s in self.sources if s.source_id==item.track.source_id and s.active)
             stamp=_guard_file(item.track.path,source.root_path)
@@ -170,6 +251,29 @@ class Receipt:
         self.operation=operation;self.item=item;self.source=source;self.source_proof=proof
         self.cover=None;self.final_sha='';self.binding=None
         self.source_pin=source_pin
+        self.uses_manual_cover = False
+
+    def manual_cover(self):
+        track = self.item.track
+        explicit = (track.cover_choice or 'auto').casefold() == 'manual'
+        if not track.manual_cover_path and not explicit:
+            return None
+        try:
+            data = self.operation.verified_manual_bytes(track)
+        except ManualCoverError as exc:
+            # Preserve the configured fallback order when manual was not chosen.
+            # An observed change or loss of an already pinned input is a refusal.
+            if explicit or exc.reason == 'changed' or track.track_id in self.operation.manual_inputs:
+                raise
+            return None
+        try:
+            prepared, mime, _ = prepare_cover_image(data)
+        except (OSError, ValueError, Image.DecompressionBombError) as exc:
+            if not explicit:
+                return None
+            raise ManualCoverError(track, 'invalid_image', str(exc)) from exc
+        self.uses_manual_cover = True
+        return prepared, mime
 
     @contextmanager
     def publication(self,staged):
@@ -192,10 +296,27 @@ class Receipt:
                 raise ValueError('Produced OutputSpec differs from the pinned writer policy.')
             yield lambda target:self.register(target,pin)
 
+    @contextmanager
+    def cover_guard(self):
+        """Recheck the selected cover at publication and pin it on NTFS."""
+        with ExitStack() as guards:
+            if self.uses_manual_cover:
+                track = self.item.track
+                if native.on_windows():
+                    try:
+                        guards.enter_context(protected_file(Path(track.manual_cover_path).absolute()))
+                    except FileNotFoundError as exc:
+                        raise ManualCoverError(track, 'missing', str(exc)) from exc
+                    except (OSError, ValueError) as exc:
+                        raise ManualCoverError(track, 'unverified', str(exc)) from exc
+                self.operation.verified_manual_bytes(track)
+            yield
+
     def register(self,target,pin):
         op=self.operation;repo=op.repository;target=Path(target)
         # Hand off the still-open producer object to final-path deny-delete/write.
         with ExitStack() as guards:
+            guards.enter_context(self.cover_guard())
             final_pin=guards.enter_context(protected_file(target))
             if native.on_windows():
                 api,h=pin[0];produced=api.query(h);final=native.capture(target)
@@ -253,7 +374,7 @@ class Receipt:
                 if native.on_windows():evidence['native_object']=_native_object(final)
                 conn.execute('INSERT INTO managed_bindings VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                     (current.track_id,op.library_id,binding_id,relative,key,proof.full_sha256,proof.algorithm,
-                     proof.audio_digest,stamp[0],stamp[1],canonical_json(stamp),canonical_json(source_binding),
+                     proof.audio_digest,*sqlite_file_ids(*stamp[:2]),canonical_json(stamp),canonical_json(source_binding),
                      canonical_json(applied),canonical_json(evidence),at))
                 binding=next(b for b in read_managed_bindings(conn)if b.track_id==current.track_id)
                 from audio_library_organizer.storage.file_state_cache import write_file_facts
@@ -274,6 +395,8 @@ class Receipt:
                         or stat_identity(os.fstat(final_pin[0]))!=stamp
                         or stat_identity(os.fstat(self.source_pin[0]))!=source_now.stat_identity):
                     raise ValueError('Producer descriptors changed before ownership commit.')
+                if self.uses_manual_cover:
+                    op.verified_manual_bytes(current)
                 conn.commit()  # Still inside every source, produced-file and DB guard.
                 self.binding=binding
 

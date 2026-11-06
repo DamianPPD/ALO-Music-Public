@@ -27,7 +27,8 @@ from audio_library_organizer.jobs.managed_files import lexical_locator, source_m
 from audio_library_organizer.metadata.change_history import metadata_revision
 from audio_library_organizer.storage.database import require_current_schema
 from audio_library_organizer.storage.managed_bindings import (
-    ManagedBinding, canonical_json, evidence_digest, read_managed_bindings, safe_relative, valid_digest,
+    ManagedBinding, binding_stat_identity, canonical_json, evidence_digest, read_managed_bindings, safe_relative,
+    sqlite_file_ids, valid_digest,
 )
 from audio_library_organizer.storage.source_registry import list_sources
 
@@ -220,7 +221,8 @@ def _known_state(descriptors, *, conn=None, aliases=None):
                 locator = str(Path(item.root).joinpath(*safe_relative(row['relative_path']).parts))
                 if lexical_locator(locator)!=row['locator_key']:
                     raise ValueError('Known managed binding belongs to another library root.')
-                owners.append((library_id,row['track_id'],locator,row['device'],row['inode']))
+                device, inode = binding_stat_identity(row)[:2]
+                owners.append((library_id,row['track_id'],locator,device,inode))
                 try:
                     token=_guard_file(locator,item.root)
                 except FileNotFoundError:
@@ -803,7 +805,7 @@ def adopt_legacy_output(repository, proposal_id, *, confirmed, library_root,
         progress(0,1,'saving')
         conn.execute('INSERT INTO managed_bindings VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             (track.track_id,library_id,binding_id,relative,key,proof.full_sha256,proof.algorithm,proof.audio_digest,
-             before[0],before[1],canonical_json(before),canonical_json(source_binding),canonical_json(applied),canonical_json(evidence),at))
+             *sqlite_file_ids(*before[:2]),canonical_json(before),canonical_json(source_binding),canonical_json(applied),canonical_json(evidence),at))
         conn.execute("UPDATE legacy_adoption_proposals SET status='ALREADY_BOUND' WHERE proposal_id=?",(proposal_id,))
         progress(1,1,'saving')
         # A final no-follow observation detects replacement after the decoder.

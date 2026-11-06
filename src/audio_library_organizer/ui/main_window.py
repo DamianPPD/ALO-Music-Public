@@ -2703,7 +2703,8 @@ class MainWindow(QMainWindow):
         self._export_dialog.stop_requested.connect(self._request_export_stop)
         thread = QThread(self)
         worker = ExportWorker(plan, adoption_repository=self.repository,
-            library_root=self._export_library.root, known_libraries=self._known_adoption_libraries())
+            library_root=self._export_library.root, known_libraries=self._known_adoption_libraries(),
+            language=self._export_language)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.progress.connect(self._export_progress, Qt.ConnectionType.QueuedConnection)

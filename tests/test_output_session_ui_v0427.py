@@ -233,9 +233,31 @@ def test_database_locked_at_gui_acceptance_refuses_without_waiting(adopted_windo
 
 def test_unknown_filesystem_is_not_accepted(adopted_window,monkeypatch):
     from audio_library_organizer.jobs import output_session
+    from audio_library_organizer.safety import windows_file_identity as native
     window,lib,_=adopted_window;_,_,track,_=lib
-    monkeypatch.setattr(output_session,'local_filesystem',lambda p:None)
+    if native.on_windows():
+        prepare = output_session.prepare_delivery
+        query = native._WinAPI.query
+        observed = []
+
+        def unknown_filesystem(api, handle):
+            node = query(api, handle)
+            observed.append(node.filesystem)
+            return replace(node, filesystem='UNKNOWN')
+
+        def prepare_on_unknown_filesystem(*args, **kwargs):
+            # Only the delivery probe sees the unsupported filesystem. The
+            # earlier reconciliation can still acquire its real NTFS lease.
+            with monkeypatch.context() as probe:
+                probe.setattr(native._WinAPI, 'query', unknown_filesystem)
+                return prepare(*args, **kwargs)
+
+        monkeypatch.setattr(output_session, 'prepare_delivery', prepare_on_unknown_filesystem)
+    else:
+        monkeypatch.setattr(output_session, 'local_filesystem', lambda p: None)
     run_check(window)
+    if native.on_windows():
+        assert observed and set(observed) == {'NTFS'}
     assert_no_output_confirmation(window,track)
     assert not window._output_session
 

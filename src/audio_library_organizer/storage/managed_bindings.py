@@ -50,6 +50,28 @@ TABLE_SQL = {
 }
 
 
+def _sqlite_file_id(value):
+    """Store the bits of an unsigned file ID in a signed SQLite INTEGER."""
+    if type(value) is not int or not 0 <= value < (1 << 64):
+        raise ValueError('Unsupported physical file identifier.')
+    return value if value < (1 << 63) else value - (1 << 64)
+
+
+def sqlite_file_ids(device, inode):
+    return _sqlite_file_id(device), _sqlite_file_id(inode)
+
+
+def binding_stat_identity(row):
+    """Return raw stat evidence after checking its indexed representation."""
+    token = json.loads(row['stat_json'])
+    stored = row['device'], row['inode']
+    if (not isinstance(token, list) or len(token) != 6
+            or not all(type(value) is int for value in (*token, *stored))
+            or sqlite_file_ids(*token[:2]) != stored):
+        raise ValueError('Invalid adopted binding physical evidence.')
+    return tuple(token)
+
+
 def canonical_json(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False)
 
@@ -124,9 +146,7 @@ def read_managed_bindings(conn):
         safe_relative(row['relative_path'])
         if row['library_id'] != library_id or not valid_digest(row['expected_sha256']) or not valid_digest(row['audio_digest']):
             raise ValueError('Invalid adopted binding identity/digest.')
-        token = tuple(json.loads(row['stat_json']))
-        if len(token) != 6 or not all(type(v) is int for v in token) or token[:2] != (row['device'], row['inode']):
-            raise ValueError('Invalid adopted binding physical evidence.')
+        token = binding_stat_identity(row)
         payloads = [json.loads(row[name]) for name in ('source_binding_json','applied_snapshot_json','evidence_json')]
         if not all(isinstance(v, dict) for v in payloads):
             raise ValueError('Invalid adopted binding snapshot/evidence.')

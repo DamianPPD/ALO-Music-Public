@@ -401,6 +401,8 @@ class ExportProgressDialog(_ExportDialog):
             'preflight_reports': ('FAZA 1 — Sprawdzanie bezpieczeństwa: odczyt wcześniejszych raportów', 'PHASE 1 — Library safety checks: reading previous reports'),
             'preflight_outputs': ('FAZA 1 — Sprawdzanie bezpieczeństwa: weryfikacja istniejących wyników', 'PHASE 1 — Library safety checks: verifying existing outputs'),
             'preflight_saving': ('FAZA 1 — Sprawdzanie bezpieczeństwa: kończenie transakcji SQLite', 'PHASE 1 — Library safety checks: completing the SQLite transaction'),
+            'preflight_covers': ('FAZA 1 — Sprawdzanie planu i ręcznych okładek',
+                                 'PHASE 1 — Checking the plan and manual covers'),
             'operation_started': ('FAZA 2 — Tworzenie plików', 'PHASE 2 — Creating files'),
             'item_started': ('Kopiowanie', 'Copying'),
             'copied': ('Skopiowano plik — kontrola SHA-256', 'File copied — checking SHA-256'),
@@ -410,6 +412,7 @@ class ExportProgressDialog(_ExportDialog):
             'final_verifying': ('Końcowa kontrola pliku', 'Final file verification'),
             'final_verified': ('Plik końcowy zweryfikowany', 'Final file verified'),
             'item_finished': ('Zakończono przetwarzanie pliku', 'File completed'),
+            'item_skipped': ('Pominięto plik', 'File skipped'),
             'item_failed': ('Błąd przetwarzania pliku', 'File failed'),
             'operation_finished': ('Oczekiwanie na zakończenie workera…', 'Waiting for worker shutdown…'),
             'operation_finishing': ('FAZA 3 — Kończenie zadania i przygotowanie raportu…', 'PHASE 3 — Finishing the task and preparing the report…'),
@@ -496,7 +499,13 @@ class ExportSummaryDialog(_ExportDialog):
             self.body_layout.addWidget(self.label(self.tr(
                 'Poprawne kopie pozostały w bibliotece. Ponowne uruchomienie może utworzyć kolejne kopie z unikalnymi nazwami.',
                 'Completed copies remain in the library. Running again may create additional copies with unique names.'), color=AMBER))
-        self.notice = self.label('\n'.join(filter(None, [result.fatal_error, *result.cleanup_warnings, *report_errors])), color=AMBER)
+        cover_issues = sum(outcome.manual_cover_issue for outcome in result.outcomes)
+        cover_notice = self.tr(
+            f'Pozycje z odmową weryfikacji ręcznej okładki: {cover_issues}. Szczegóły w raporcie.',
+            f'Tracks with unverified manual covers: {cover_issues}. See the report for details.',
+        ) if cover_issues else ''
+        self.notice = self.label('\n'.join(filter(None, [result.fatal_error, cover_notice,
+            *result.cleanup_warnings, *report_errors])), color=AMBER)
         if result.cancelled and result.stop_phase == 'preflight' and not result.fatal_error:
             prefix = self.tr('Zatrzymano przed rozpoczęciem kopiowania. Wszystkie pozycje pozostały nieprzetworzone.',
                              'Stopped before copying began. All items remain unprocessed.')

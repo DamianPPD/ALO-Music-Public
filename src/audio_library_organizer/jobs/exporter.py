@@ -113,6 +113,7 @@ class ExportOutcome:
     raw_verified: bool = False
     final_size_bytes: int = 0
     final_sha256: str = ''
+    manual_cover_issue: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,6 +184,44 @@ class ExportResult:
         return 'success'
 
 
+class ManualCoverError(ValueError):
+    """Refusal limited to a track's configured artwork."""
+
+    def __init__(self, track, reason, detail=''):
+        self.track_name = ' – '.join(part for part in (track.artist, track.title) if part) or track.filename
+        self.cover_path = track.manual_cover_path or '—'
+        self.reason = reason
+        self.detail = detail
+        super().__init__(self.describe('en', details=True))
+
+    def describe(self, language, *, details=False, published=False, continues=False):
+        english = language == 'en'
+        messages = {
+            'missing': ('Okładka jest niedostępna.', 'The cover is unavailable.'),
+            'changed': ('Zmieniła się zawartość lub tożsamość okładki.', 'The cover contents or identity changed.'),
+            'unverified': ('Odczyt lub weryfikacja tożsamości nie powiodły się.',
+                           'The cover could not be read or its identity verified.'),
+            'invalid_image': ('Plik nie zawiera poprawnego obrazu.', 'The file is not a valid image.'),
+            'too_large': ('Okładka przekracza limit 32 MiB.', 'The cover exceeds the 32 MiB limit.'),
+        }
+        if english:
+            message = f'Cannot verify the manual cover for “{self.track_name}”.'
+            outcome = 'The output remains unregistered.' if published else 'Track skipped.'
+            continuation = ' Export continues with the remaining tracks.' if continues else ''
+            location = f' Cover path: {self.cover_path}.'
+        else:
+            message = f'Nie można zweryfikować ręcznej okładki dla utworu „{self.track_name}”.'
+            outcome = 'Wynik pozostał bez powiązania.' if published else 'Utwór pominięto.'
+            continuation = ' Eksport jest kontynuowany dla pozostałych utworów.' if continues else ''
+            location = f' Ścieżka okładki: {self.cover_path}.'
+        result = f'{message} {messages[self.reason][english]} {outcome}{continuation}'
+        if details:
+            result += location
+            if self.detail:
+                result += f' ({self.detail})'
+        return result
+
+
 def _prepared_source_cover(track: TrackRecord):
     embedded = extract_embedded_cover(track.path)
     if not embedded:
@@ -235,10 +274,11 @@ def _manual_cover(track: TrackRecord):
         return None
 
 
-def resolve_cover_for_export(track: TrackRecord, artwork, cover_cache: dict[str, tuple[bytes, str] | None]):
+def resolve_cover_for_export(track: TrackRecord, artwork, cover_cache: dict[str, tuple[bytes, str] | None],
+                             *, manual_provider=None):
     """Always return the best available cover, honoring an explicit user choice."""
     choice = (track.cover_choice or 'auto').casefold()
-    manual = lambda: _manual_cover(track)
+    manual = manual_provider if manual_provider is not None else lambda: _manual_cover(track)
     external = lambda: _external_cover(track, artwork, cover_cache)
     source = lambda: _prepared_source_cover(track)
     placeholder = _prepared_placeholder_cover
@@ -258,7 +298,7 @@ def resolve_cover_for_export(track: TrackRecord, artwork, cover_cache: dict[str,
 
 
 def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
-                      cancelled=None, event=None, registration=None) -> ExportResult:
+                      cancelled=None, event=None, registration=None, language='pl') -> ExportResult:
     """Finish the current item safely; cancellation only prevents the next item."""
     started = perf_counter()
     cancelled = cancelled or (lambda: False)
@@ -274,8 +314,9 @@ def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
     def emit(phase, source=None, destination=None, message=''):
         if event is not None:
             event(ExportEvent(phase, total, len(outcomes), len(verified),
-                              sum(o.status != 'verified' for o in outcomes),
-                              source, destination, message))
+                              sum(o.status not in {'verified', 'skipped'} for o in outcomes),
+                              source, destination, message,
+                              skipped=sum(o.status == 'skipped' for o in outcomes)))
 
     emit('operation_started')
     cleanup_warnings: list[str] = []
@@ -297,9 +338,12 @@ def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
             raw_ok = True
             emit('raw_verified', source, staged)
             stage = 'tag_error'
-            cover = resolve_cover_for_export(item.track, artwork, cover_cache)
             if receipt is not None:
+                cover = resolve_cover_for_export(
+                    item.track, artwork, cover_cache, manual_provider=receipt.manual_cover)
                 receipt.cover = cover
+            else:
+                cover = resolve_cover_for_export(item.track, artwork, cover_cache)
             emit('tagging', source, staged)
             if cover:
                 write_resolved_tags(staged, item.track, cover_bytes=cover[0], cover_mime=cover[1], replace_cover=True)
@@ -342,27 +386,44 @@ def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
                                 register(path)
                             yield complete
                     return guarded()
+                publication_options = {}
+                if receipt is not None:
+                    publication_options = {'publication': publication, 'publication_guard': receipt.cover_guard}
                 target = copy_without_overwrite(source, item.destination_dir, item.filename,
-                    prepare=prepare, on_warning=cleanup_warnings.append,
-                    **({'publication':publication} if receipt is not None else {}))
+                    prepare=prepare, on_warning=cleanup_warnings.append, **publication_options)
             emit('final_verified', source, target)
             copied.append(target)
             verified.append(CopyVerification(source, target, True, True, final_size))
             outcomes.append(ExportOutcome(index, source, target, item.category, 'verified',
                                           raw_verified=True, final_size_bytes=final_size, final_sha256=final_sha))
             emit('item_finished', source, target)
+        except ManualCoverError as exc:
+            continues = index < total and not cancelled()
+            error = exc.describe(language, details=True, continues=continues)
+            outcomes.append(ExportOutcome(index, source, None, item.category, 'skipped', error,
+                                          raw_ok, manual_cover_issue=True))
+            emit('item_skipped', source, message=exc.describe(language, continues=continues))
         except Exception as exc:
             from audio_library_organizer.safety.copy_pipeline import PublishedCopyError
+            cover_error = None
             if isinstance(exc, PublishedCopyError):
+                if isinstance(exc.__cause__, ManualCoverError):
+                    cover_error = exc.__cause__
                 target, stage = exc.destination, 'registration_error'
             elif receipt is not None and target is not None:
                 stage = 'registration_error'
                 exc = OSError('Output registration cleanup failed: ' + str(exc))
             error = f'{source}: {exc}'
+            message = error
+            if cover_error is not None:
+                continues = index < total and not cancelled()
+                message = cover_error.describe(language, published=True, continues=continues)
+                error = cover_error.describe(language, details=True, published=True, continues=continues)
+                error = f'{error} [{stage}]'
             (verification_errors if stage == 'verification_error' else errors).append(error)
             outcomes.append(ExportOutcome(index, source, target, item.category, stage, error,
-                                          raw_ok, final_size, final_sha))
-            emit('item_failed', source, target, error)
+                                          raw_ok, final_size, final_sha, manual_cover_issue=cover_error is not None))
+            emit('item_failed', source, target, message)
         finally:
             if progress is not None:
                 progress(index, total, item.track.filename)

@@ -332,9 +332,10 @@ class ExportWorker(QObject):
     progress = Signal(int, int, str)
     phase = Signal(object)
 
-    def __init__(self, plan, *, adoption_repository=None, library_root=None, known_libraries=()):
+    def __init__(self, plan, *, adoption_repository=None, library_root=None, known_libraries=(), language='pl'):
         super().__init__()
         self.plan = plan
+        self.language = language
         self.adoption_repository = adoption_repository
         self.library_root = library_root
         self.known_libraries = tuple(known_libraries)
@@ -410,18 +411,23 @@ class ExportWorker(QObject):
             if self._cancelled.is_set():
                 stop_preflight()
                 return
-            checking_preflight = False
             registration = None
             if self.adoption_repository is not None:
                 from audio_library_organizer.jobs.created_output import ProducerOperation
+                self._preflight_phase('covers')
                 registration = ProducerOperation(self.adoption_repository, self.library_root,
-                    self.plan, self.known_libraries)
+                    self.plan, self.known_libraries, cancelled=self._cancelled.is_set)
+            if self._cancelled.is_set():
+                stop_preflight()
+                return
+            checking_preflight = False
             result = execute_copy_plan(
                 self.plan,
                 progress=lambda current, total, name: self.progress.emit(current, total, name),
                 cancelled=self._cancelled.is_set,
                 event=self.phase.emit,
                 registration=registration,
+                language=self.language,
             )
             finish(result)
         except InterruptedError as exc:

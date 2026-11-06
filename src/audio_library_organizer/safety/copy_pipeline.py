@@ -63,11 +63,12 @@ class PublishedCopyError(OSError):
 
 
 def copy_without_overwrite(source: Path, destination_dir: Path, filename: str | None = None, *,
-                           prepare=None, on_warning=None, publication=None) -> Path:
+                           prepare=None, on_warning=None, publication=None, publication_guard=None) -> Path:
     """Prepare a private copy, then publish it atomically under a free name.
 
     ``prepare`` can verify/write tags before publication. Cleanup is confined
     to this operation's fresh temporary directory, never a shared final path.
+    An optional publication guard surrounds the atomic rename/link attempt.
     """
     source = Path(source)
     destination_dir = Path(destination_dir)
@@ -100,12 +101,14 @@ def copy_without_overwrite(source: Path, destination_dir: Path, filename: str | 
             with publication(staged) if publication is not None else nullcontext() as register:
                 while True:
                     target = _unique_path(destination_dir, name)
-                    try:
-                        _publish_without_overwrite(staged, target)
+                    guard = publication_guard() if publication_guard is not None else nullcontext()
+                    with guard:
+                        try:
+                            _publish_without_overwrite(staged, target)
+                        except FileExistsError:
+                            continue
                         published = target
-                        break
-                    except FileExistsError:
-                        continue
+                    break
                 if register is not None:
                     # Retire only the POSIX private link, keeping its fd alive.
                     if os.name != 'nt':
