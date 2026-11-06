@@ -34,7 +34,7 @@ RED_REQUIRED_FAILURES = {
     'test_mainwindow_creates_and_registers_valid_apev2_in_mixed_batch': (GENERIC_REFUSAL,),
     'test_mainwindow_audit_preserves_different_source_refusal_reasons': (MPEG_REFUSAL, GENERIC_REFUSAL),
     'test_apev2_metadata_edits_do_not_change_untagged_audio_proof': (MPEG_REFUSAL,),
-    'test_signature_bytes_inside_terminal_metadata_do_not_define_a_second_tag[ape]': (MPEG_REFUSAL,),
+    'test_coincidental_tail_signatures_do_not_change_mpeg_boundary[ape]': (MPEG_REFUSAL,),
     'test_single_frame_byte_change_changes_apev2_audio_digest': (MPEG_REFUSAL,),
     **{
         f'test_valid_apev2_does_not_mask_mpeg_or_real_ffmpeg_errors[{damage}-{reason}]': (MPEG_REFUSAL,)
@@ -53,6 +53,11 @@ RED_REQUIRED_PASSES = {
     'test_malformed_apev2_and_unknown_tails_remain_invalid[bad-ape-size]',
     'test_malformed_apev2_and_unknown_tails_remain_invalid[unknown-tail]',
 }
+
+NATIVE_MATERIAL_TESTS = tuple(
+    f'tests/test_windows_output_native_v0427.py::test_native_material_identity[{kind}]'
+    for kind in ('same-size', 'restored-mtime')
+)
 
 REGRESSIONS = {
     'native-audio-regressions': (
@@ -397,6 +402,10 @@ def run_native():
         stages.append((baseline, red_result['success']))
         candidate = pytest_stage('native-green', 'green', green, (TEST,), evidence, private)
         stages.append((candidate, green_ok(candidate)))
+        # Report the same NTFS assertions on the published tree. A baseline
+        # failure is evidence for comparison, never an expected PASS.
+        base_material = pytest_stage('native-base-material', 'base', red, NATIVE_MATERIAL_TESTS, evidence, private)
+        stages.append((base_material, green_ok(base_material)))
         for name, targets in REGRESSIONS.items():
             suite = pytest_stage(name, 'regression', green, tuple(f'tests/{test}' for test in targets),
                                  evidence, private)

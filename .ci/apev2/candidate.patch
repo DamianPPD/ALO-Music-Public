@@ -1,5 +1,5 @@
 diff --git a/src/audio_library_organizer/audio/identity.py b/src/audio_library_organizer/audio/identity.py
-index b043fb30a9f17417504772a3d6998dd72878686d..6c623b93ce4ce9a891783e7dafe17f93d608d1ee 100644
+index b043fb30a9f17417504772a3d6998dd72878686d..a2ee0e1fe298c1ce66dc06d66e255486b8a1084b 100644
 --- a/src/audio_library_organizer/audio/identity.py
 +++ b/src/audio_library_organizer/audio/identity.py
 @@ -1,7 +1,7 @@
@@ -33,7 +33,15 @@ index b043fb30a9f17417504772a3d6998dd72878686d..6c623b93ce4ce9a891783e7dafe17f93
  DECODE_SECONDS = 120
  MAX_DECODE_STDERR_BYTES = 64 * 1024
  
-@@ -71,6 +79,92 @@ def _cancel(cancelled):
+@@ -37,6 +45,7 @@ class AudioIdentity:
+     stat_identity: tuple = ()
+     tag_snapshot: dict = field(default_factory=dict)
+     reason: str = ''
++    ape_at_eof: bool = False
+ 
+ 
+ class UnsupportedMP3(ValueError):
+@@ -71,6 +80,92 @@ def _cancel(cancelled):
          raise InterruptedError('Audio identity cancelled.')
  
  
@@ -126,7 +134,7 @@ index b043fb30a9f17417504772a3d6998dd72878686d..6c623b93ce4ce9a891783e7dafe17f93
  def _frame_identity(stream, length, cancelled):
      """Strict envelope/frame traversal: no sync-search through unknown bytes."""
      stream.seek(0)
-@@ -90,10 +184,22 @@ def _frame_identity(stream, length, cancelled):
+@@ -90,10 +185,22 @@ def _frame_identity(stream, length, cancelled):
          begin = 10 + tag_length
          if begin > end:
              raise ValueError('Truncated ID3 envelope.')
@@ -145,7 +153,7 @@ index b043fb30a9f17417504772a3d6998dd72878686d..6c623b93ce4ce9a891783e7dafe17f93
 +        else:
 +            # Only the boundary of the declared, complete stream can succeed.
 +            # Magic bytes inside a frame or a metadata value do not set that boundary.
-+            return digest, count, frame_end if footer is not None else None
++            return digest, count, frame_end if footer is not None else None, footer is not None and tail_end == length
 +    raise first_error
 +
 +
@@ -153,7 +161,7 @@ index b043fb30a9f17417504772a3d6998dd72878686d..6c623b93ce4ce9a891783e7dafe17f93
      stream.seek(begin)
      digest = hashlib.sha256()
      count, configuration, declared = 0, None, None
-@@ -245,10 +351,16 @@ def _decode_windows(command, cancelled):
+@@ -245,10 +352,16 @@ def _decode_windows(command, cancelled):
                  process.stderr.close()
  
  
@@ -173,22 +181,42 @@ index b043fb30a9f17417504772a3d6998dd72878686d..6c623b93ce4ce9a891783e7dafe17f93
      if os.name == 'nt':
          return _decode_windows(command, cancelled)
      process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-@@ -313,11 +425,11 @@ def inspect_audio(path: Path, *, decoder=None, cancelled=None) -> AudioIdentity:
+@@ -271,9 +384,9 @@ def _decode(path, decoder, cancelled):
+         process.communicate()
+ 
+ 
+-def _tags(path):
++def _tags(path, *, ape_at_eof=False):
+     try:
+-        tags = ID3(path)
++        tags = ID3(path, load_v1=not ape_at_eof)
+     except ID3NoHeaderError:
+         tags = {}
+     def text(key):
+@@ -313,16 +426,17 @@ def inspect_audio(path: Path, *, decoder=None, cancelled=None) -> AudioIdentity:
              result = replace(result, full_sha256=full.hexdigest(), stat_identity=token)
              if path.suffix.lower() != '.mp3':
                  return replace(result, status='UNSUPPORTED', reason='Only MP3 identity is supported.')
 -            digest, count = _frame_identity(stream, before.st_size, cancelled)
-+            digest, count, frame_end = _frame_identity(stream, before.st_size, cancelled)
++            digest, count, frame_end, ape_at_eof = _frame_identity(stream, before.st_size, cancelled)
          executable = decoder if decoder is not None else _find_decoder()
          if not executable:
              return replace(result, status='UNAVAILABLE', reason='Complete MP3 decoder is unavailable.')
 -        _decode(path, executable, cancelled)
+-        snapshot = _tags(path)
 +        _decode(path, executable, cancelled, frame_end)
-         snapshot = _tags(path)
++        snapshot = _tags(path, ape_at_eof=ape_at_eof)
          _cancel(cancelled)
          if stat_identity(path.stat()) != token:
+             raise ValueError('Audio file changed during identity validation.')
+-        return replace(result, status='VALID', audio_digest=digest, frame_count=count, tag_snapshot=snapshot)
++        return replace(result, status='VALID', audio_digest=digest, frame_count=count,
++                       tag_snapshot=snapshot, ape_at_eof=ape_at_eof)
+     except InterruptedError as exc:
+         return replace(result, status='CANCELLED', reason=str(exc))
+     except UnsupportedMP3 as exc:
 diff --git a/src/audio_library_organizer/jobs/created_output.py b/src/audio_library_organizer/jobs/created_output.py
-index e1457a7de2c3bb81de568fc0af78fed258628a8f..21caa68cbdb408f000604886abefd81f6092e5ba 100644
+index e1457a7de2c3bb81de568fc0af78fed258628a8f..4d342b902b12effb83c9ac4219e591d04f37e7a3 100644
 --- a/src/audio_library_organizer/jobs/created_output.py
 +++ b/src/audio_library_organizer/jobs/created_output.py
 @@ -31,7 +31,7 @@ from audio_library_organizer.storage.source_registry import list_sources
@@ -200,7 +228,19 @@ index e1457a7de2c3bb81de568fc0af78fed258628a8f..21caa68cbdb408f000604886abefd81f
  from .legacy_adoption import (_active_root, _descriptors, _known_state, _source_context,
                                _guard_file, _snapshot_value, binding_facts)
  
-@@ -239,10 +239,15 @@ class ProducerOperation:
+@@ -78,8 +78,9 @@ def protected_file(path, *, publishing=False):
+     finally: owner.close()
+ 
+ 
+-def observed_spec(path, relative):
+-    values=_tags(path);tags=ID3(path)
++def observed_spec(path, relative, *, ape_at_eof=False):
++    values = _tags(path, ape_at_eof=ape_at_eof)
++    tags = ID3(path, load_v1=not ape_at_eof)
+     values.update(track_number=str(tags.get('TRCK','')),disc_number=str(tags.get('TPOS','')),
+                   discogs_url='')
+     links=[f.url for f in tags.getall('WXXX') if f.desc.casefold()=='discogs']
+@@ -239,10 +240,15 @@ class ProducerOperation:
              source=next(s for s in self.sources if s.source_id==item.track.source_id and s.active)
              stamp=_guard_file(item.track.path,source.root_path)
              proof=inspect_audio(item.track.path)
@@ -220,8 +260,36 @@ index e1457a7de2c3bb81de568fc0af78fed258628a8f..21caa68cbdb408f000604886abefd81f
              yield Receipt(self,item,source,proof,source_pin)
  
  
+@@ -283,7 +289,7 @@ class Receipt:
+                     or staged_proof.audio_digest!=self.source_proof.audio_digest):
+                 raise ValueError('Produced audio did not match source and final SHA.')
+             self.staged_proof=staged_proof
+-            self.spec=observed_spec(staged,'pending')
++            self.spec=observed_spec(staged,'pending',ape_at_eof=staged_proof.ape_at_eof)
+             expected=build_mp3_spec(self.item.track,cover_bytes=self.cover[0] if self.cover else None,relative_path='pending')
+             fields=[]
+             for field in expected.fields:
+@@ -336,7 +342,7 @@ class Receipt:
+                     or proof.audio_digest!=self.source_proof.audio_digest):
+                 raise ValueError('Published MP3 changed or failed verification.')
+             relative=target.relative_to(op.root).as_posix();safe_relative(relative)
+-            actual=observed_spec(target,relative)
++            actual=observed_spec(target,relative,ape_at_eof=proof.ape_at_eof)
+             expected=replace(self.spec,fields=tuple(OutputField(f.name,FieldAction.SET,relative)
+                 if f.name=='relative_path' else f for f in self.spec.fields))
+             if not compare_specs(expected,actual).complete_match:raise ValueError('Published OutputSpec changed.')
+@@ -425,7 +431,8 @@ def producer_check(binding,track,root,*,at,policy_revision,cancelled):
+             if (proof.status!='VALID' or proof.stat_identity!=stamp or stamp!=binding.stat_identity
+                     or (native.on_windows() and binding.evidence.get('native_object') is None)):
+                 raise ValueError('Producer output material changed.')
+-            payload=binding.applied_snapshot;spec=observed_spec(path,binding.relative_path)
++            payload=binding.applied_snapshot
++            spec=observed_spec(path,binding.relative_path,ape_at_eof=proof.ape_at_eof)
+             if _spec_data(spec)!=payload.get('producer_spec'):raise ValueError('Producer OutputSpec changed.')
+             # This bulk check does not resolve today's cover/routing directives
+             # or perform the bounded P delivery protocol. Keep the receipt H.
 diff --git a/src/audio_library_organizer/jobs/exporter.py b/src/audio_library_organizer/jobs/exporter.py
-index 0377f98177495a39df462cb08a850a9209196e1d..d5e7f3d3f387d74cd6a6a46fc2a97a8dfc6032b0 100644
+index 0377f98177495a39df462cb08a850a9209196e1d..c16530eb3da7bb821d2490a54ee5de3bb36d27ef 100644
 --- a/src/audio_library_organizer/jobs/exporter.py
 +++ b/src/audio_library_organizer/jobs/exporter.py
 @@ -184,6 +184,10 @@ class ExportResult:
@@ -235,7 +303,23 @@ index 0377f98177495a39df462cb08a850a9209196e1d..d5e7f3d3f387d74cd6a6a46fc2a97a8d
  class ManualCoverError(ValueError):
      """Refusal limited to a track's configured artwork."""
  
-@@ -415,7 +419,10 @@ def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
+@@ -345,10 +349,12 @@ def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
+             else:
+                 cover = resolve_cover_for_export(item.track, artwork, cover_cache)
+             emit('tagging', source, staged)
++            tag_options = {}
++            if receipt is not None and receipt.source_proof.ape_at_eof:
++                tag_options['staged_ape_at_eof'] = True
+             if cover:
+-                write_resolved_tags(staged, item.track, cover_bytes=cover[0], cover_mime=cover[1], replace_cover=True)
+-            else:
+-                write_resolved_tags(staged, item.track)
++                tag_options.update(cover_bytes=cover[0], cover_mime=cover[1], replace_cover=True)
++            write_resolved_tags(staged, item.track, **tag_options)
+             emit('tags_written', source, staged)
+             stage = 'verification_error'
+             emit('final_verifying', source, staged)
+@@ -415,7 +421,10 @@ def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
                  exc = OSError('Output registration cleanup failed: ' + str(exc))
              error = f'{source}: {exc}'
              message = error
@@ -247,12 +331,86 @@ index 0377f98177495a39df462cb08a850a9209196e1d..d5e7f3d3f387d74cd6a6a46fc2a97a8d
                  continues = index < total and not cancelled()
                  message = cover_error.describe(language, published=True, continues=continues)
                  error = cover_error.describe(language, details=True, published=True, continues=continues)
+diff --git a/src/audio_library_organizer/metadata/tag_writer.py b/src/audio_library_organizer/metadata/tag_writer.py
+index 6846286c96b53c427f48e612744688d56d4e08b9..3ac15f275a02c2f6cdcc319e324d74e111ac13e1 100644
+--- a/src/audio_library_organizer/metadata/tag_writer.py
++++ b/src/audio_library_organizer/metadata/tag_writer.py
+@@ -1,6 +1,9 @@
+ from __future__ import annotations
+ 
++from contextlib import contextmanager
++from os import SEEK_END
+ from pathlib import Path
++from typing import BinaryIO
+ 
+ from mutagen import File as MutagenFile
+ from mutagen.id3 import ID3, ID3NoHeaderError, APIC, TALB, TBPM, TCON, TDRC, TIT2, TPE1, COMM, WXXX
+@@ -11,9 +14,27 @@ from audio_library_organizer.domain.models import TrackRecord
+ from .mp3_output import build_title_tag, mp3_text_frames, mp3_discogs_frame, REMOVED_NUMBER_FRAMES
+ 
+ 
+-def _write_mp3(path: Path, track: TrackRecord, cover_bytes: bytes | None, cover_mime: str, replace_cover: bool) -> None:
++@contextmanager
++def _hide_staged_ape_from_id3v1(path: Path):
++    """Keep the terminal APEv2 bytes outside Mutagen's ID3v1 search."""
++    # Mutagen reads the last 128 ID3v1 bytes plus 3 look-behind bytes.
++    # Only a private export copy with a proven EOF APEv2 reaches this path.
++    guard = bytes(128 + 3)
++    with path.open('r+b') as stream:
++        stream.seek(0, SEEK_END)
++        stream.write(guard)
++        stream.seek(0)
++        yield stream
++        guard_start = stream.seek(-len(guard), SEEK_END)
++        if stream.read(len(guard)) != guard:
++            raise OSError('Staged MP3 tag writer changed its APEv2 guard.')
++        stream.truncate(guard_start)
++
++
++def _write_mp3(file: Path | BinaryIO, track: TrackRecord, cover_bytes: bytes | None,
++               cover_mime: str, replace_cover: bool) -> None:
+     try:
+-        tags = ID3(path)
++        tags = ID3(file)
+     except ID3NoHeaderError:
+         tags = ID3()
+     frames = mp3_text_frames(track)
+@@ -40,7 +61,9 @@ def _write_mp3(path: Path, track: TrackRecord, cover_bytes: bytes | None, cover_
+         if not replace_cover:
+             tags.delall('APIC')
+         tags.add(APIC(encoding=3, mime=cover_mime, type=3, desc='Cover', data=cover_bytes))
+-    tags.save(path, v2_version=3)
++    if not isinstance(file, Path):
++        file.seek(0)
++    tags.save(file, v2_version=3)
+ 
+ 
+ 
+@@ -133,11 +156,16 @@ def _write_generic(path: Path, track: TrackRecord) -> None:
+     audio.save()
+ 
+ 
+-def write_resolved_tags(path: Path, track: TrackRecord, *, cover_bytes: bytes | None = None, cover_mime: str = 'image/jpeg', replace_cover: bool = False) -> None:
++def write_resolved_tags(path: Path, track: TrackRecord, *, cover_bytes: bytes | None = None, cover_mime: str = 'image/jpeg',
++                        replace_cover: bool = False, staged_ape_at_eof: bool = False) -> None:
+     path = Path(path)
+     suffix = path.suffix.lower()
+     if suffix == '.mp3':
+-        _write_mp3(path, track, cover_bytes, cover_mime, replace_cover)
++        if staged_ape_at_eof:
++            with _hide_staged_ape_from_id3v1(path) as stream:
++                _write_mp3(stream, track, cover_bytes, cover_mime, replace_cover)
++        else:
++            _write_mp3(path, track, cover_bytes, cover_mime, replace_cover)
+     elif suffix == '.flac':
+         _write_flac(path, track, cover_bytes, cover_mime, replace_cover)
+     elif suffix in {'.m4a', '.mp4'}:
 diff --git a/tests/test_apev2_identity_v0427.py b/tests/test_apev2_identity_v0427.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..8a8aca50d80bc968d774718ef5a065440f213b82
+index 0000000000000000000000000000000000000000..eef382cd18895361cf112d2f0c1a08c4481039d5
 --- /dev/null
 +++ b/tests/test_apev2_identity_v0427.py
-@@ -0,0 +1,439 @@
+@@ -0,0 +1,448 @@
 +"""Real MPEG, FFmpeg, MainWindow exports and SQLite ownership with APEv2."""
 +
 +import csv
@@ -295,6 +453,12 @@ index 0000000000000000000000000000000000000000..8a8aca50d80bc968d774718ef5a06544
 +    size = len(body) + 32  # The optional header is outside the declared size.
 +    footer = _ape_descriptor(size, len(items), flags)
 +    return (_ape_descriptor(size, len(items), flags | (1 << 29)) if header else b'') + body + footer
++
++
++def _ape_with_false_id3v1():
++    # Both signatures are inside an opaque binary value of the real EOF tag.
++    data = b'file.dat\0APETAGEX' + b'x' * 24 + b'TAG' + b'y' * 93
++    return _ape_tag(_ape_item(b'Fixture binary', data, flags=2))
 +
 +
 +ID3V1 = b'TAG' + b'APE fixture title'.ljust(30, b'\0') + bytes(95)
@@ -370,8 +534,7 @@ index 0000000000000000000000000000000000000000..8a8aca50d80bc968d774718ef5a06544
 +    if container == 'ape':
 +        # At EOF-128 it looks like ID3v1, and 32 bytes before that
 +        # fake tag it also looks like the beginning of an APEv2 footer.
-+        data = b'file.dat\0APETAGEX' + b'x' * 24 + b'TAG' + b'y' * 93
-+        tail = _ape_tag(_ape_item(b'Fixture binary', data, flags=2))
++        tail = _ape_with_false_id3v1()
 +        assert tail[-128:-125] == b'TAG'
 +        assert tail[-160:-152] == b'APETAGEX'
 +    elif container == 'id3v1':
@@ -386,6 +549,8 @@ index 0000000000000000000000000000000000000000..8a8aca50d80bc968d774718ef5a06544
 +    proof = inspect_audio(path)
 +    assert proof.status == 'VALID', proof.reason
 +    assert proof.audio_digest == hashlib.sha256(frames).hexdigest()
++    if container == 'ape':
++        assert not proof.tag_snapshot['title']
 +
 +
 +def _malformed_tails():
@@ -531,7 +696,7 @@ index 0000000000000000000000000000000000000000..8a8aca50d80bc968d774718ef5a06544
 +    for name, content in (
 +        ('02-malformed-ape', reference + _ape_item() + _ape_descriptor(31, 1)),
 +        ('03-truncated-mpeg', reference[:-1]),
-+        ('04-valid-ape', reference + _ape_tag(_ape_item(), header=True)),
++        ('04-valid-ape', reference + _ape_with_false_id3v1()),
 +    ):
 +        path = source / f'{name}.mp3'
 +        path.write_bytes(content)
@@ -650,6 +815,8 @@ index 0000000000000000000000000000000000000000..8a8aca50d80bc968d774718ef5a06544
 +        tags = ID3(output)
 +        assert str(tags['TIT2']) == f'{track.title} [128bpm]' and str(tags['TPE1']) == track.artist
 +        assert str(tags['TBPM']) == '128'
++        if track is tracks[4]:
++            assert output.read_bytes().endswith(_ape_with_false_id3v1())
 +        outputs[output] = (proof.full_sha256, output.stat().st_mtime_ns)
 +    with closing(sqlite3.connect(paths.database)) as conn:
 +        assert conn.execute('PRAGMA integrity_check').fetchall() == [('ok',)]
