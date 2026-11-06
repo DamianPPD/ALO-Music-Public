@@ -1,0 +1,8 @@
+{
+  "base": "c88a18b73f56732d1d906e00beabca2787592a00",
+  "base_tree": "71649c46fcda001874a79206c6666e54a781d754",
+  "tree": "37d17bc50c6725cfbf22d85372d22eb022afa9e6",
+  "patch_sha256": "2ae9237da0c16c57cb20b2bd288212b0ccdb4f4b4fd973bb3de9a998040f1ab2",
+  "manifest_sha256": "c9c1454b60a16869df082454da8be8e310775164cc26ee4aaf2fdb7bae9bb2fb",
+  "red_test_sha256": "0bf481269353362b04f361ced4c2a14d1f1ee5ffc5f7f3b86fe8c353f1deafa2"
+}

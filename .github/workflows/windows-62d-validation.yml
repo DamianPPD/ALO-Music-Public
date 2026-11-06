@@ -1,5 +1,5 @@
-name: ALO NTFS SQLite native validation
-run-name: ALO NTFS SQLite / Windows 2022 / CPython 3.12
+name: ALO APEv2 native validation
+run-name: ALO APEv2 / Windows Server 2022 / CPython 3.12
 on:
   push:
     branches: [ci/windows-62d-validation]
@@ -47,17 +47,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'FFmpeg is unavailable' }
       - name: Fetch exact product baseline
         run: |
-          git fetch --no-tags --depth=1 origin a80207b5097e037bc90350cedc80bb1b87b3ea93
+          git fetch --no-tags --depth=1 origin c88a18b73f56732d1d906e00beabca2787592a00
           if ($LASTEXITCODE -ne 0) { throw 'Baseline fetch failed' }
-      - name: Verify exact Git trees, reproduce and run targeted tests
+      - name: Verify sealed trees and run native RED, GREEN and regressions
         run: |
-          python -B .ci/ntfs-sqlite/validate.py
+          python -B .ci/apev2/validate.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Preserve native evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ALO-NTFS-SQLite-Windows-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/alo-ntfs-evidence/
+          name: ALO-APEv2-Windows-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/alo-apev2-evidence/
           retention-days: 30
           if-no-files-found: warn
