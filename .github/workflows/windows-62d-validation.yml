@@ -1,5 +1,5 @@
-name: ALO APEv2 native validation
-run-name: ALO APEv2 / isolated Windows lease and Qt recheck
+name: ALO NTFS material identity diagnostics
+run-name: ALO NTFS / exact base and APEv2 candidate / diagnostic reproduction
 on:
   push:
     branches: [ci/windows-62d-validation]
@@ -49,15 +49,15 @@ jobs:
         run: |
           git fetch --no-tags --depth=1 origin c88a18b73f56732d1d906e00beabca2787592a00
           if ($LASTEXITCODE -ne 0) { throw 'Baseline fetch failed' }
-      - name: Verify sealed trees and run native RED, GREEN and regressions
+      - name: Reproduce original assertions and collect native NTFS evidence
         run: |
-          python -B .ci/apev2/validate.py lease-recheck
+          python -B .ci/ntfs-material/diagnose.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Preserve native evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ALO-APEv2-Windows-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/alo-apev2-evidence/
+          name: ALO-NTFS-Diagnosis-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/alo-ntfs-diagnosis/
           retention-days: 30
           if-no-files-found: warn
