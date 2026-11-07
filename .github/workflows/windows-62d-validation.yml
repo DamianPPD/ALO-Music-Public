@@ -1,5 +1,5 @@
-name: ALO APEv2 adoption validation
-run-name: ALO APEv2 adoption / sealed final candidate
+name: ALO APEv2 publication validation
+run-name: ALO APEv2 publication / exact nine-path candidate
 on:
   push:
     branches: [ci/windows-62d-validation]
@@ -12,7 +12,7 @@ jobs:
   native-windows:
     if: github.repository == 'DamianPPD/ALO-Music-Public' && github.ref == 'refs/heads/ci/windows-62d-validation'
     runs-on: windows-2022
-    timeout-minutes: 35
+    timeout-minutes: 38
     defaults:
       run:
         shell: pwsh
@@ -52,7 +52,7 @@ jobs:
           $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           $exe = Join-Path $bin 'ffmpeg.exe'
           "ALO_FFMPEG_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          $evidence = Join-Path $env:RUNNER_TEMP 'alo-apev2-adoption-final'
+          $evidence = Join-Path $env:RUNNER_TEMP 'alo-apev2-publication-final'
           New-Item -ItemType Directory -Path $evidence | Out-Null
           "$expected  ffmpeg-9.0.2-essentials_build.zip" | Set-Content -LiteralPath (Join-Path $evidence 'ffmpeg-archive-sha256.txt') -Encoding utf8
       - name: Fetch exact product baseline
@@ -61,13 +61,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Baseline fetch failed' }
       - name: Validate the sealed product candidate on native Windows
         run: |
-          python -B .ci/apev2-adoption-fix/validate-final.py
+          python -B .ci/apev2-publication-final/validate-final.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Preserve native evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ALO-APEv2-Adoption-Final-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/alo-apev2-adoption-final/
+          name: ALO-APEv2-Publication-Final-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/alo-apev2-publication-final/
           retention-days: 30
           if-no-files-found: warn
