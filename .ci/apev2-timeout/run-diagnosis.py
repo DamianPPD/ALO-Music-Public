@@ -1,0 +1,164 @@
+"""Reproduce the native restart timeout on immutable baseline and candidate trees."""
+
+import ast
+import hashlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import textwrap
+import traceback
+import xml.etree.ElementTree as ET
+
+HERE = Path(__file__).resolve().parent
+spec = importlib.util.spec_from_file_location(
+    'sealed_runner', HERE.parent / 'apev2-publication-final' / 'validate-final.py')
+sealed = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(sealed)
+shared = sealed.shared
+
+MODULE = 'tests/test_apev2_adoption_v0427.py'
+TARGET = MODULE + '::test_unchanged_ape_binary_tag_adoption_survives_main_window_restart'
+PREVIOUS = MODULE + '::test_unchanged_ape_binary_tag_adoption_remains_confirmed_after_restart'
+
+
+def plan():
+    control = str(HERE / 'test_restart_baseline_control.py')
+    yield 'baseline-id3-plain', 'base', False, (control,)
+    yield 'baseline-id3-traced', 'base', True, (control,)
+    yield 'candidate-id3-plain', 'candidate', False, (control,)
+    yield 'candidate-id3-traced', 'candidate', True, (control,)
+    for repeat in range(1, 4):
+        yield f'isolated-plain-{repeat}', 'candidate', False, (TARGET,)
+    yield 'whole-adoption-plain', 'candidate', False, (MODULE,)
+    for repeat in range(1, 5):
+        yield f'isolated-traced-{repeat}', 'candidate', True, (TARGET,)
+    for repeat in range(1, 3):
+        yield f'after-apev2-{repeat}', 'candidate', True, (PREVIOUS, TARGET)
+        yield f'after-lease-{repeat}', 'candidate', True, ('tests/test_windows_output_lease_v0427.py', TARGET)
+        yield f'after-qt-{repeat}', 'candidate', True, ('tests/test_identification_qt_lifecycle_v0427.py', TARGET)
+    yield 'whole-adoption-traced', 'candidate', True, (MODULE,)
+
+
+def extract_child(candidate, evidence):
+    tree = ast.parse((candidate / MODULE).read_bytes())
+    function, = (node for node in tree.body if isinstance(node, ast.FunctionDef)
+                 and node.name == '_check_in_new_process')
+    assignment = function.body[0]
+    assert isinstance(assignment, ast.Assign) and assignment.targets[0].id == 'script'
+    script = textwrap.dedent(ast.literal_eval(assignment.value.args[0]))
+    path = evidence / 'exact-child-program.py'
+    path.write_text(script, encoding='utf-8', newline='\n')
+    return path
+
+
+def stage(row, roots, evidence, private, child):
+    name, side, traced, targets = row
+    directory = evidence / name
+    directory.mkdir()
+    root = roots[side]
+    env = os.environ | {
+        'PYTHONPATH': os.pathsep.join((str(HERE), str(root / 'src'))),
+        'ALO_EXACT_CHILD_SCRIPT': str(child), 'ALO_TIMEOUT_ATTEMPT': str(directory),
+        'ALO_TRACE_CHILD': '1' if traced else '0',
+        'TEMP': str(private), 'TMP': str(private), 'ALO_62D_EVIDENCE': str(directory),
+    }
+    xml = directory / 'junit.xml'
+    command = [
+        sys.executable, '-B', '-m', 'pytest', '-p', 'restart_parent', '-p', 'no:cacheprovider',
+        '-c', str(root / 'pyproject.toml'), '-o', 'pythonpath=src tests',
+        '-o', 'faulthandler_timeout=65', '--capture=tee-sys', '-vv', '-ra', '--tb=short',
+        '--basetemp', str(private / name), '--junitxml', str(xml), *targets,
+    ]
+    log = directory / 'pytest.log'
+    result = dict(stage=name, tree=side, traced=traced, targets=targets)
+    with log.open('wb') as stream:
+        try:
+            result['exit_code'] = subprocess.run(command, cwd=root, env=env, stdout=stream,
+                                                  stderr=subprocess.STDOUT, timeout=140).returncode
+        except subprocess.TimeoutExpired:
+            result['exit_code'] = 124
+            stream.write(b'\nOuter diagnostic timeout after 140 seconds.\n')
+    if xml.exists():
+        suite = ET.parse(xml).getroot().find('testsuite')
+        result.update({key: int(suite.get(key, '0')) for key in ('tests', 'failures', 'errors', 'skipped')})
+        nodes = [node for node in suite.findall('testcase') if node.get('name') in (
+            'test_unchanged_ape_binary_tag_adoption_survives_main_window_restart',
+            'test_id3_restart_compatible_with_both_trees')]
+        if len(nodes) == 1:
+            case = nodes[0]
+            failure = case.find('failure')
+            details = '' if failure is None else (failure.text or '') + failure.get('message', '')
+            result['target'] = ('TIMEOUT' if 'TimeoutExpired' in details else
+                                'FAIL' if failure is not None or case.find('error') is not None else
+                                'SKIP' if case.find('skipped') is not None else 'PASS')
+            result['target_seconds'] = float(case.get('time', '0'))
+    result.setdefault('target', 'TIMEOUT' if result['exit_code'] == 124 else 'UNKNOWN')
+    if traced:
+        logs = list(directory.glob('child-*.jsonl'))
+        observations = [json.loads(line) for path in logs for line in path.read_text(encoding='utf-8').splitlines()]
+        result['trace_files'] = len(logs)
+        result['trace_records'] = len(observations)
+        result['trace_installed'] = any(
+            row.get('event') == 'observer_installed'
+            and row.get('child_source_matches_command') is True for row in observations)
+    shared.record(directory, 'result', result)
+    print(name, result, flush=True)
+    print(log.read_text(encoding='utf-8', errors='replace')[-8000:], flush=True)
+    return result
+
+
+def main():
+    repo = HERE.parents[1]
+    evidence = Path(os.environ['RUNNER_TEMP']) / 'alo-apev2-timeout'
+    evidence.mkdir(parents=True, exist_ok=True)
+    results, manifests = [], {}
+    error = None
+    try:
+        shared.require(sys.platform == 'win32', 'Native Windows runner required')
+        private = shared.select_volume(evidence)
+        shared.native_environment(evidence, private, repo)
+        patch = shared.git(repo, 'show', 'HEAD:.ci/apev2-timeout/candidate.patch')
+        raw_seal = shared.git(repo, 'show', 'HEAD:.ci/apev2-timeout/sealed.json')
+        seal = json.loads(raw_seal)
+        shared.require(shared.sha256(patch) == seal['patch_sha256'], 'Patch hash mismatch')
+        shared.require(seal['base'] == shared.BASE and seal['base_tree'] == shared.BASE_TREE, 'Wrong baseline')
+        tree = shared.prepare_index(repo, private, patch)
+        shared.require(tree == seal['tree'], 'Candidate tree mismatch')
+        (evidence / 'sealed.json').write_bytes(raw_seal)
+        (evidence / 'candidate.patch').write_bytes(patch)
+        roots = {side: private / side for side in ('base', 'candidate')}
+        for side, root in roots.items():
+            root.mkdir()
+            tree_id = shared.BASE_TREE if side == 'base' else tree
+            rows = shared.tree_manifest(repo, tree_id, root)
+            digest = shared.sha256(shared.json_bytes(rows))
+            if side == 'candidate':
+                shared.require(digest == seal['manifest_sha256'], 'Manifest hash mismatch')
+            metadata = {'tree': tree_id, 'manifest_sha256': digest}
+            manifests[side] = rows, metadata
+            sealed.verify_manifest(root, rows, metadata, evidence, side + '-pre')
+        child = extract_child(roots['candidate'], evidence)
+        try:
+            for row in plan():
+                results.append(stage(row, roots, evidence, private, child))
+        finally:
+            for side, root in roots.items():
+                rows, metadata = manifests[side]
+                sealed.verify_manifest(root, rows, metadata, evidence, side + '-post')
+    except Exception:
+        error = traceback.format_exc()
+        print(error, flush=True)
+        (evidence / 'harness-error.log').write_text(error, encoding='utf-8')
+    shared.record(evidence, 'summary', {'error': error, 'stages': results, 'diagnostic_only': True})
+    hashes = {p.relative_to(evidence).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+              for p in sorted(evidence.rglob('*')) if p.is_file() and p.name != 'evidence-sha256.json'}
+    shared.record(evidence, 'evidence-sha256', hashes)
+    return int(bool(error) or any(row['exit_code'] or row['target'] != 'PASS'
+                                 or (row['traced'] and not row.get('trace_installed')) for row in results))
+
+
+if __name__ == '__main__':
+    sys.exit(main())
