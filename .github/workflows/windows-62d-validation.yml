@@ -1,5 +1,5 @@
-name: ALO NTFS material identity diagnostics
-run-name: ALO NTFS / exact base and APEv2 candidate / diagnostic reproduction
+name: ALO NTFS material identity validation
+run-name: ALO NTFS / corrected test controls and APEv2 final validation
 on:
   push:
     branches: [ci/windows-62d-validation]
@@ -54,15 +54,15 @@ jobs:
         run: |
           git fetch --no-tags --depth=1 origin c88a18b73f56732d1d906e00beabca2787592a00
           if ($LASTEXITCODE -ne 0) { throw 'Baseline fetch failed' }
-      - name: Reproduce original assertions and collect native NTFS evidence
+      - name: Validate the test correction and the sealed product candidate
         run: |
-          python -B .ci/ntfs-material/diagnose.py
+          python -B .ci/ntfs-material/validate-final.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Preserve native evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ALO-NTFS-Diagnosis-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/alo-ntfs-diagnosis/
+          name: ALO-NTFS-Final-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/alo-ntfs-final/
           retention-days: 30
           if-no-files-found: warn
