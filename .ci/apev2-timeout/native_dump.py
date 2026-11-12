@@ -31,10 +31,10 @@ def analyze(directory):
         symbols += ';srv*' + str(directory / 'symbols') + '*https://msdl.microsoft.com/download/symbols'
         command = '.symopt+ 0x10000000; .reload; ~*kp; !locks; !runaway; lmv; q'
         try:
-            with (directory / 'cdb-native-stacks.log').open('wb') as log:
+            with dump.with_suffix('.cdb.log').open('wb') as log:
                 r = subprocess.run([cdb, '-z', str(dump), '-y', symbols, '-c', command],
                                    stdout=log, stderr=subprocess.STDOUT, timeout=150)
             result = {'exit_code':r.returncode}
         except Exception as exc:
             result = {'error':repr(exc)}
-        (directory / 'native-analysis.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
+        dump.with_suffix('.analysis.json').write_text(json.dumps(result, indent=2), encoding='utf-8')

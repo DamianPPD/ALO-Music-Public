@@ -76,7 +76,7 @@ def stage(row, roots, evidence, private, child):
                 raise RuntimeError('CDB required for native abort diagnosis')
             dump = directory / 'hung-abort.dmp'
             commands = 'bu ucrtbase!abort \".echo ABORT_BREAKPOINT; ~*kp; .dump /ma ' + str(dump) + '; q\"; g'
-            command = [cdb, '-o', '-g', '-G', '-y', os.environ.get('ALO_PYTHON_PDB_DIR',''), '-c', commands, *command]
+            command = [cdb, '-o', '-G', '-y', os.environ.get('ALO_PYTHON_PDB_DIR',''), '-c', commands, *command]
 
         with (directory/'pytest.log').open('wb') as stream:
             process = subprocess.Popen(command,cwd=root,env=env,stdout=stream,stderr=subprocess.STDOUT)
@@ -86,7 +86,11 @@ def stage(row, roots, evidence, private, child):
             except subprocess.TimeoutExpired:
                 code,status = 124,'TIMEOUT'
                 shared.record(directory,'live-timeout',{'pid':process.pid,'poll':process.poll(),'limit':45})
-                collect(process.pid,directory)
+                target_pid=process.pid
+                if mode == 'weak-debugger':
+                    marker=directory/'cleanup-probe.jsonl'
+                    if marker.exists():target_pid=json.loads(marker.read_text().splitlines()[0])['pid']
+                collect(target_pid,directory)
                 process.kill();process.wait()
         analyze(directory)
         if mode == 'weak-debugger' and list(directory.glob('*.dmp')): status = 'RED_CAPTURED'
