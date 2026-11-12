@@ -1,5 +1,5 @@
 name: ALO APEv2 MainWindow timeout diagnosis
-run-name: ALO APEv2 / native restart timeout diagnosis
+run-name: ALO APEv2 / restart stacks without Python monitoring
 on:
   push:
     branches: [ci/windows-62d-validation]
@@ -20,6 +20,7 @@ jobs:
       QT_QPA_PLATFORM: windows
       PYTHONDONTWRITEBYTECODE: '1'
       PYTHONUTF8: '1'
+      ALO_RESTART_TRACE_MODE: stacks
     steps:
       - name: Checkout diagnostic files
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5

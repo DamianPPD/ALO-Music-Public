@@ -26,20 +26,15 @@ PREVIOUS = MODULE + '::test_unchanged_ape_binary_tag_adoption_remains_confirmed_
 
 def plan():
     control = str(HERE / 'test_restart_baseline_control.py')
-    yield 'baseline-id3-plain', 'base', False, (control,)
-    yield 'baseline-id3-traced', 'base', True, (control,)
-    yield 'candidate-id3-plain', 'candidate', False, (control,)
-    yield 'candidate-id3-traced', 'candidate', True, (control,)
-    for repeat in range(1, 4):
-        yield f'isolated-plain-{repeat}', 'candidate', False, (TARGET,)
-    yield 'whole-adoption-plain', 'candidate', False, (MODULE,)
-    for repeat in range(1, 5):
-        yield f'isolated-traced-{repeat}', 'candidate', True, (TARGET,)
+    yield 'baseline-id3-stacks', 'base', True, (control,)
+    yield 'candidate-id3-stacks', 'candidate', True, (control,)
+    for repeat in range(1, 13):
+        yield f'isolated-stacks-{repeat}', 'candidate', True, (TARGET,)
     for repeat in range(1, 3):
-        yield f'after-apev2-{repeat}', 'candidate', True, (PREVIOUS, TARGET)
-        yield f'after-lease-{repeat}', 'candidate', True, ('tests/test_windows_output_lease_v0427.py', TARGET)
-        yield f'after-qt-{repeat}', 'candidate', True, ('tests/test_identification_qt_lifecycle_v0427.py', TARGET)
-    yield 'whole-adoption-traced', 'candidate', True, (MODULE,)
+        yield f'after-apev2-stacks-{repeat}', 'candidate', True, (PREVIOUS, TARGET)
+        yield f'after-lease-stacks-{repeat}', 'candidate', True, ('tests/test_windows_output_lease_v0427.py', TARGET)
+        yield f'after-qt-stacks-{repeat}', 'candidate', True, ('tests/test_identification_qt_lifecycle_v0427.py', TARGET)
+    yield 'whole-adoption-stacks', 'candidate', True, (MODULE,)
 
 
 def extract_child(candidate, evidence):
@@ -143,7 +138,10 @@ def main():
         child = extract_child(roots['candidate'], evidence)
         try:
             for row in plan():
-                results.append(stage(row, roots, evidence, private, child))
+                result = stage(row, roots, evidence, private, child)
+                results.append(result)
+                if result['target'] == 'TIMEOUT':
+                    break
         finally:
             for side, root in roots.items():
                 rows, metadata = manifests[side]
