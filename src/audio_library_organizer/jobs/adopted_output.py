@@ -12,7 +12,7 @@ import sqlite3
 import time
 from uuid import UUID
 
-from audio_library_organizer.audio.identity import _tags, inspect_audio
+from audio_library_organizer.audio.identity import inspect_audio
 from audio_library_organizer.domain.file_state import FileFacts, evaluate_file_state
 from audio_library_organizer.metadata.change_history import metadata_revision
 from audio_library_organizer.metadata.mp3_output import build_mp3_spec, observed_adoption_spec, compare_specs, TEXT_FIELDS
@@ -147,7 +147,14 @@ def assess_adopted_mp3(repository, library_root, request: AssessmentRequest, *, 
         if plan.kind!=MaterialKind.MANAGED: return refuse('MANAGED_RESOLUTION_REQUIRED')
         proof=recheck_read_path(plan,cancelled=cancelled)
         if not proof.is_verified: return refuse(proof.reason_code)
-        observed=_tags(path)
+        # Use the same validated MP3 envelopes and ID3 snapshot as adoption.
+        output_proof=inspect_audio(path,cancelled=cancelled)
+        if output_proof.status=='CANCELLED': return refuse('CANCELLED')
+        if (output_proof.status!='VALID' or output_proof.full_sha256!=binding.expected_sha256
+                or output_proof.algorithm!=binding.audio_algorithm
+                or output_proof.audio_digest!=binding.audio_digest or output_proof.stat_identity!=stamp):
+            return refuse('MANAGED_AUDIO_IDENTITY_UNCONFIRMED')
+        observed=output_proof.tag_snapshot
         if any(observed[k]!=tags[k] for k in (*TEXT_FIELDS,'cover_sha256')):
             return refuse('APPLIED_TAGS_INCONSISTENT')
         comparison=compare_specs(build_mp3_spec(track),observed_adoption_spec(payload))

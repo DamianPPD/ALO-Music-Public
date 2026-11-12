@@ -31,7 +31,7 @@ from audio_library_organizer.storage.source_registry import list_sources
 from audio_library_organizer.storage.database import require_current_schema
 from audio_library_organizer.safety import windows_file_identity as native
 from audio_library_organizer.safety.windows_output_lease import WindowsOutputLease, guard_database_identity
-from .exporter import ManualCoverError
+from .exporter import ManualCoverError, SourceAudioIdentityError
 from .legacy_adoption import (_active_root, _descriptors, _known_state, _source_context,
                               _guard_file, _snapshot_value, binding_facts)
 
@@ -78,8 +78,9 @@ def protected_file(path, *, publishing=False):
     finally: owner.close()
 
 
-def observed_spec(path, relative):
-    values=_tags(path);tags=ID3(path)
+def observed_spec(path, relative, *, ape_at_eof=False):
+    values = _tags(path, ape_at_eof=ape_at_eof)
+    tags = ID3(path, load_v1=not ape_at_eof)
     values.update(track_number=str(tags.get('TRCK','')),disc_number=str(tags.get('TPOS','')),
                   discogs_url='')
     links=[f.url for f in tags.getall('WXXX') if f.desc.casefold()=='discogs']
@@ -239,10 +240,15 @@ class ProducerOperation:
             source=next(s for s in self.sources if s.source_id==item.track.source_id and s.active)
             stamp=_guard_file(item.track.path,source.root_path)
             proof=inspect_audio(item.track.path)
-            if (proof.status!='VALID' or proof.full_sha256!=item.track.sha256
-                    or proof.stat_identity!=stamp or stamp[2:4]!=(item.track.size_bytes,item.track.mtime_ns)
-                    or (not native.on_windows() and stat_identity(os.fstat(source_pin[0]))!=stamp)):
-                raise ValueError('Source audio identity unverified.')
+            if proof.status != 'VALID':
+                raise SourceAudioIdentityError(f'{proof.status}: {proof.reason}')
+            if proof.full_sha256 != item.track.sha256:
+                raise SourceAudioIdentityError('Source SHA-256 differs from the recorded SHA-256.')
+            if (proof.stat_identity != stamp or
+                    (not native.on_windows() and stat_identity(os.fstat(source_pin[0])) != stamp)):
+                raise SourceAudioIdentityError('Source file identity changed during validation.')
+            if stamp[2:4] != (item.track.size_bytes, item.track.mtime_ns):
+                raise SourceAudioIdentityError('Source size or modification time differs from the recorded source.')
             yield Receipt(self,item,source,proof,source_pin)
 
 
@@ -283,7 +289,7 @@ class Receipt:
                     or staged_proof.audio_digest!=self.source_proof.audio_digest):
                 raise ValueError('Produced audio did not match source and final SHA.')
             self.staged_proof=staged_proof
-            self.spec=observed_spec(staged,'pending')
+            self.spec=observed_spec(staged,'pending',ape_at_eof=staged_proof.ape_at_eof)
             expected=build_mp3_spec(self.item.track,cover_bytes=self.cover[0] if self.cover else None,relative_path='pending')
             fields=[]
             for field in expected.fields:
@@ -336,7 +342,7 @@ class Receipt:
                     or proof.audio_digest!=self.source_proof.audio_digest):
                 raise ValueError('Published MP3 changed or failed verification.')
             relative=target.relative_to(op.root).as_posix();safe_relative(relative)
-            actual=observed_spec(target,relative)
+            actual=observed_spec(target,relative,ape_at_eof=proof.ape_at_eof)
             expected=replace(self.spec,fields=tuple(OutputField(f.name,FieldAction.SET,relative)
                 if f.name=='relative_path' else f for f in self.spec.fields))
             if not compare_specs(expected,actual).complete_match:raise ValueError('Published OutputSpec changed.')
@@ -425,7 +431,8 @@ def producer_check(binding,track,root,*,at,policy_revision,cancelled):
             if (proof.status!='VALID' or proof.stat_identity!=stamp or stamp!=binding.stat_identity
                     or (native.on_windows() and binding.evidence.get('native_object') is None)):
                 raise ValueError('Producer output material changed.')
-            payload=binding.applied_snapshot;spec=observed_spec(path,binding.relative_path)
+            payload=binding.applied_snapshot
+            spec=observed_spec(path,binding.relative_path,ape_at_eof=proof.ape_at_eof)
             if _spec_data(spec)!=payload.get('producer_spec'):raise ValueError('Producer OutputSpec changed.')
             # This bulk check does not resolve today's cover/routing directives
             # or perform the bounded P delivery protocol. Keep the receipt H.

@@ -222,6 +222,26 @@ class LibraryRowDelegate(QStyledItemDelegate):
         return QSize(38, size.height()) if index.column() == 1 else size
 
 
+class _CoverCancellation:
+    """Plain callable owned by the destruction connection, never by a worker.
+
+    It deliberately has no QWidget reference. Connecting Event.set for every
+    read makes PySide disconnect a weak Python receiver when the last worker
+    releases that Event, concurrently with new GUI connections.
+    """
+
+    def __init__(self):
+        self.current = Event()
+
+    def renew(self):
+        self.current.set()
+        self.current = Event()
+        return self.current
+
+    def __call__(self, *_):
+        self.current.set()
+
+
 class LibraryPage(QWidget):
     play_requested = Signal(object)
     track_selected = Signal(object)
@@ -258,6 +278,11 @@ class LibraryPage(QWidget):
         self._cover_note = ''
         self._cover_network = QNetworkAccessManager(self)
         self._cover_request_serial = 0
+        self._cover_lifetime = _CoverCancellation()
+        self._cover_cancel = self._cover_lifetime.current
+        # A callable instance is strongly retained by Qt without retaining this
+        # widget. It also works for parent destruction and deleteLater().
+        self.destroyed.connect(self._cover_lifetime)
         self._history_provider = None
         self._playing_path: str | None = None
         self._version_family_by_path: dict[str, list[TrackRecord]] = {}
@@ -861,14 +886,12 @@ class LibraryPage(QWidget):
         self.cancel_context_actions()
         self._read_context = context
         self._file_context_presentations = index_file_state_presentations(context)
-        self._cover_request_serial += 1
-        if hasattr(self, '_cover_cancel'):
-            self._cover_cancel.set()
+        self._cancel_cover_reads()
         if previous is not None and (context is None or previous.library_id != context.library_id):
             self._checked_paths.clear()
             self._playing_path = None
-            self.table.selectionModel().clearSelection()
             self.table.selectionModel().clearCurrentIndex()
+            self.table.selectionModel().clearSelection()
 
     def set_file_state_evaluations(self, library_id, evaluations):
         """Display cache evaluations from the same coherent repository snapshot.
@@ -891,9 +914,6 @@ class LibraryPage(QWidget):
 
     def closeEvent(self, event):
         self.cancel_context_actions(closing=True)
-        self._cover_request_serial += 1
-        if hasattr(self, '_cover_cancel'):
-            self._cover_cancel.set()
         super().closeEvent(event)
 
     def _cover_read_plan(self, track):
@@ -1241,6 +1261,7 @@ class LibraryPage(QWidget):
     def _show_detail(self, *_):
         t = self._current_track()
         if not t:
+            self._cancel_cover_reads()
             return
         crash_debug.record('library.selection.enter', path=str(t.path), track_id=t.track_id)
         self.track_selected.emit(t)
@@ -1325,10 +1346,8 @@ class LibraryPage(QWidget):
 
     def _load_cover(self, track: TrackRecord):
         self._cover_request_serial += 1; serial = self._cover_request_serial
-        if hasattr(self, '_cover_cancel'):
-            self._cover_cancel.set()
-        self._cover_cancel = Event()
-        self.destroyed.connect(self._cover_cancel.set)
+        self._cover_cancel = self._cover_lifetime.renew()
+        self._abort_cover_replies()
         self._cover_track_key = self._path_key(track)
         self._cover_plan = self._cover_read_plan(track)
         choice = (track.cover_choice or 'auto').casefold()
@@ -1343,6 +1362,18 @@ class LibraryPage(QWidget):
             QThreadPool.globalInstance().start(task)
             return
         self._load_external_or_source_cover(track, serial)
+
+    def _abort_cover_replies(self):
+        # Invalidate the request serial before aborting: abort() can emit
+        # finished synchronously, whose old result must not start a fallback.
+        for reply in self._cover_network.findChildren(QNetworkReply):
+            if reply.isRunning():
+                reply.abort()
+
+    def _cancel_cover_reads(self):
+        self._cover_request_serial += 1
+        self._cover_lifetime()
+        self._abort_cover_replies()
 
     def _load_external_or_source_cover(self, track, serial):
         choice = (track.cover_choice or 'auto').casefold()
@@ -1523,6 +1554,8 @@ class LibraryPage(QWidget):
         self.cancel_context_actions(closing=True)
 
     def cancel_context_actions(self, *, closing=False):
+        if closing:
+            self._cancel_cover_reads()
         self._menu_epoch += 1
         self._context_serial += 1
         self._context_cancel.set()

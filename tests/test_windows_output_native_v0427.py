@@ -48,11 +48,40 @@ def test_disabled_release_gate_refuses_on_the_actual_windows_runtime(adopted_win
     record('release-gate',enabled=False)
 
 
+def _set_native_file_times(path, last_write, change_time):
+    # Use actual FileBasicInfo on a private fixture. FILE_WRITE_ATTRIBUTES,
+    # sharing READ|WRITE|DELETE, OPEN_EXISTING, and OPEN_REPARSE_POINT.
+    api = native._WinAPI()
+    h = api.create(str(path), 0x100, 7, None, 3, 0x00200000, None)
+    if h is None or h == ctypes.c_void_p(-1).value:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        setter = api.k.SetFileInformationByHandle
+        setter.argtypes = (ctypes.c_void_p, ctypes.c_int32, ctypes.c_void_p, ctypes.c_uint32)
+        setter.restype = ctypes.c_int32
+        info = native.FILE_BASIC_INFO(0, 0, last_write, change_time, 0)
+        if not setter(h, 0, ctypes.byref(info), ctypes.sizeof(info)):
+            raise ctypes.WinError(ctypes.get_last_error())
+    finally:
+        api.close(h)
+
+
 @pytest.mark.parametrize('kind',['unchanged','same-size','restored-mtime','replace','rename-replace','hardlink','missing'])
 def test_native_material_identity(tmp_path,kind):
-    p=sample(tmp_path);before=native.capture(p);st=p.stat()
-    if kind in ('same-size','restored-mtime'):
-        p.write_bytes(b'fedcba9876543210')
+    p = sample(tmp_path)
+    overwrite = kind in ('same-size', 'restored-mtime')
+    if overwrite:
+        # Give the initial snapshot a known past timestamp. Consecutive NTFS
+        # writes can otherwise share the system timestamp even after close.
+        initial_write = 132_223_104_000_000_000
+        initial_change = 132_223_104_030_000_000
+        _set_native_file_times(p, initial_write, initial_change)
+    before = native.capture(p)
+    st = p.stat()
+    if overwrite:
+        assert (before.leaf.last_write, before.leaf.change_time) == (initial_write, initial_change)
+        assert p.read_bytes() == b'0123456789abcdef'
+        assert p.write_bytes(b'fedcba9876543210') == st.st_size
         if kind=='restored-mtime':os.utime(p,ns=(st.st_atime_ns,st.st_mtime_ns))
     elif kind in ('replace','rename-replace'):
         replacement=tmp_path/'replacement.bin';replacement.write_bytes(b'fedcba9876543210')
@@ -66,10 +95,15 @@ def test_native_material_identity(tmp_path,kind):
     after=native.capture(p);post=p.stat()
     if kind=='unchanged':assert native.same_material(before,after)
     else:assert not native.same_material(before,after)
+    if overwrite:
+        assert p.read_bytes() == b'fedcba9876543210'
+        assert after.leaf.object_identity == before.leaf.object_identity
+        assert after.leaf.size == before.leaf.size == st.st_size == post.st_size
+        assert after.leaf.change_time != before.leaf.change_time
     if kind=='restored-mtime':
         assert (st.st_size,st.st_mtime_ns)==(post.st_size,post.st_mtime_ns)
         assert before.leaf.creation_time==after.leaf.creation_time
-        assert before.leaf.change_time!=after.leaf.change_time
+        assert before.leaf.last_write == after.leaf.last_write
         # CPython3.11's ctime creation value must actually demonstrate the gap.
         if sys.version_info[:2]==(3,11):assert st.st_ctime_ns==post.st_ctime_ns
     record(kind,before=asdict(before),after=asdict(after),stat_before=list(st),stat_after=list(post),

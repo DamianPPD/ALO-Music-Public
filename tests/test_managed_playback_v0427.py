@@ -8,6 +8,7 @@ from dataclasses import replace
 import hashlib
 import importlib
 from io import BytesIO
+import os
 from pathlib import Path
 from threading import Event, get_ident
 from time import monotonic
@@ -19,7 +20,7 @@ from PIL import Image
 import numpy as np
 import soundfile as sf
 from mutagen.flac import FLAC, Picture
-from PySide6.QtCore import Qt, QThreadPool, QCoreApplication, QEvent
+from PySide6.QtCore import Qt, QThreadPool, QCoreApplication, QEvent, QUrl
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication
 
@@ -56,6 +57,23 @@ def wait(app, predicate, seconds=5):
     while not predicate() and monotonic() < deadline:
         app.processEvents()
     assert predicate(), 'Bounded Qt read did not finish'
+
+
+def local_url_points_to(url, expected):
+    """Check the full native locator and physical file, not QUrl's separators.
+
+    This is a test assertion only; ReadContext ownership and worker rechecks
+    still decide whether PlayerBar may select the material in the first place.
+    """
+    if not url.isLocalFile():
+        return False
+    actual, expected = Path(url.toLocalFile()), Path(expected)
+    if not actual.is_absolute() or not expected.is_absolute() or actual != expected:
+        return False
+    try:
+        return actual.samefile(expected)
+    except OSError:
+        return False
 
 
 def audio(path, color='#dc5588'):
@@ -194,7 +212,7 @@ def test_managed_only_restart_can_play_edit_and_read_cover(tmp_path, app):
     editor = MetadataEditorDialog(track, player_bar=bar, read_context=ctx)
     try:
         bar.load_track(track, autoplay=False)
-        wait(app, lambda: bar.player.source().toLocalFile() == str(managed))
+        wait(app, lambda: local_url_points_to(bar.player.source(), managed))
         wait(app, lambda: editor._cover_candidate_states.get('source') == 'ready')
         assert bar.current_track.track_id == track.track_id
         assert bar.current_path == managed and track.path != managed
@@ -318,13 +336,13 @@ def test_read_context_and_history_are_isolated_by_library_uuid(tmp_path):
 def test_stale_cover_or_waveform_generation_is_ignored(tmp_path, app):
     repo, track, managed, root = library(tmp_path); m = api(); ctx = context(repo, track, managed, root)
     bar = PlayerBar(); bar.set_read_context(ctx); bar.load_track(track, autoplay=False)
-    wait(app, lambda: bar.player.source().toLocalFile() == str(managed))
+    wait(app, lambda: local_url_points_to(bar.player.source(), managed))
     editor = MetadataEditorDialog(track, player_bar=bar, read_context=ctx)
     old_generation = bar._waveform_generation; old_cover = bar._cover_request_serial
     second = audio(root / 'GOTOWE_MP3' / 'second.flac', '#2277bb')
     changed = context(repo, track, second, root, revision='owned-v2')
     bar.set_read_context(changed); bar.load_track(track, autoplay=False)
-    wait(app, lambda: bar.player.source().toLocalFile() == str(second))
+    wait(app, lambda: local_url_points_to(bar.player.source(), second))
     bar._waveform_ready(old_generation, [1.0])
     assert bar.seek.peaks != [1.0] and bar._cover_request_serial > old_cover
     assert not editor.accepts_read_result(m.resolve_read_path(track, ctx, m.ReadPurpose.COVER_READ))
@@ -604,12 +622,12 @@ def test_source_only_playback_and_queue_use_refreshed_uuid(tmp_path, app, monkey
     bar = PlayerBar(); bar.set_read_context(ctx)
     try:
         bar.load_track(track, autoplay=False)
-        wait(app, lambda: bar.player.source().toLocalFile() == str(track.path))
+        wait(app, lambda: local_url_points_to(bar.player.source(), track.path))
         bar.queue_next(queued); bar.reconcile_tracks([track, renamed])
         assert bar.queued_track is renamed
         monkeypatch.setattr(bar.player, 'mediaStatus', lambda: QMediaPlayer.MediaStatus.EndOfMedia)
         bar._media_status(QMediaPlayer.MediaStatus.EndOfMedia)
-        wait(app, lambda: bar.player.source().toLocalFile() == str(renamed.path))
+        wait(app, lambda: local_url_points_to(bar.player.source(), renamed.path))
         assert bar.current_track.track_id == queued.track_id
         assert bar.current_track.source_id == queued.source_id and bar.queued_track is None
         assert before == {p: p.read_bytes() for p in before}
@@ -635,7 +653,7 @@ def test_play_pause_during_read_preflight_does_not_play_an_empty_or_stale_source
     try:
         bar.load_track(track, autoplay=True); wait(app, started.is_set)
         bar.toggle()  # Pause the pending autoplay request before it resolves.
-        released.set(); wait(app, lambda: bar.player.source().toLocalFile() == str(managed))
+        released.set(); wait(app, lambda: local_url_points_to(bar.player.source(), managed))
         assert plays == [], 'Pause during preflight played an empty source or resurrected autoplay'
     finally:
         released.set(); bar.close()
@@ -704,7 +722,7 @@ def test_source_scan_revision_rejects_old_waveform_at_the_same_locator(tmp_path,
     bar = PlayerBar(); bar.set_read_context(m.ReadContext(repo.library_id, str(root), tuple(repo.list_sources())))
     try:
         bar.load_track(track, autoplay=False)
-        wait(app, lambda: bar.player.source().toLocalFile() == str(track.path))
+        wait(app, lambda: local_url_points_to(bar.player.source(), track.path))
         old_plan = bar.read_plan(track, m.ReadPurpose.WAVEFORM)
         old_generation = bar._waveform_generation
         fresh = replace(track, mtime_ns=track.mtime_ns + 1, sha256='f' * 64)
@@ -877,6 +895,50 @@ def test_review_standalone_player_keeps_an_absolute_local_url(tmp_path, app, mon
     bar = PlayerBar()
     try:
         bar.load(Path('standalone.flac'), autoplay=False)
-        assert bar.player.source().toLocalFile() == str(path)
+        assert local_url_points_to(bar.player.source(), path)
     finally:
         bar.close()
+
+
+@pytest.mark.parametrize('name', ['with spaces.flac', 'Zażółć gęślą 音楽.flac', 'hash#percent%25.flac'])
+def test_player_local_url_preserves_exact_unicode_and_escaped_locator(tmp_path, app, name):
+    path = audio(tmp_path / 'material' / name)
+    bar = PlayerBar()
+    try:
+        bar.load(path, autoplay=False)
+        url = bar.player.source()
+        assert url.isLocalFile() and Path(url.toLocalFile()).samefile(path)
+        assert local_url_points_to(url, path)
+        assert local_url_points_to(QUrl.fromLocalFile(path.as_posix()), path)
+        if os.name == 'nt':
+            # QUrl returns forward slashes; WindowsPath uses native separators.
+            assert url.toLocalFile() != str(path)
+            assert local_url_points_to(QUrl.fromLocalFile(str(path).swapcase()), path)
+            drive_case = str(path)[0].swapcase() + str(path)[1:]
+            assert local_url_points_to(QUrl.fromLocalFile(drive_case), path)
+    finally:
+        bar.close()
+
+
+@pytest.mark.parametrize('kind', ['same-name-same-bytes', 'hardlink', 'missing', 'nonlocal', 'relative'])
+def test_local_url_comparison_rejects_wrong_or_unverifiable_material(tmp_path, kind):
+    expected = audio(tmp_path / 'expected' / 'song.flac')
+    other = tmp_path / 'other' / expected.name
+    other.parent.mkdir()
+    if kind == 'same-name-same-bytes':
+        other.write_bytes(expected.read_bytes())
+        assert other.name == expected.name and other.read_bytes() == expected.read_bytes()
+        assert not other.samefile(expected)
+        url = QUrl.fromLocalFile(str(other))
+    elif kind == 'hardlink':
+        os.link(expected, other)
+        assert other.samefile(expected)
+        url = QUrl.fromLocalFile(str(other))
+    elif kind == 'missing':
+        url = QUrl.fromLocalFile(str(expected))
+        expected.unlink()
+    elif kind == 'nonlocal':
+        url = QUrl('qrc:/expected/song.flac')
+    else:
+        url = QUrl.fromLocalFile('expected/song.flac')
+    assert not local_url_points_to(url, expected)

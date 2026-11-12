@@ -169,19 +169,47 @@ def test_delivery_revalidates_native_proof_and_never_falls_back_to_stat(library,
 
 
 def test_adapter_retains_native_material_observed_before_the_content_read(library,monkeypatch):
+    from contextlib import closing, nullcontext
     from test_adopted_output_spec_v0427 import approve,request
     from audio_library_organizer.jobs import adopted_output as adapter
+    from audio_library_organizer.safety.windows_output_lease import acquire_output_lease
     m=api();repo,root,track,output=library;b=approve(library);r=request(adapter,repo,track,b)
-    observed=[];original=adapter.inspect_audio;native=proof(m)
-    monkeypatch.setattr(m,'on_windows',lambda:True)
-    monkeypatch.setattr(m,'capture',lambda p,**kw: observed.append(('native_db' if kw.get('mutable') else 'native',str(p))) or native)
-    def content(*a,**kw):
-        observed.append(('content',str(a[0])));return original(*a,**kw)
-    monkeypatch.setattr(adapter,'inspect_audio',content)
-    result=adapter.assess_adopted_mp3(repo,root,r,current_request=lambda:r)
+    source, managed = str(track.path), str(output)
+    database = str(repo.database_path)
+    observed = []
+    inspect_audio, capture_native = adapter.inspect_audio, m.capture
+    native = proof(m)
+    protection = closing(acquire_output_lease(source, managed)) if m.on_windows() else nullcontext()
+    with protection as lease:
+        expected_material = lease.material if lease is not None else (native, native)
+
+        def capture(path, *, mutable=False):
+            observed.append(('native_db' if mutable else 'native', str(path)))
+            return capture_native(path, mutable=mutable) if lease is not None else native
+
+        def content(path, **kwargs):
+            observed.append(('content', str(path)))
+            if lease is not None:
+                assert lease.active_for((source, managed), expected_material)
+            result = inspect_audio(path, **kwargs)
+            if lease is not None:
+                assert lease.active_for((source, managed), expected_material)
+            return result
+
+        monkeypatch.setattr(m, 'on_windows', lambda: True)
+        monkeypatch.setattr(m, 'capture', capture)
+        monkeypatch.setattr(adapter, 'inspect_audio', content)
+        result = adapter.assess_adopted_mp3(repo, root, r, current_request=lambda: r)
+
     assert result.evaluation.is_confirmed
-    assert result.guard.windows_material==(native,native)
-    assert [k for k,_ in observed]==['native_db','native','native','content','native','native','native_db']
+    assert result.guard.windows_material == expected_material
+    assert observed == [
+        ('native_db', database),
+        ('native', source), ('native', managed),
+        ('content', source), ('content', managed),
+        ('native', source), ('native', managed),
+        ('native_db', database),
+    ]
 
 
 def test_adapter_refuses_native_change_across_the_content_read(library,monkeypatch):

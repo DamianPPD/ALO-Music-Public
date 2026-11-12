@@ -184,6 +184,10 @@ class ExportResult:
         return 'success'
 
 
+class SourceAudioIdentityError(ValueError):
+    """The source could not be verified before copying."""
+
+
 class ManualCoverError(ValueError):
     """Refusal limited to a track's configured artwork."""
 
@@ -345,10 +349,12 @@ def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
             else:
                 cover = resolve_cover_for_export(item.track, artwork, cover_cache)
             emit('tagging', source, staged)
+            tag_options = {}
+            if receipt is not None and receipt.source_proof.ape_at_eof:
+                tag_options['staged_ape_at_eof'] = True
             if cover:
-                write_resolved_tags(staged, item.track, cover_bytes=cover[0], cover_mime=cover[1], replace_cover=True)
-            else:
-                write_resolved_tags(staged, item.track)
+                tag_options.update(cover_bytes=cover[0], cover_mime=cover[1], replace_cover=True)
+            write_resolved_tags(staged, item.track, **tag_options)
             emit('tags_written', source, staged)
             stage = 'verification_error'
             emit('final_verifying', source, staged)
@@ -415,7 +421,10 @@ def execute_copy_plan(plan: ExportPlan, *, artwork_client=None, progress=None,
                 exc = OSError('Output registration cleanup failed: ' + str(exc))
             error = f'{source}: {exc}'
             message = error
-            if cover_error is not None:
+            if isinstance(exc, SourceAudioIdentityError):
+                message = ('Could not verify the source audio.' if language == 'en'
+                           else 'Nie udało się zweryfikować pliku źródłowego.')
+            elif cover_error is not None:
                 continues = index < total and not cancelled()
                 message = cover_error.describe(language, published=True, continues=continues)
                 error = cover_error.describe(language, details=True, published=True, continues=continues)

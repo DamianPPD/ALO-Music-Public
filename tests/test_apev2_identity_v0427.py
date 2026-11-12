@@ -1,0 +1,448 @@
+"""Real MPEG, FFmpeg, MainWindow exports and SQLite ownership with APEv2."""
+
+import csv
+from contextlib import closing
+import hashlib
+import json
+import os
+from pathlib import Path
+import sqlite3
+import struct
+import subprocess
+import sys
+import textwrap
+from uuid import UUID
+
+import pytest
+from mutagen.id3 import ID3
+from PySide6.QtWidgets import QApplication
+
+from audio_adoption_fixtures import mp3_samples
+from audio_library_organizer.audio import identity
+from audio_library_organizer.audio.identity import inspect_audio
+from audio_library_organizer.domain.models import TrackRecord
+from audio_library_organizer.ui.export_dialogs import ExportProgressDialog
+from test_export_window_v0427 import export_window, no_unhandled_qt_errors
+from test_manual_cover_export_v0427 import wait_for_export
+
+
+def _ape_descriptor(size, items, flags=0, version=2000):
+    return struct.pack('<8sIIII8s', b'APETAGEX', version, size, items, flags, bytes(8))
+
+
+def _ape_item(key=b'Comment', value=b'fixture APE metadata', flags=0):
+    return struct.pack('<II', len(value), flags) + key + b'\0' + value
+
+
+def _ape_tag(*items, header=False):
+    body = b''.join(items)
+    flags = 1 << 31 if header else 0
+    size = len(body) + 32  # The optional header is outside the declared size.
+    footer = _ape_descriptor(size, len(items), flags)
+    return (_ape_descriptor(size, len(items), flags | (1 << 29)) if header else b'') + body + footer
+
+
+def _ape_with_false_id3v1():
+    # Both signatures are inside an opaque binary value of the real EOF tag.
+    data = b'file.dat\0APETAGEX' + b'x' * 24 + b'TAG' + b'y' * 93
+    return _ape_tag(_ape_item(b'Fixture binary', data, flags=2))
+
+
+ID3V1 = b'TAG' + b'APE fixture title'.ljust(30, b'\0') + bytes(95)
+ALGORITHM = 'mp3-layer3-frames-sha256/v1'
+
+
+@pytest.fixture
+def mp3_bytes(mp3_samples):
+    original = mp3_samples['original'].read_bytes()
+    assert original[:3] == b'ID3'  # The repo's FFmpeg fixture has an ID3v2 prefix.
+    start = 10 + sum(value << (7 * (3 - index)) for index, value in enumerate(original[6:10]))
+    return original[:start], original[start:]
+
+
+@pytest.mark.parametrize('header', [False, True], ids=['footer-only', 'header-and-footer'])
+@pytest.mark.parametrize('id3v1', [b'', ID3V1], ids=['eof', 'before-id3v1'])
+def test_valid_apev2_keeps_legacy_mpeg_digest(tmp_path, mp3_samples, header, id3v1):
+    reference = mp3_samples['original']
+    before = inspect_audio(reference)
+    assert before.status == 'VALID', before.reason
+    path = tmp_path / 'tagged, take #2.mp3'
+    content = reference.read_bytes() + _ape_tag(_ape_item(), header=header) + id3v1
+    path.write_bytes(content)
+    mtime = path.stat().st_mtime_ns
+
+    after = inspect_audio(path)
+
+    assert after.status == 'VALID', after.reason
+    assert before.algorithm == after.algorithm == ALGORITHM
+    assert before.audio_digest == after.audio_digest
+    assert before.frame_count == after.frame_count
+    assert before.full_sha256 != after.full_sha256 == hashlib.sha256(content).hexdigest()
+    assert path.read_bytes() == content and path.stat().st_mtime_ns == mtime
+
+
+@pytest.mark.parametrize('id3', ['none', 'leading', 'trailing'])
+def test_existing_id3_and_untagged_streams_keep_exact_frame_digest(tmp_path, mp3_bytes, id3):
+    prefix, frames = mp3_bytes
+    content = (prefix if id3 == 'leading' else b'') + frames + (ID3V1 if id3 == 'trailing' else b'')
+    path = tmp_path / 'plain.mp3'
+    path.write_bytes(content)
+    proof = inspect_audio(path)
+    assert proof.status == 'VALID', proof.reason
+    assert proof.algorithm == ALGORITHM
+    assert proof.audio_digest == hashlib.sha256(frames).hexdigest()
+    assert proof.full_sha256 == hashlib.sha256(content).hexdigest()
+
+
+def test_apev2_metadata_edits_do_not_change_untagged_audio_proof(tmp_path, mp3_bytes):
+    _, frames = mp3_bytes
+    path = tmp_path / 'tagged.mp3'
+    first = frames + _ape_tag(_ape_item(value=b'first comment'))
+    second = frames + _ape_tag(
+        _ape_item(value='zmieniony komentarz'.encode() + b'\0second value', flags=1),
+        _ape_item(b'Fixture binary', b'file.dat\0\x00\xffAPETAGEX', flags=2),
+        _ape_item(b'Location', b'https://example.test/source', flags=4),
+        header=True,
+    )
+    path.write_bytes(first)
+    before = inspect_audio(path)
+    path.write_bytes(second)
+    after = inspect_audio(path)
+    assert before.status == after.status == 'VALID', (before.reason, after.reason)
+    assert before.audio_digest == after.audio_digest == hashlib.sha256(frames).hexdigest()
+    assert before.full_sha256 == hashlib.sha256(first).hexdigest()
+    assert after.full_sha256 == hashlib.sha256(second).hexdigest()
+    assert before.full_sha256 != after.full_sha256
+
+
+@pytest.mark.parametrize('container', ['ape', 'id3v1', 'mpeg-eof', 'mpeg-before-id3v1'])
+def test_coincidental_tail_signatures_do_not_change_mpeg_boundary(tmp_path, mp3_bytes, container):
+    _, frames = mp3_bytes
+    if container == 'ape':
+        # At EOF-128 it looks like ID3v1, and 32 bytes before that
+        # fake tag it also looks like the beginning of an APEv2 footer.
+        tail = _ape_with_false_id3v1()
+        assert tail[-128:-125] == b'TAG'
+        assert tail[-160:-152] == b'APETAGEX'
+    elif container == 'id3v1':
+        tail = ID3V1[:-32] + b'APETAGEX' + bytes(24)
+        assert tail[-32:-24] == b'APETAGEX'
+    else:
+        # Modify only the end of the fixture's final real MPEG frame.
+        frames = frames[:-32] + b'APETAGEX' + frames[-24:]
+        tail = ID3V1 if container == 'mpeg-before-id3v1' else b''
+    path = tmp_path / 'signature-in-metadata.mp3'
+    path.write_bytes(frames + tail)
+    proof = inspect_audio(path)
+    assert proof.status == 'VALID', proof.reason
+    assert proof.audio_digest == hashlib.sha256(frames).hexdigest()
+    if container == 'ape':
+        assert not proof.tag_snapshot['title']
+
+
+def _malformed_tails():
+    item = _ape_item()
+    size = len(item) + 32
+    tag = _ape_tag(item)
+    header_present = 1 << 31
+    header_flag = header_present | (1 << 29)
+    return [
+        pytest.param(item + _ape_descriptor(31, 1), id='bad-ape-size'),
+        pytest.param(item + _ape_descriptor(0xffffffff, 1), id='oversized-ape'),
+        pytest.param(item + _ape_descriptor(size, 1, version=1000), id='wrong-ape-version'),
+        pytest.param(tag[:-1] + b'X', id='reserved-footer-bytes'),
+        pytest.param(item + _ape_descriptor(size, 1, 1 << 12), id='reserved-footer-flag'),
+        pytest.param(item + _ape_descriptor(size, 1, 1 << 30), id='footer-absent-flag'),
+        pytest.param(item + _ape_descriptor(size, 1, header_flag), id='header-in-footer-position'),
+        pytest.param(item + _ape_descriptor(size, 1, header_present), id='missing-declared-header'),
+        pytest.param(_ape_descriptor(size, 2, header_flag) + item + _ape_descriptor(size, 1, header_present),
+                     id='header-footer-count-mismatch'),
+        pytest.param(item + _ape_descriptor(size, 2), id='declared-items-missing'),
+        pytest.param(item + _ape_descriptor(size, 0), id='unclaimed-item-bytes'),
+        pytest.param(_ape_tag(_ape_item(flags=6)), id='reserved-item-type'),
+        pytest.param(_ape_tag(_ape_item(flags=1 << 12)), id='reserved-item-flag'),
+        pytest.param(_ape_tag(_ape_item(key=b'A')), id='short-item-key'),
+        pytest.param(_ape_tag(_ape_item(key=b'\xff\xff')), id='non-ascii-item-key'),
+        pytest.param(_ape_tag(_ape_item(key=b'ID3')), id='reserved-item-key'),
+        pytest.param(_ape_tag(item, _ape_item(key=b'comment')), id='duplicate-case-insensitive-key'),
+        pytest.param(_ape_tag(_ape_item(value=b'\xff')), id='bad-utf8-item-value'),
+        pytest.param(_ape_tag(struct.pack('<II', 4096, 0) + b'Comment\0short'), id='short-item-value'),
+        pytest.param(_ape_tag(struct.pack('<II', 0, 0) + b'Comment'), id='missing-key-terminator'),
+        pytest.param(tag[:-5], id='truncated-footer'),
+        pytest.param(tag[:-32] + b'APETAGEX' + b'X' * 24, id='false-signature'),
+        pytest.param(b'extra bytes' + tag, id='junk-before-valid-tag'),
+        pytest.param(tag + b'extra bytes', id='junk-after-valid-tag'),
+        pytest.param(tag + tag, id='duplicate-end-tags'),
+        pytest.param(ID3V1 + tag, id='ape-after-id3v1'),
+        pytest.param(b'unrecognized tail', id='unknown-tail'),
+    ]
+
+
+@pytest.mark.parametrize('tail', _malformed_tails())
+def test_malformed_apev2_and_unknown_tails_remain_invalid(tmp_path, mp3_samples, tail):
+    path = tmp_path / 'bad.mp3'
+    path.write_bytes(mp3_samples['original'].read_bytes() + tail)
+    proof = inspect_audio(path)
+    assert proof.status in {'ERROR', 'UNSUPPORTED'} and proof.audio_digest is None
+    assert proof.reason
+
+
+def test_single_frame_byte_change_changes_apev2_audio_digest(tmp_path, mp3_bytes):
+    _, frames = mp3_bytes
+    changed = frames[:-1] + bytes([frames[-1] ^ 1])
+    tail = _ape_tag(_ape_item())
+    path = tmp_path / 'frame-byte.mp3'
+    path.write_bytes(frames + tail)
+    before = inspect_audio(path)
+    path.write_bytes(changed + tail)
+    after = inspect_audio(path)
+    assert before.status == after.status == 'VALID', (before.reason, after.reason)
+    assert before.audio_digest == hashlib.sha256(frames).hexdigest()
+    assert after.audio_digest == hashlib.sha256(changed).hexdigest()
+    assert before.audio_digest != after.audio_digest
+
+
+@pytest.mark.parametrize('damage, reason', [
+    ('truncate', 'Truncated MPEG frame'),
+    ('info-count', 'Xing/Info frame count'),
+    ('sync', 'Invalid MPEG frame boundary'),
+    ('side-info', 'Full MP3 decoding failed'),
+])
+def test_valid_apev2_does_not_mask_mpeg_or_real_ffmpeg_errors(tmp_path, mp3_bytes, damage, reason):
+    _, mpeg = mp3_bytes
+    # The FFmpeg fixture is 44.1 kHz, MPEG-1 stereo CBR at 128 kb/s.
+    assert mpeg[:2] == b'\xff\xfb' and mpeg[2] & 0xfc == 0x90
+    second_frame = 417 + bool(mpeg[2] & 2)
+    assert mpeg[second_frame:second_frame+2] == b'\xff\xfb'
+    if damage == 'truncate':
+        mpeg = mpeg[:-1]
+    elif damage == 'info-count':
+        assert mpeg[36:40] in (b'Info', b'Xing')
+        mpeg = mpeg[:44] + b'\0' * 4 + mpeg[48:]
+    elif damage == 'sync':
+        mpeg = mpeg[:second_frame] + b'\0' + mpeg[second_frame+1:]
+    else:
+        # Keep all frame headers and the declared count. Only decoding can
+        # discover the impossible values in the second frame's side info.
+        offset = second_frame + 4
+        mpeg = mpeg[:offset] + b'\xff' * 32 + mpeg[offset+32:]
+    path = tmp_path / 'broken-audio.mp3'
+    path.write_bytes(mpeg + _ape_tag(_ape_item(), header=True))
+    proof = inspect_audio(path)
+    assert proof.status == 'ERROR' and proof.audio_digest is None
+    assert reason in proof.reason
+
+
+def test_apev2_cancellation_during_decode_never_returns_a_proof(tmp_path, mp3_bytes, monkeypatch):
+    _, frames = mp3_bytes
+    path = tmp_path / 'cancel.mp3'
+    content = frames + _ape_tag(_ape_item())
+    path.write_bytes(content)
+    decoding = False
+    original_decode = identity._decode
+
+    def start_decode_then_cancel(*args, **kwargs):
+        nonlocal decoding
+        decoding = True
+        return original_decode(*args, **kwargs)
+
+    monkeypatch.setattr(identity, '_decode', start_decode_then_cancel)
+    proof = inspect_audio(path, cancelled=lambda: decoding)
+    assert decoding and proof.status == 'CANCELLED' and proof.audio_digest is None
+    assert path.read_bytes() == content
+
+
+def test_apev2_same_bytes_replacement_during_validation_is_refused(tmp_path, mp3_bytes, monkeypatch):
+    _, frames = mp3_bytes
+    path = tmp_path / 'replaced.mp3'
+    replacement = tmp_path / 'replacement.mp3'
+    content = frames + _ape_tag(_ape_item(), header=True)
+    path.write_bytes(content)
+    replacement.write_bytes(content)
+    before = path.stat()
+    os.utime(replacement, ns=(before.st_atime_ns, before.st_mtime_ns))
+    original_decode = identity._decode
+
+    def replace_after_decode(*args, **kwargs):
+        original_decode(*args, **kwargs)
+        replacement.replace(path)
+
+    monkeypatch.setattr(identity, '_decode', replace_after_decode)
+    proof = inspect_audio(path)
+    assert proof.status == 'ERROR' and proof.audio_digest is None
+    assert 'changed during identity validation' in proof.reason
+    assert path.stat().st_ino != before.st_ino and path.stat().st_mtime_ns == before.st_mtime_ns
+    assert path.read_bytes() == content
+
+
+@pytest.fixture
+def mixed_export(export_window, mp3_samples, monkeypatch):
+    window, tracks, summaries = export_window
+    reference = mp3_samples['original'].read_bytes()
+    source = tracks[0].path.parent
+    for name, content in (
+        ('02-malformed-ape', reference + _ape_item() + _ape_descriptor(31, 1)),
+        ('03-truncated-mpeg', reference[:-1]),
+        ('04-valid-ape', reference + _ape_with_false_id3v1()),
+    ):
+        path = source / f'{name}.mp3'
+        path.write_bytes(content)
+        info = path.stat()
+        track = TrackRecord(path=path, artist='Fixture artist', title=name, year='2000',
+                            genre='House', bpm=128, status='ready', locked_fields={'__status__'},
+                            sha256=hashlib.sha256(content).hexdigest(), size_bytes=info.st_size,
+                            mtime_ns=info.st_mtime_ns)
+        window.repository.upsert_track(track)
+        tracks.append(track)
+    window.refresh_data()
+    originals = {track.path: (track.sha256, track.path.stat().st_mtime_ns) for track in tracks}
+    progress_logs = []
+    finish = ExportProgressDialog.finish
+
+    def observe_progress(dialog):
+        progress_logs.append(dialog.log.toPlainText())
+        return finish(dialog)
+
+    monkeypatch.setattr(ExportProgressDialog, 'finish', observe_progress)
+    window.export_library()
+    assert window._thread is not None
+    try:
+        wait_for_export(window)
+    finally:
+        if window._thread is not None:
+            window._request_export_stop()
+            wait_for_export(window)
+    result = window._export_result
+    assert not result.fatal_error and not result.cancelled
+    assert (result.planned, result.processed, result.remaining) == (5, 5, 0)
+    assert len(summaries) == 1 and summaries[0][0].outcome == 'problems'
+    with summaries[0][0].report.open(encoding='utf-8-sig', newline='') as stream:
+        audit = {row['source_path']: row for row in csv.DictReader(stream)}
+    return window, tracks, result, audit, originals, progress_logs
+
+
+def _restart_and_check(window, tmp_path):
+    result = tmp_path / 'restarted.json'
+    window.qt_settings.sync()
+    library_root = window.app_settings.library.root
+    prefs = window.qt_settings.fileName()
+    window.close()
+    QApplication.processEvents()
+    code = textwrap.dedent('''
+        import json
+        from pathlib import Path
+        import sys
+        import time
+        sys.path.insert(0, sys.argv[1])
+        from PySide6.QtCore import QCoreApplication, QEvent, QSettings, QThreadPool, Qt
+        from PySide6.QtWidgets import QApplication
+        from audio_library_organizer.domain.settings import AppSettings, LibraryPaths
+        from audio_library_organizer.ui import main_window
+        from audio_library_organizer.ui.dashboard_page import DashboardPage
+
+        main_window.DashboardPage = DashboardPage
+        app = QApplication([])
+        errors = []
+        sys.excepthook = lambda kind, value, trace: errors.append(str(value))
+        settings = AppSettings((), LibraryPaths(Path(sys.argv[2])))
+        window = main_window.MainWindow(settings, QSettings(sys.argv[3], QSettings.Format.IniFormat))
+        window.show()
+        app.processEvents()
+        window._check_library_clicked()
+        deadline = time.monotonic() + 35
+        while window._thread is not None and time.monotonic() < deadline:
+            app.processEvents()
+        assert window._thread is None and window.last_reconciliation_result is not None
+        model = window.library.model
+        cells = {model.item(row, 0).data(Qt.ItemDataRole.UserRole).track_id: model.item(row, 10).text()
+                 for row in range(model.rowCount())}
+        ids = {binding.track_id: binding.binding_id for binding in window.repository.list_managed_bindings()}
+        window.close()
+        app.processEvents()
+        QThreadPool.globalInstance().waitForDone(5000)
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        Path(sys.argv[4]).write_text(json.dumps({'cells': cells, 'ids': ids, 'errors': errors}), encoding='utf-8')
+    ''')
+    source = Path(__file__).resolve().parents[1] / 'src'
+    child = subprocess.run([sys.executable, '-I', '-B', '-c', code, str(source), str(library_root), prefs, str(result)],
+                           capture_output=True, encoding='utf-8', errors='replace', timeout=45)
+    assert child.returncode == 0, child.stderr
+    return json.loads(result.read_text(encoding='utf-8'))
+
+
+def test_mainwindow_creates_and_registers_valid_apev2_in_mixed_batch(mixed_export, tmp_path, mp3_bytes):
+    window, tracks, result, audit, originals, _ = mixed_export
+    by_source = {outcome.source: outcome for outcome in result.outcomes}
+    assert all(by_source[track.path].status == 'verified' for track in tracks[:2])
+    accepted = by_source[tracks[4].path]
+    assert accepted.status == 'verified', accepted.error
+    assert (result.created, result.failed) == (3, 2)
+    bindings = {binding.track_id: binding for binding in window.repository.list_managed_bindings()}
+    assert bindings.keys() == {tracks[i].track_id for i in (0, 1, 4)}
+    paths = window.app_settings.library
+    assert set(paths.root.rglob('*.mp3')) == set(result.copied)
+    assert not list(paths.root.rglob('.alo-copy-*'))
+    expected_digest = hashlib.sha256(mp3_bytes[1]).hexdigest()
+    outputs = {}
+    for track in (tracks[0], tracks[1], tracks[4]):
+        binding = bindings[track.track_id]
+        assert UUID(binding.binding_id) and UUID(binding.track_id) and UUID(binding.library_id)
+        assert binding.library_id == window.repository.library_id
+        outcome = by_source[track.path]
+        output = outcome.destination
+        assert outcome.raw_verified and output == Path(binding.locator(paths.root))
+        proof = inspect_audio(output)
+        assert proof.status == 'VALID', proof.reason
+        assert proof.stat_identity == binding.stat_identity
+        assert proof.algorithm == binding.audio_algorithm == ALGORITHM
+        assert proof.audio_digest == binding.audio_digest == expected_digest
+        assert proof.full_sha256 == binding.expected_sha256 == outcome.final_sha256 == audit[str(track.path)]['final_sha256']
+        assert binding.evidence['source_sha256'] == originals[track.path][0]
+        assert binding.evidence['source_audio_digest'] == expected_digest
+        tags = ID3(output)
+        assert str(tags['TIT2']) == f'{track.title} [128bpm]' and str(tags['TPE1']) == track.artist
+        assert str(tags['TBPM']) == '128'
+        if track is tracks[4]:
+            assert output.read_bytes().endswith(_ape_with_false_id3v1())
+        outputs[output] = (proof.full_sha256, output.stat().st_mtime_ns)
+    with closing(sqlite3.connect(paths.database)) as conn:
+        assert conn.execute('PRAGMA integrity_check').fetchall() == [('ok',)]
+        assert not conn.execute('PRAGMA foreign_key_check').fetchall()
+        assert set(conn.execute('SELECT track_id, binding_id, audio_digest FROM managed_bindings')) == {
+            (track_id, binding.binding_id, expected_digest) for track_id, binding in bindings.items()
+        }
+
+    window.export_library()
+    assert window._thread is not None
+    wait_for_export(window)
+    assert not window._export_result.fatal_error
+    assert window._export_result.created == 0 and window._export_result.skipped == 3
+    assert set(paths.root.rglob('*.mp3')) == set(outputs)
+    for file, value in (outputs | originals).items():
+        assert (hashlib.sha256(file.read_bytes()).hexdigest(), file.stat().st_mtime_ns) == value
+
+    restarted = _restart_and_check(window, tmp_path)
+    assert restarted['ids'] == {track_id: binding.binding_id for track_id, binding in bindings.items()}
+    assert not restarted['errors']
+    assert set(restarted['cells']) == {track.track_id for track in tracks}
+    assert {track_id for track_id, status in restarted['cells'].items() if status.startswith('W bibliotece')} == bindings.keys()
+
+
+def test_mainwindow_audit_preserves_different_source_refusal_reasons(mixed_export):
+    _, tracks, result, audit, _, progress_logs = mixed_export
+    outcomes = {outcome.source: outcome for outcome in result.outcomes}
+    reasons = set()
+    for track in tracks[2:4]:
+        proof = inspect_audio(track.path)
+        assert proof.status == 'ERROR' and proof.reason
+        outcome = outcomes[track.path]
+        assert outcome.status != 'verified' and outcome.destination is None
+        assert not outcome.raw_verified
+        row = audit[str(track.path)]
+        assert row['destination_path'] == '' and row['final_file_exists'] == 'False'
+        assert proof.reason in row['error']
+        reasons.add(proof.reason)
+    assert len(reasons) == 2
+    (log,) = progress_logs
+    assert 'Nie udało się zweryfikować pliku źródłowego' in log
+    assert all(reason not in log for reason in reasons)

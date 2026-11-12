@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+from os import SEEK_END
 from pathlib import Path
+from typing import BinaryIO
 
 from mutagen import File as MutagenFile
 from mutagen.id3 import ID3, ID3NoHeaderError, APIC, TALB, TBPM, TCON, TDRC, TIT2, TPE1, COMM, WXXX
@@ -11,9 +14,27 @@ from audio_library_organizer.domain.models import TrackRecord
 from .mp3_output import build_title_tag, mp3_text_frames, mp3_discogs_frame, REMOVED_NUMBER_FRAMES
 
 
-def _write_mp3(path: Path, track: TrackRecord, cover_bytes: bytes | None, cover_mime: str, replace_cover: bool) -> None:
+@contextmanager
+def _hide_staged_ape_from_id3v1(path: Path):
+    """Keep the terminal APEv2 bytes outside Mutagen's ID3v1 search."""
+    # Mutagen reads the last 128 ID3v1 bytes plus 3 look-behind bytes.
+    # Only a private export copy with a proven EOF APEv2 reaches this path.
+    guard = bytes(128 + 3)
+    with path.open('r+b') as stream:
+        stream.seek(0, SEEK_END)
+        stream.write(guard)
+        stream.seek(0)
+        yield stream
+        guard_start = stream.seek(-len(guard), SEEK_END)
+        if stream.read(len(guard)) != guard:
+            raise OSError('Staged MP3 tag writer changed its APEv2 guard.')
+        stream.truncate(guard_start)
+
+
+def _write_mp3(file: Path | BinaryIO, track: TrackRecord, cover_bytes: bytes | None,
+               cover_mime: str, replace_cover: bool) -> None:
     try:
-        tags = ID3(path)
+        tags = ID3(file)
     except ID3NoHeaderError:
         tags = ID3()
     frames = mp3_text_frames(track)
@@ -40,7 +61,9 @@ def _write_mp3(path: Path, track: TrackRecord, cover_bytes: bytes | None, cover_
         if not replace_cover:
             tags.delall('APIC')
         tags.add(APIC(encoding=3, mime=cover_mime, type=3, desc='Cover', data=cover_bytes))
-    tags.save(path, v2_version=3)
+    if not isinstance(file, Path):
+        file.seek(0)
+    tags.save(file, v2_version=3)
 
 
 
@@ -133,11 +156,16 @@ def _write_generic(path: Path, track: TrackRecord) -> None:
     audio.save()
 
 
-def write_resolved_tags(path: Path, track: TrackRecord, *, cover_bytes: bytes | None = None, cover_mime: str = 'image/jpeg', replace_cover: bool = False) -> None:
+def write_resolved_tags(path: Path, track: TrackRecord, *, cover_bytes: bytes | None = None, cover_mime: str = 'image/jpeg',
+                        replace_cover: bool = False, staged_ape_at_eof: bool = False) -> None:
     path = Path(path)
     suffix = path.suffix.lower()
     if suffix == '.mp3':
-        _write_mp3(path, track, cover_bytes, cover_mime, replace_cover)
+        if staged_ape_at_eof:
+            with _hide_staged_ape_from_id3v1(path) as stream:
+                _write_mp3(stream, track, cover_bytes, cover_mime, replace_cover)
+        else:
+            _write_mp3(path, track, cover_bytes, cover_mime, replace_cover)
     elif suffix == '.flac':
         _write_flac(path, track, cover_bytes, cover_mime, replace_cover)
     elif suffix in {'.m4a', '.mp4'}:

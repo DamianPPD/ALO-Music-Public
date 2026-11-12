@@ -1,7 +1,7 @@
 """Versioned MP3 material evidence, never evidence of ownership.
 
 v1 hashes every complete MPEG Layer III frame, including the stream's Info/Xing
-frame. Parsed ID3v2 and ID3v1 envelopes are excluded; no fixed prefix is skipped.
+frame. Parsed ID3v2, APEv2 and ID3v1 envelopes are excluded.
 It deliberately does not equate a re-encoded recording with the original. A
 strict, complete decoder pass is also required. Unsupported variants fail closed.
 Call only in workers: this module reads and hashes the complete local file.
@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import shutil
 import stat
+import struct
 import subprocess
 import sys
 import time
@@ -23,6 +24,13 @@ from mutagen.id3 import ID3, ID3NoHeaderError
 
 ALGORITHM = 'mp3-layer3-frames-sha256/v1'
 MAX_ID3_BYTES = 64 * 1024 * 1024
+MAX_APEV2_BYTES = 16 * 1024 * 1024
+MAX_APEV2_ITEMS = 4096
+_APE_DESCRIPTOR = struct.Struct('<8s4I8s')
+_APE_ITEM = struct.Struct('<II')
+_APE_MAGIC = b'APETAGEX'
+_APE_HAS_HEADER = 1 << 31
+_APE_IS_HEADER = 1 << 29
 DECODE_SECONDS = 120
 MAX_DECODE_STDERR_BYTES = 64 * 1024
 
@@ -37,6 +45,7 @@ class AudioIdentity:
     stat_identity: tuple = ()
     tag_snapshot: dict = field(default_factory=dict)
     reason: str = ''
+    ape_at_eof: bool = False
 
 
 class UnsupportedMP3(ValueError):
@@ -71,6 +80,92 @@ def _cancel(cancelled):
         raise InterruptedError('Audio identity cancelled.')
 
 
+def _ape_footer(stream, begin, end):
+    if end - begin < _APE_DESCRIPTOR.size:
+        return None
+    stream.seek(end - _APE_DESCRIPTOR.size)
+    raw = stream.read(_APE_DESCRIPTOR.size)
+    return raw if raw.startswith(_APE_MAGIC) else None
+
+
+def _ape_start(stream, begin, end, footer, cancelled):
+    _cancel(cancelled)
+    if len(footer) != _APE_DESCRIPTOR.size:
+        raise ValueError('Invalid APEv2 footer length.')
+    magic, version, size, count, flags, reserved = _APE_DESCRIPTOR.unpack(footer)
+    if version != 2000:
+        raise ValueError('Invalid APEv2 version.')
+    if flags & ~(_APE_HAS_HEADER | 1) or any(reserved):
+        raise ValueError('Invalid APEv2 footer flags or reserved bytes.')
+    header_size = _APE_DESCRIPTOR.size if flags & _APE_HAS_HEADER else 0
+    start = end - size - header_size
+    if (size < _APE_DESCRIPTOR.size or size + header_size > MAX_APEV2_BYTES
+            or start < begin):
+        raise ValueError('Invalid APEv2 size or position.')
+    remaining = size - _APE_DESCRIPTOR.size
+    if count > min(MAX_APEV2_ITEMS, remaining // 11):
+        raise ValueError('Invalid APEv2 item count.')
+    stream.seek(start)
+    if header_size:
+        expected = _APE_DESCRIPTOR.pack(magic, version, size, count, flags | _APE_IS_HEADER, reserved)
+        if stream.read(header_size) != expected:
+            raise ValueError('Invalid APEv2 header/footer pair.')
+    keys = {b'id3', b'tag', b'oggs', b'mp+'}
+    for _ in range(count):
+        _cancel(cancelled)
+        if remaining < 11:
+            raise ValueError('Invalid APEv2 item length.')
+        raw = stream.read(_APE_ITEM.size)
+        if len(raw) != _APE_ITEM.size:
+            raise ValueError('Invalid APEv2 item header.')
+        value_size, item_flags = _APE_ITEM.unpack(raw)
+        if item_flags > 5:
+            raise ValueError('Invalid APEv2 item flags.')
+        remaining -= _APE_ITEM.size
+        key_start = stream.tell()
+        key_data = stream.read(min(remaining, 256))
+        key_size = key_data.find(b'\0')
+        if key_size < 2 or any(not 0x20 <= byte <= 0x7e for byte in key_data[:key_size]):
+            raise ValueError('Invalid APEv2 item key.')
+        key = key_data[:key_size].lower()
+        if key in keys:
+            raise ValueError('Invalid APEv2 reserved or duplicate item key.')
+        keys.add(key)
+        remaining -= key_size + 1
+        if value_size > remaining:
+            raise ValueError('Invalid APEv2 item value length.')
+        stream.seek(key_start + key_size + 1)
+        value = stream.read(value_size)
+        if len(value) != value_size:
+            raise ValueError('Invalid APEv2 truncated item value.')
+        if (item_flags & 6) != 2:  # Text and external locators are UTF-8.
+            try:
+                value.decode('utf-8')
+            except UnicodeDecodeError as exc:
+                raise ValueError('Invalid APEv2 item UTF-8.') from exc
+        remaining -= value_size
+    if remaining:
+        raise ValueError('Invalid APEv2 unaccounted item bytes.')
+    return start
+
+
+def _mp3_tails(stream, begin, length):
+    end = length
+    if length - begin >= 128:
+        stream.seek(length - 128)
+        if stream.read(3) == b'TAG':
+            end -= 128
+    footer = _ape_footer(stream, begin, end)
+    if footer is not None:
+        yield end, footer
+    if end != length:
+        # A binary APEv2 item can also contain TAG 128 bytes from EOF.
+        footer = _ape_footer(stream, begin, length)
+        if footer is not None:
+            yield length, footer
+    yield end, None
+
+
 def _frame_identity(stream, length, cancelled):
     """Strict envelope/frame traversal: no sync-search through unknown bytes."""
     stream.seek(0)
@@ -90,10 +185,22 @@ def _frame_identity(stream, length, cancelled):
         begin = 10 + tag_length
         if begin > end:
             raise ValueError('Truncated ID3 envelope.')
-    if end >= 128:
-        stream.seek(end-128)
-        if stream.read(3) == b'TAG':
-            end -= 128
+    first_error = None
+    for tail_end, footer in _mp3_tails(stream, begin, end):
+        try:
+            frame_end = tail_end if footer is None else _ape_start(stream, begin, tail_end, footer, cancelled)
+            digest, count = _mpeg_frame_digest(stream, begin, frame_end, cancelled)
+        except ValueError as exc:
+            if first_error is None:
+                first_error = exc
+        else:
+            # Only the boundary of the declared, complete stream can succeed.
+            # Magic bytes inside a frame or a metadata value do not set that boundary.
+            return digest, count, frame_end if footer is not None else None, footer is not None and tail_end == length
+    raise first_error
+
+
+def _mpeg_frame_digest(stream, begin, end, cancelled):
     stream.seek(begin)
     digest = hashlib.sha256()
     count, configuration, declared = 0, None, None
@@ -245,10 +352,16 @@ def _decode_windows(command, cancelled):
                 process.stderr.close()
 
 
-def _decode(path, decoder, cancelled):
+def _decode(path, decoder, cancelled, frame_end=None):
+    input_args = ['-protocol_whitelist', 'file,pipe', '-f', 'mp3', '-i', str(path)]
+    if frame_end is not None:
+        # Some FFmpeg versions feed footer-only APE items to the MP3 decoder.
+        # Use a seekable view ending at the validated last frame on the same file.
+        input_args = ['-protocol_whitelist', 'file,pipe,subfile', '-f', 'mp3',
+                      '-start', '0', '-end', str(frame_end), '-i', 'subfile:file:' + str(path)]
     command = [str(decoder), '-hide_banner', '-v', 'error', '-nostdin', '-xerror',
-               '-err_detect', 'explode', '-protocol_whitelist', 'file,pipe', '-f', 'mp3',
-               '-i', str(path), '-map', '0:a:0', '-vn', '-sn', '-dn', '-threads', '1', '-f', 'null', '-']
+               '-err_detect', 'explode', *input_args, '-map', '0:a:0',
+               '-vn', '-sn', '-dn', '-threads', '1', '-f', 'null', '-']
     if os.name == 'nt':
         return _decode_windows(command, cancelled)
     process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -271,9 +384,9 @@ def _decode(path, decoder, cancelled):
         process.communicate()
 
 
-def _tags(path):
+def _tags(path, *, ape_at_eof=False):
     try:
-        tags = ID3(path)
+        tags = ID3(path, load_v1=not ape_at_eof)
     except ID3NoHeaderError:
         tags = {}
     def text(key):
@@ -313,16 +426,17 @@ def inspect_audio(path: Path, *, decoder=None, cancelled=None) -> AudioIdentity:
             result = replace(result, full_sha256=full.hexdigest(), stat_identity=token)
             if path.suffix.lower() != '.mp3':
                 return replace(result, status='UNSUPPORTED', reason='Only MP3 identity is supported.')
-            digest, count = _frame_identity(stream, before.st_size, cancelled)
+            digest, count, frame_end, ape_at_eof = _frame_identity(stream, before.st_size, cancelled)
         executable = decoder if decoder is not None else _find_decoder()
         if not executable:
             return replace(result, status='UNAVAILABLE', reason='Complete MP3 decoder is unavailable.')
-        _decode(path, executable, cancelled)
-        snapshot = _tags(path)
+        _decode(path, executable, cancelled, frame_end)
+        snapshot = _tags(path, ape_at_eof=ape_at_eof)
         _cancel(cancelled)
         if stat_identity(path.stat()) != token:
             raise ValueError('Audio file changed during identity validation.')
-        return replace(result, status='VALID', audio_digest=digest, frame_count=count, tag_snapshot=snapshot)
+        return replace(result, status='VALID', audio_digest=digest, frame_count=count,
+                       tag_snapshot=snapshot, ape_at_eof=ape_at_eof)
     except InterruptedError as exc:
         return replace(result, status='CANCELLED', reason=str(exc))
     except UnsupportedMP3 as exc:
