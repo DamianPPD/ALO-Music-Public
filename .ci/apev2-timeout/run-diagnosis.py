@@ -75,7 +75,7 @@ def stage(row, roots, evidence, private, child):
             if not cdb:
                 raise RuntimeError('CDB required for native abort diagnosis')
             dump = directory / 'hung-abort.dmp'
-            commands = 'bu ucrtbase!abort \".echo ABORT_BREAKPOINT; ~*kp; .dump /ma ' + str(dump) + '; q\"; g'
+            commands = 'bu ucrtbase!abort \".echo ABORT_BREAKPOINT; ~*kp; .dump /ma ' + dump.as_posix() + '; q\"; g'
             command = [cdb, '-o', '-G', '-y', os.environ.get('ALO_PYTHON_PDB_DIR',''), '-c', commands, *command]
 
         with (directory/'pytest.log').open('wb') as stream:
