@@ -1,5 +1,5 @@
-name: ALO Qt cover lifecycle validation
-run-name: ALO Qt cover / exact candidate Windows validation
+name: ALO managed playback diagnosis
+run-name: ALO QMediaPlayer native base and candidate diagnosis
 on:
   push:
     branches: [ci/windows-62d-validation]
@@ -20,7 +20,6 @@ jobs:
       QT_QPA_PLATFORM: windows
       PYTHONDONTWRITEBYTECODE: '1'
       PYTHONUTF8: '1'
-      ALO_RESTART_TRACE_MODE: stacks
     steps:
       - name: Checkout diagnostic files
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -53,7 +52,7 @@ jobs:
           $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           $exe = Join-Path $bin 'ffmpeg.exe'
           "ALO_FFMPEG_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          $evidence = Join-Path $env:RUNNER_TEMP 'alo-qt-cover-validation'
+          $evidence = Join-Path $env:RUNNER_TEMP 'alo-managed-playback-diagnosis'
           New-Item -ItemType Directory -Path $evidence | Out-Null
           "$expected  ffmpeg-9.0.2-essentials_build.zip" | Set-Content -LiteralPath (Join-Path $evidence 'ffmpeg-archive-sha256.txt') -Encoding utf8
       - name: Fetch exact product baseline
@@ -62,13 +61,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Baseline fetch failed' }
       - name: Validate the sealed product candidate on native Windows
         run: |
-          python -B .ci/qt-cover/validate.py
+          python -B .ci/managed-playback/diagnose.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Preserve native evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ALO-Qt-Cover-Final-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/alo-qt-cover-validation/
+          name: ALO-Managed-Playback-Diagnosis-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/alo-managed-playback-diagnosis/
           retention-days: 30
           if-no-files-found: warn
