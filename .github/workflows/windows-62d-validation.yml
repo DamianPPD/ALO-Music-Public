@@ -1,5 +1,5 @@
-name: ALO managed playback diagnosis
-run-name: ALO QMediaPlayer native base and candidate diagnosis
+name: ALO managed playback final validation
+run-name: ALO managed playback exact final tree validation
 on:
   push:
     branches: [ci/windows-62d-validation]
@@ -52,7 +52,7 @@ jobs:
           $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           $exe = Join-Path $bin 'ffmpeg.exe'
           "ALO_FFMPEG_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          $evidence = Join-Path $env:RUNNER_TEMP 'alo-managed-playback-diagnosis'
+          $evidence = Join-Path $env:RUNNER_TEMP 'alo-managed-playback-final'
           New-Item -ItemType Directory -Path $evidence | Out-Null
           "$expected  ffmpeg-9.0.2-essentials_build.zip" | Set-Content -LiteralPath (Join-Path $evidence 'ffmpeg-archive-sha256.txt') -Encoding utf8
       - name: Fetch exact product baseline
@@ -61,13 +61,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Baseline fetch failed' }
       - name: Validate the sealed product candidate on native Windows
         run: |
-          python -B .ci/managed-playback/diagnose.py
+          python -B .ci/managed-playback/final_validate.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Preserve native evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ALO-Managed-Playback-Diagnosis-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/alo-managed-playback-diagnosis/
+          name: ALO-Managed-Playback-Final-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/alo-managed-playback-final/
           retention-days: 30
           if-no-files-found: warn
