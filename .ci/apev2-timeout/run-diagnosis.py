@@ -26,15 +26,11 @@ PREVIOUS = MODULE + '::test_unchanged_ape_binary_tag_adoption_remains_confirmed_
 
 def plan():
     control = str(HERE / 'test_restart_baseline_control.py')
-    yield 'baseline-id3-stacks', 'base', True, (control,)
-    yield 'candidate-id3-stacks', 'candidate', True, (control,)
+    for side in ('base', 'candidate'):
+        for repeat in range(1, 9):
+            yield f'{side}-id3-native-{repeat}', side, True, (control,)
     for repeat in range(1, 13):
-        yield f'isolated-stacks-{repeat}', 'candidate', True, (TARGET,)
-    for repeat in range(1, 3):
-        yield f'after-apev2-stacks-{repeat}', 'candidate', True, (PREVIOUS, TARGET)
-        yield f'after-lease-stacks-{repeat}', 'candidate', True, ('tests/test_windows_output_lease_v0427.py', TARGET)
-        yield f'after-qt-stacks-{repeat}', 'candidate', True, ('tests/test_identification_qt_lifecycle_v0427.py', TARGET)
-    yield 'whole-adoption-stacks', 'candidate', True, (MODULE,)
+        yield f'candidate-ape-native-{repeat}', 'candidate', True, (TARGET,)
 
 
 def extract_child(candidate, evidence):
@@ -54,7 +50,8 @@ def stage(row, roots, evidence, private, child):
     directory = evidence / name
     directory.mkdir()
     root = roots[side]
-    env = os.environ | {
+    clean = {k:v for k,v in os.environ.items() if not any(x in k.upper() for x in ('TOKEN','SECRET','PASSWORD','CREDENTIAL'))}
+    env = clean | {
         'PYTHONPATH': os.pathsep.join((str(HERE), str(root / 'src'))),
         'ALO_EXACT_CHILD_SCRIPT': str(child), 'ALO_TIMEOUT_ATTEMPT': str(directory),
         'ALO_TRACE_CHILD': '1' if traced else '0',
@@ -90,6 +87,8 @@ def stage(row, roots, evidence, private, child):
                                 'FAIL' if failure is not None or case.find('error') is not None else
                                 'SKIP' if case.find('skipped') is not None else 'PASS')
             result['target_seconds'] = float(case.get('time', '0'))
+    from native_dump import analyze
+    analyze(directory)
     result.setdefault('target', 'TIMEOUT' if result['exit_code'] == 124 else 'UNKNOWN')
     if traced:
         logs = list(directory.glob('child-*.jsonl'))

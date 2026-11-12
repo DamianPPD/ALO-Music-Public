@@ -48,6 +48,12 @@ def pytest_runtest_call(item):
                        child_poll=self.poll(), timeout=exc.timeout)
                 output(directory, 'partial-stdout.txt', exc.stdout)
                 output(directory, 'partial-stderr.txt', exc.stderr)
+                subprocess.Popen = original_popen
+                try:
+                    from native_dump import collect
+                    collect(self.pid, directory)
+                finally:
+                    subprocess.Popen = ObservedProcess
                 raise
 
         def kill(self):

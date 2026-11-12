@@ -1,5 +1,5 @@
-name: ALO APEv2 MainWindow timeout diagnosis
-run-name: ALO APEv2 / restart stacks without Python monitoring
+name: ALO Qt cover native diagnosis
+run-name: ALO Qt cover / native dump after real timeout
 on:
   push:
     branches: [ci/windows-62d-validation]
@@ -56,6 +56,8 @@ jobs:
           $evidence = Join-Path $env:RUNNER_TEMP 'alo-apev2-timeout'
           New-Item -ItemType Directory -Path $evidence | Out-Null
           "$expected  ffmpeg-9.0.2-essentials_build.zip" | Set-Content -LiteralPath (Join-Path $evidence 'ffmpeg-archive-sha256.txt') -Encoding utf8
+      - name: Prepare trusted native debugger
+        run: .ci/apev2-timeout/setup-debugger.ps1
       - name: Fetch exact product baseline
         run: |
           git fetch --no-tags --depth=1 origin c88a18b73f56732d1d906e00beabca2787592a00
@@ -68,7 +70,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ALO-APEv2-Timeout-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ALO-Qt-Cover-RED-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/alo-apev2-timeout/
           retention-days: 30
           if-no-files-found: warn
