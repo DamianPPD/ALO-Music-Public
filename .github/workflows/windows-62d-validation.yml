@@ -1,5 +1,5 @@
-name: ALO Qt cover native diagnosis
-run-name: ALO Qt cover / native weak receiver abort stacks
+name: ALO Qt cover lifecycle validation
+run-name: ALO Qt cover / exact candidate Windows validation
 on:
   push:
     branches: [ci/windows-62d-validation]
@@ -34,7 +34,7 @@ jobs:
           check-latest: false
       - name: Install test dependencies
         run: |
-          python -m pip install --disable-pip-version-check PySide6==6.10.3 shiboken6==6.10.3 Pillow mutagen requests pytest
+          python -m pip install --disable-pip-version-check PySide6==6.10.3 shiboken6==6.10.3 Pillow mutagen requests pytest numpy soundfile
           if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
           python -m pip check
           if ($LASTEXITCODE -ne 0) { throw 'Dependency integrity check failed' }
@@ -53,24 +53,22 @@ jobs:
           $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           $exe = Join-Path $bin 'ffmpeg.exe'
           "ALO_FFMPEG_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          $evidence = Join-Path $env:RUNNER_TEMP 'alo-apev2-timeout'
+          $evidence = Join-Path $env:RUNNER_TEMP 'alo-qt-cover-validation'
           New-Item -ItemType Directory -Path $evidence | Out-Null
           "$expected  ffmpeg-9.0.2-essentials_build.zip" | Set-Content -LiteralPath (Join-Path $evidence 'ffmpeg-archive-sha256.txt') -Encoding utf8
-      - name: Prepare trusted native debugger
-        run: .ci/apev2-timeout/setup-debugger.ps1
       - name: Fetch exact product baseline
         run: |
           git fetch --no-tags --depth=1 origin c88a18b73f56732d1d906e00beabca2787592a00
           if ($LASTEXITCODE -ne 0) { throw 'Baseline fetch failed' }
       - name: Validate the sealed product candidate on native Windows
         run: |
-          python -B .ci/apev2-timeout/run-diagnosis.py
+          python -B .ci/qt-cover/validate.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Preserve native evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ALO-Qt-Cover-RED-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/alo-apev2-timeout/
+          name: ALO-Qt-Cover-Final-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/alo-qt-cover-validation/
           retention-days: 30
           if-no-files-found: warn
