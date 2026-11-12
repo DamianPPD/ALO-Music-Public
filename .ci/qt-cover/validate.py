@@ -232,7 +232,7 @@ def run_red_controls(repo, candidate, evidence, private):
              'test_leaving_selected_track_cancels_without_renewing_old_request[empty]']
     results=[]
     for side,tree in [('base',shared.BASE_TREE),('ape-input',old_tree)]:
-        root=private/('red-'+side);root.mkdir()
+        root=private/('red-product-'+side);root.mkdir()
         rows=shared.tree_manifest(repo,tree,root)
         expected={'tree':tree,'manifest_sha256':shared.sha256(shared.json_bytes(rows))}
         verify_manifest(root,rows,expected,evidence,'red-'+side+'-pre')
