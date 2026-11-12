@@ -1,5 +1,5 @@
 name: ALO Qt cover native diagnosis
-run-name: ALO Qt cover / weak receiver expiry comparison
+run-name: ALO Qt cover / native weak receiver abort stacks
 on:
   push:
     branches: [ci/windows-62d-validation]

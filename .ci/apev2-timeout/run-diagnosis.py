@@ -26,7 +26,7 @@ PREVIOUS = MODULE + '::test_unchanged_ape_binary_tag_adoption_remains_confirmed_
 
 def plan():
     for side in ('base', 'candidate'):
-        for mode in ('weak','stable'):
+        for mode in ('weak-debugger','stable'):
             yield f'{side}-cleanup-{mode}', side, False, ('PROBE',mode)
     control = str(HERE / 'test_restart_baseline_control.py')
     yield 'base-id3-native-extra', 'base', True, (control,)
@@ -68,7 +68,16 @@ def stage(row, roots, evidence, private, child):
         import time
         from native_dump import collect, analyze
         started = time.monotonic()
-        command = [sys.executable, str(HERE / 'receiver_cleanup_probe.py'), str(directory), targets[1]]
+        mode = targets[1]
+        command = [sys.executable, str(HERE / 'receiver_cleanup_probe.py'), str(directory), 'weak' if mode=='weak-debugger' else mode]
+        if mode == 'weak-debugger':
+            cdb = os.environ.get('ALO_CDB_EXE')
+            if not cdb:
+                raise RuntimeError('CDB required for native abort diagnosis')
+            dump = directory / 'hung-abort.dmp'
+            commands = 'bu ucrtbase!abort \".echo ABORT_BREAKPOINT; ~*kp; .dump /ma ' + str(dump) + '; q\"; g'
+            command = [cdb, '-o', '-g', '-G', '-y', os.environ.get('ALO_PYTHON_PDB_DIR',''), '-c', commands, *command]
+
         with (directory/'pytest.log').open('wb') as stream:
             process = subprocess.Popen(command,cwd=root,env=env,stdout=stream,stderr=subprocess.STDOUT)
             try:
@@ -80,6 +89,7 @@ def stage(row, roots, evidence, private, child):
                 collect(process.pid,directory)
                 process.kill();process.wait()
         analyze(directory)
+        if mode == 'weak-debugger' and list(directory.glob('*.dmp')): status = 'RED_CAPTURED'
         result = dict(stage=name,tree=side,traced=False,target=status,exit_code=code,
                       target_seconds=time.monotonic()-started,diagnostic_probe=True)
         shared.record(directory,'result',result)
