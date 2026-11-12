@@ -35,11 +35,17 @@ try {
   "ALO_CDB_EXE=$cdb" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
 } catch { $report.cdb_error = $_.ToString() }
 try {
-  $pdb = Join-Path $dest 'python-pdb.zip'
-  Invoke-WebRequest 'https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64-pdb.zip' -OutFile $pdb
-  Expand-Archive $pdb -DestinationPath (Join-Path $dest 'python-pdb')
+  $pdb = Join-Path $dest 'core_pdb.msi'
+  Invoke-WebRequest 'https://www.python.org/ftp/python/3.12.10/amd64/core_pdb.msi' -OutFile $pdb
+  $sig = Get-AuthenticodeSignature $pdb
+  if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'Python Software Foundation') { throw 'Untrusted Python PDB MSI' }
+  $pdbdir = Join-Path $dest 'python-pdb'
+  $proc = Start-Process msiexec.exe -ArgumentList @('/a', $pdb, '/qn', "TARGETDIR=$pdbdir") -Wait -PassThru
+  if ($proc.ExitCode -ne 0) { throw 'PDB extraction failed' }
   $report.python_pdb_sha256 = (Get-FileHash $pdb -Algorithm SHA256).Hash
-  "ALO_PYTHON_PDB_DIR=$(Join-Path $dest 'python-pdb')" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+  $pdbfile = Get-ChildItem $pdbdir -Recurse -Filter python312.pdb | Select-Object -First 1
+  if (-not $pdbfile) { throw 'python312.pdb not found' }
+  "ALO_PYTHON_PDB_DIR=$($pdbfile.DirectoryName)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
 } catch { $report.python_pdb_error = $_.ToString() }
 $report | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $evidence 'native-tools.json') -Encoding utf8
 $report | ConvertTo-Json -Depth 5

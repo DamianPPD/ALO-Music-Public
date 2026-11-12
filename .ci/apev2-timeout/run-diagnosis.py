@@ -25,12 +25,12 @@ PREVIOUS = MODULE + '::test_unchanged_ape_binary_tag_adoption_remains_confirmed_
 
 
 def plan():
-    control = str(HERE / 'test_restart_baseline_control.py')
     for side in ('base', 'candidate'):
-        for repeat in range(1, 9):
-            yield f'{side}-id3-native-{repeat}', side, True, (control,)
-    for repeat in range(1, 13):
-        yield f'candidate-ape-native-{repeat}', 'candidate', True, (TARGET,)
+        for mode in ('weak','stable'):
+            yield f'{side}-cleanup-{mode}', side, False, ('PROBE',mode)
+    control = str(HERE / 'test_restart_baseline_control.py')
+    yield 'base-id3-native-extra', 'base', True, (control,)
+    yield 'candidate-ape-native-extra', 'candidate', True, (TARGET,)
 
 
 def extract_child(candidate, evidence):
@@ -64,6 +64,26 @@ def stage(row, roots, evidence, private, child):
         '-o', 'faulthandler_timeout=65', '--capture=tee-sys', '-vv', '-ra', '--tb=short',
         '--basetemp', str(private / name), '--junitxml', str(xml), *targets,
     ]
+    if targets[0] == 'PROBE':
+        import time
+        from native_dump import collect, analyze
+        started = time.monotonic()
+        command = [sys.executable, str(HERE / 'receiver_cleanup_probe.py'), str(directory), targets[1]]
+        with (directory/'pytest.log').open('wb') as stream:
+            process = subprocess.Popen(command,cwd=root,env=env,stdout=stream,stderr=subprocess.STDOUT)
+            try:
+                code = process.wait(timeout=45)
+                status = 'PASS' if code == 0 else 'FAIL'
+            except subprocess.TimeoutExpired:
+                code,status = 124,'TIMEOUT'
+                shared.record(directory,'live-timeout',{'pid':process.pid,'poll':process.poll(),'limit':45})
+                collect(process.pid,directory)
+                process.kill();process.wait()
+        analyze(directory)
+        result = dict(stage=name,tree=side,traced=False,target=status,exit_code=code,
+                      target_seconds=time.monotonic()-started,diagnostic_probe=True)
+        shared.record(directory,'result',result)
+        return result
     log = directory / 'pytest.log'
     result = dict(stage=name, tree=side, traced=traced, targets=targets)
     with log.open('wb') as stream:
@@ -139,7 +159,7 @@ def main():
             for row in plan():
                 result = stage(row, roots, evidence, private, child)
                 results.append(result)
-                if result['target'] == 'TIMEOUT':
+                if result['target'] == 'TIMEOUT' and not result.get('diagnostic_probe'):
                     break
         finally:
             for side, root in roots.items():
