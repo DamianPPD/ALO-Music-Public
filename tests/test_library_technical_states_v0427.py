@@ -131,7 +131,7 @@ def test_stale_history_is_annotated_then_refresh_updates_current_state(tmp_path)
     page.refresh()
     item = page.model.item(0, file_column(page))
     assert item.text() == 'W bibliotece · Niepotwierdzony'
-    assert 'Ostatni potwierdzony stan' in item.toolTip()
+    assert 'Stan historyczny — wymaga ponownej kontroli' in item.toolTip()
     page.set_file_state_evaluations(context.library_id, {tracks[0].track_id:evaluate_file_state(facts_for(tracks[0],FileState.CONFLICT,tmp_path))})
     page.refresh()
     assert page.model.item(0,10).text() == 'Konflikt'

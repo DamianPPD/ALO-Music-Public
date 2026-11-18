@@ -170,7 +170,8 @@ def test_menu_all_states_uses_read_resolver_and_only_existing_safe_operations(tm
     page, tracks, context = library_page(tmp_path, (state,))
     menu = menu_for(page, tracks[0])
     actions = menu_actions(menu)
-    assert {'edit', 'ready', 'review', 'reveal'} == actions.keys()
+    assert {'edit', 'check_files', 'ready', 'review', 'reveal'} == actions.keys()
+    assert actions['check_files'].isEnabled()
     assert not {'delete', 'move', 'relink', 'adopt', 'overwrite'} & actions.keys()
     assert not actions['reveal'].isEnabled()  # No registered source or approved read binding.
     emitted = []
@@ -245,7 +246,7 @@ def test_real_sqlite_snapshot_displays_last_confirmed_states_without_claiming_fr
         page.file_filter.setCurrentIndex(page.file_filter.findData(state.value))
         assert page.model.rowCount() == 1
         assert page.model.item(0,0).data(FILE_STATE_ROLE) == state
-        assert 'ostatni potwierdzony' in page.model.item(0,3).toolTip().lower()
+        assert 'stan historyczny' in page.model.item(0,3).toolTip().lower()
     assert repo.database_path.read_bytes() == before
 
 
@@ -376,35 +377,60 @@ def test_active_real_read_task_drops_results_after_change_or_close(library, monk
 
 @pytest.mark.parametrize('state', tuple(FileState))
 def test_rendered_file_tints_hover_and_selection_have_independent_priority(tmp_path, state):
-    from PySide6.QtTest import QTest
-    from PySide6.QtCore import QPoint
+    from PySide6.QtCore import QEvent, QPoint, QPointF
+    from PySide6.QtGui import QMouseEvent
     from audio_library_organizer.ui.library_file_state import FILE_STATE_COLORS
     from audio_library_organizer.ui.library_page import SELECTED_BACKGROUND, HOVER_BACKGROUND
     from audio_library_organizer.ui.theme import DARK_STYLE
     app = QApplication.instance() or QApplication([])
     previous = app.styleSheet()
     app.setStyleSheet(DARK_STYLE)
-    page, tracks, _ = library_page(tmp_path, (state,))
+    page, tracks, _ = library_page(tmp_path, (state, state))
     try:
         page.detail.hide()
         page.resize(1500, 450)
         page.show()
         page.table.clearSelection()
-        QTest.mouseMove(page, QPoint(1, 1))
-        app.processEvents()
-        def color(column):
-            pixmap = page.table.viewport().grab()
-            rect = page.table.visualRect(page.model.index(0, column))
+        viewport = page.table.viewport()
+        assert page.table.hasMouseTracking() and viewport.hasMouseTracking()
+        def move(position):
+            # Exercise the real viewport event/delegate/render path. QTest's
+            # OS cursor movement is not guaranteed to deliver MouseMove before
+            # the following grab on Windows; never fabricate State_MouseOver.
+            event = QMouseEvent(QEvent.Type.MouseMove, QPointF(position),
+                QPointF(viewport.mapToGlobal(position)), Qt.MouseButton.NoButton,
+                Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier)
+            app.sendEvent(viewport, event)
+            app.processEvents()
+        def color(column, row=0):
+            pixmap = viewport.grab()
+            rect = page.table.visualRect(page.model.index(row, column))
             scale = pixmap.devicePixelRatio()
             return pixmap.toImage().pixelColor(round((rect.left()+12)*scale), round((rect.top()+5)*scale)).name()
+        def center(row):
+            return page.table.visualRect(page.model.index(row, 3)).center()
         expected = FILE_STATE_COLORS[state].background or '#11171e'
-        assert color(3) == color(8) == expected
-        QTest.mouseMove(page.table.viewport(), page.table.visualRect(page.model.index(0,3)).center())
-        app.processEvents()
+        move(QPoint(-10, -10))
+        assert color(3) == color(8) == color(3, 1) == expected
+        move(center(0))
         assert color(3) == HOVER_BACKGROUND.name()
+        assert color(8) == expected
+        assert color(3, 1) == expected
         page.table.selectRow(0)
         app.processEvents()
         assert color(3) == color(8) == SELECTED_BACKGROUND.name()
+        move(center(1))
+        assert color(3) == SELECTED_BACKGROUND.name()
+        assert color(3, 1) == HOVER_BACKGROUND.name()
+        page.table.clearSelection(); app.processEvents()
+        assert color(3) == color(8) == expected
+        move(QPoint(-10, -10))
+        page.set_tracks(tracks); app.processEvents()
+        assert color(3) == color(8) == color(3, 1) == expected
+        move(center(0))
+        assert color(3) == HOVER_BACKGROUND.name() and color(3, 1) == expected
+        move(center(1))
+        assert color(3) == expected and color(3, 1) == HOVER_BACKGROUND.name()
     finally:
         page.close()
         app.setStyleSheet(previous)

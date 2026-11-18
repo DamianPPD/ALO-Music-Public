@@ -77,7 +77,10 @@ def copy_without_overwrite(source: Path, destination_dir: Path, filename: str | 
         raise ValueError('Destination filename must be a single file name.')
     destination_dir.mkdir(parents=True, exist_ok=True)
     working = Path(tempfile.mkdtemp(prefix='.alo-copy-', dir=destination_dir))
-    staged = working / name
+    # The private copy needs the format suffix, not the full public filename.
+    # Repeating a long name here can exceed the filesystem path limit even
+    # when the requested final path is valid. Publication still uses ``name``.
+    staged = working / ('f' + Path(name).suffix)
     try:
         with source.open('rb') as source_handle, staged.open('xb') as target_handle:
             source_mode = os.fstat(source_handle.fileno()).st_mode

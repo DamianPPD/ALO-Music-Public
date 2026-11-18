@@ -6,7 +6,7 @@ from copy import deepcopy
 import subprocess
 import requests
 
-from audio_library_organizer.jobs.file_reconciliation import check_library
+from audio_library_organizer.jobs.file_reconciliation import check_library, check_track_files
 from audio_library_organizer.jobs.managed_files import read_material
 
 
@@ -83,7 +83,7 @@ class FileReconciliationWorker(QObject):
 
     def __init__(self, repository, *, library_id, operation_id, managed_roots=(),
                  library_root=None, known_libraries=(), output_request=None,
-                 current_output_request=None, output_operation=None):
+                 current_output_request=None, output_operation=None, track_id=None):
         super().__init__()
         self.repository = repository
         self.library_id = library_id
@@ -91,6 +91,7 @@ class FileReconciliationWorker(QObject):
         self.managed_roots = tuple(managed_roots)
         self.library_root = library_root
         self.known_libraries = tuple(known_libraries)
+        self.track_id = track_id
         # Explicit single-record diagnostics remain supported. MainWindow uses
         # the revocable operation and a separate guarded session delivery.
         self.output_request = output_request
@@ -138,10 +139,13 @@ class FileReconciliationWorker(QObject):
                         self.output_operation.invalidate()
                         raise
                 extra['before_output_check']=acquire_selected_pair
-            result = check_library(self.repository, library_id=self.library_id,
+            check = check_library if self.track_id is None else check_track_files
+            if self.track_id is not None:
+                extra['track_id'] = self.track_id
+            result = check(self.repository, library_id=self.library_id,
                 operation_id=self.operation_id, managed_roots=self.managed_roots,
                 library_root=self.library_root, known_libraries=self.known_libraries,
-                include_adoption=self.library_root is not None,
+                include_adoption=self.library_root is not None and self.track_id is None,
                 output_request=self.output_request,
                 current_output_request=self.current_output_request,
                 producer_policy=self.output_operation.policy_revision if self.output_operation is not None else None,

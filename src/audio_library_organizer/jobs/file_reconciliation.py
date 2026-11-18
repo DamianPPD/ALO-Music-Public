@@ -132,6 +132,9 @@ class ReconciliationResult:
     adoption_inventory: object = None
     pending_output_assessment: PendingOutputAssessment | None = None
     output_delivery: object = None
+    snapshot: object = None
+    checked_track_id: str | None = None
+    display_snapshot: object = None
 
 
 def _pending_output_check(repository, root, snapshot, files, request, current_request, cancelled,
@@ -288,7 +291,11 @@ def _hash_file(path, *, root, root_stat, expected_stat, cancelled):
 
 
 def _observe(track_id, locator, source_id, at, root, root_result, root_stat, *, physical_locator=None):
-    """Negative evidence requires complete inventory and a still accessible root."""
+    """Absence requires a checked scope and a still accessible, unchanged root.
+
+    A full inventory or a point scope can supply that root; scoped_stat walks
+    the exact locator's ancestors in both cases, without accepting aliases.
+    """
     availability, code, info = FileAvailability.UNKNOWN, 'SOURCE_NOT_ACTIVE', None
     if root is not None:
         if root_result.status == SourceScanStatus.UNAVAILABLE:
@@ -374,6 +381,192 @@ def _facts(track, source, at, cached, prepared, managed_context, *, cancelled=Fa
     return FileFacts(track.track_id, at, source=source, managed_expected=False)
 
 
+def _check_binding(binding, track, snapshot, library_root, at, producer_policy, is_cancelled, context=None):
+    from .legacy_adoption import binding_facts, _source_context
+    from .managed_files import ReadPurpose, recheck_read_path, resolve_read_path
+    from .created_output import is_producer, producer_check
+    facts = binding_facts(binding, track, library_root, at=at, current=True)
+    if is_producer(binding):
+        facts = producer_check(binding, track, library_root, at=at,
+            policy_revision=producer_policy, cancelled=is_cancelled)
+        if binding.source_binding.get('source_context') != _source_context(track, snapshot.sources, snapshot.library_id):
+            facts = replace(facts, desired=None, is_current=False,
+                            last_confirmed_state=None, last_confirmed_at=None)
+        return facts
+    context = context if context is not None else snapshot.read_context(library_root)
+    proof = recheck_read_path(resolve_read_path(track, context, ReadPurpose.AUDIO_PROPERTIES), cancelled=is_cancelled)
+    if proof.is_verified:
+        managed = replace(facts.managed, reason='APPROVED_MANAGED_SHA_VERIFIED')
+    else:
+        managed = replace(facts.managed, availability=FileAvailability.UNKNOWN, reason=proof.reason_code)
+        if proof.reason_code in ('MANAGED_IDENTITY_CHANGED', 'MANAGED_OWNER_ALIAS_CONFLICT'):
+            facts = replace(facts, conflict=ConflictReason.CONTRADICTORY_FACTS)
+    return replace(facts, managed=managed)
+
+
+def _point_scope(root, library_id, source_id=None):
+    """Validate only an anchored root, without listing any directory entries."""
+    root = _declared_root(root)
+    info, status, reason = None, SourceScanStatus.SUCCESS, ''
+    try:
+        info = scoped_stat(root, root)
+        if not stat.S_ISDIR(info.st_mode):
+            raise UnsafeSourcePath('NOT_A_DIRECTORY')
+    except FileNotFoundError:
+        status, reason = SourceScanStatus.UNAVAILABLE, 'SOURCE_ROOT_UNAVAILABLE'
+    except (OSError, ValueError, RuntimeError):
+        status, reason = SourceScanStatus.ERROR, 'ROOT_CHANGED_OR_UNREADABLE'
+    return root, SourceCheckResult(source_id, library_id, str(root), status, 0, None, reason), info
+
+
+def check_track_files(repository, track_id, *, library_id=None, operation_id=None,
+                      checked_at=None, cancelled=None, progress=None, library_root=None,
+                      producer_policy=None, output_request=None, current_output_request=None,
+                      before_output_check=None, managed_roots=(), known_libraries=(),
+                      include_adoption=False):
+    """One record and its assigned output; no inventory, adoption or relinking.
+
+    All approved binding proofs are retained for the existing ownership/alias
+    checks. Other track rows and their cache are neither loaded nor modified.
+    Display results never replace the read resolver's operation-time preflight.
+    """
+    stop = cancelled or (lambda: False)
+    snapshot = repository.file_check_snapshot(track_id=track_id)
+    if library_id is not None and snapshot.library_id != library_id:
+        raise ValueError('Library identity does not match point check.')
+    if len(snapshot.tracks) != 1:
+        raise ValueError('Point check requires one existing track.')
+    at = time.time_ns() if checked_at is None else checked_at
+    if checked_at is None:
+        at = max(at, max((s.facts.checked_at for _, s in snapshot.cached), default=-1) + 1,
+                 max((b.adopted_at for b in snapshot.managed_bindings if b.track_id == track_id), default=-1) + 1)
+    FileFacts(track_id, at)
+    operation_id = operation_id or str(uuid4())
+    if output_request is not None and ((output_request.library_id, output_request.operation_id, output_request.track_id)
+            != (snapshot.library_id, operation_id, track_id) or not callable(current_output_request)):
+        raise ValueError('Output assessment does not match point check.')
+    if before_output_check is not None and (output_request is None or not callable(before_output_check)):
+        raise ValueError('Output protection requires a pinned request.')
+    track = snapshot.tracks[0]
+    locator = dict(snapshot.locators)[track_id]
+    cached = dict(snapshot.cached).get(track_id)
+    sources = [s for s in snapshot.sources if s.source_id == track.source_id and s.active]
+    scopes = tuple(_point_scope(s.root_path, snapshot.library_id, s.source_id) for s in sources) if not stop() else ()
+    if stop():
+        source, info, code = FileObservation(track_id, locator, FileAvailability.UNKNOWN, at, track.source_id, 'CANCELLED'), None, 'CANCELLED'
+    else:
+        source, info, code = _observe(track_id, locator, track.source_id, at,
+            scopes[0][0] if len(scopes) == 1 else None,
+            scopes[0][1] if len(scopes) == 1 else None,
+            scopes[0][2] if len(scopes) == 1 else None, physical_locator=Path(locator).expanduser().absolute())
+    if not stop() and info is not None and _valid_digest(track.sha256):
+        try:
+            digest = _hash_file(Path(locator).expanduser().absolute(), root=scopes[0][0], root_stat=scopes[0][2],
+                                expected_stat=info, cancelled=stop)
+            code = 'SOURCE_CONTENT_UNCHANGED' if digest == track.sha256 else 'SOURCE_CONTENT_CHANGED'
+            source = replace(source, reason=_observation_reason(code, info, digest),
+                             availability=FileAvailability.PRESENT if digest == track.sha256 else FileAvailability.UNKNOWN)
+        except InterruptedError:
+            source, code = replace(source, availability=FileAvailability.UNKNOWN, reason='CANCELLED'), 'CANCELLED'
+        except (OSError, ValueError, RuntimeError):
+            source, code = replace(source, availability=FileAvailability.ERROR, reason='FILE_CHANGED_OR_UNREADABLE'), 'FILE_CHANGED_OR_UNREADABLE'
+    owners = [b for b in snapshot.managed_bindings if b.track_id == track_id]
+    foreign_owners = any(b.track_id != track_id for b in snapshot.managed_bindings)
+    facts = _facts(track, source, at, cached, None, ((), (), ()), cancelled=stop())
+    if owners and not stop():
+        if library_root is None:
+            library_root = repository.database_path.parent.parent
+        if len(owners) != 1:
+            facts = replace(facts, is_current=True, conflict=ConflictReason.AMBIGUOUS_OWNERSHIP)
+        else:
+            binding = owners[0]
+            if foreign_owners:
+                # The general read resolver verifies foreign aliases by probing
+                # their paths. A point check must never do that traversal or
+                # silently drop the guard. Collect this output's bytes only;
+                # ownership/current OutputSpec remain explicitly unconfirmed.
+                from .legacy_adoption import binding_facts
+                facts = replace(binding_facts(binding, track, library_root, at=at, current=True),
+                                ownership=Ownership.UNKNOWN)
+            else:
+                facts = _check_binding(binding, track, snapshot, library_root, at, producer_policy, stop)
+            root, scope, stamp = _point_scope(library_root, snapshot.library_id)
+            managed, managed_info, _ = _observe(track_id, binding.locator(library_root), None, at, root, scope, stamp)
+            managed = replace(managed, reason=managed.reason.replace('SOURCE_', 'MANAGED_'))
+            if foreign_owners and managed_info is not None and not stop():
+                try:
+                    digest = _hash_file(Path(binding.locator(library_root)), root=root, root_stat=stamp,
+                                        expected_stat=managed_info, cancelled=stop)
+                    managed = replace(managed, reason='POINT_OWNERSHIP_SCOPE_UNCONFIRMED')
+                    if digest != binding.expected_sha256:
+                        facts = replace(facts, conflict=ConflictReason.CONTRADICTORY_FACTS)
+                except InterruptedError:
+                    managed = replace(managed, availability=FileAvailability.UNKNOWN, reason='CANCELLED')
+                    code = 'CANCELLED'
+                except (OSError, ValueError, RuntimeError):
+                    managed = replace(managed, availability=FileAvailability.ERROR, reason='MANAGED_UNREADABLE')
+                facts = replace(facts, managed=managed)
+            elif managed.availability != FileAvailability.PRESENT:
+                facts = replace(facts, managed=managed, is_current=True)
+            facts = replace(facts, source=source)
+    elif dict(snapshot.cache_errors).get(track_id):
+        facts = replace(facts, managed_expected=None)
+    if stop():
+        facts = replace(facts, is_current=False)
+    item = FileCheckResult(track_id, source, facts, evaluate_file_state(facts),
+                           _technical(info) if info is not None else None, (code,))
+    reasons = {code}
+    saved = 0
+    if not stop() and code != 'CANCELLED' and track_id not in dict(snapshot.cache_errors):
+        try:
+            saved_evaluations = repository.save_file_facts_batch((facts,), snapshot=snapshot, cancelled=stop)
+            item = replace(item, evaluation=saved_evaluations[0])
+            saved = 1
+        except InterruptedError:
+            reasons.add('CANCELLED')
+        except (ValueError, sqlite3.Error):
+            reasons.add('CACHE_WRITE_REJECTED')
+    was_cancelled = stop() or 'CANCELLED' in reasons
+    pending = None
+    if (output_request is not None and not was_cancelled and saved == 1 and not foreign_owners
+            and item.source.availability == FileAvailability.PRESENT
+            and item.evaluation.state not in (FileState.CONFLICT, FileState.MANAGED_FILE_MISSING)):
+        if before_output_check is None or before_output_check():
+            pending = _pending_output_check(repository, library_root, snapshot, (item,), output_request,
+                current_output_request, stop, saved != 1)
+        was_cancelled = stop()
+    if progress and not was_cancelled:
+        progress(1, 1, track.path.name)
+    display_snapshot = None
+    if saved == 1 and not was_cancelled:
+        try:
+            latest = repository.file_check_snapshot(track_id=track_id)
+            state = dict(latest.cached).get(track_id)
+            if (latest.library_id != snapshot.library_id or latest.tracks != snapshot.tracks
+                    or latest.sources != snapshot.sources or latest.managed_bindings != snapshot.managed_bindings
+                    or state is None or state.facts.checked_at != at):
+                raise ValueError('Point check context changed after cache commit.')
+            display_snapshot = latest
+        except (ValueError, OSError, sqlite3.Error):
+            reasons.add('CHECK_CONTEXT_CHANGED')
+            pending = None
+    was_cancelled = was_cancelled or stop()
+    if was_cancelled:
+        reasons.add('CANCELLED')
+        pending = None
+        display_snapshot = None
+    availability = source.availability
+    summary = ReconciliationSummary(int(availability == FileAvailability.PRESENT),
+        int(availability == FileAvailability.MISSING), int(availability == FileAvailability.OFFLINE),
+        int(availability in (FileAvailability.UNKNOWN, FileAvailability.ERROR)), 0, 0, 0,
+        int(item.evaluation.is_confirmed and item.evaluation.state == FileState.CONFLICT))
+    return ReconciliationResult(snapshot.library_id, operation_id, at, summary,
+        tuple(s[1] for s in scopes), (item,), (), (), (), (), (), tuple(sorted(reasons)),
+        was_cancelled, int(not was_cancelled), int(was_cancelled), saved,
+        pending_output_assessment=None if was_cancelled else pending,
+        snapshot=snapshot, checked_track_id=track_id, display_snapshot=display_snapshot)
+
+
 def check_library(repository, *, library_id=None, operation_id=None, checked_at=None,
                   cancelled=None, progress=None, managed_roots=(), prepared_facts=(),
                   prepared_library_id=None, library_root=None, known_libraries=(),
@@ -435,26 +628,8 @@ def check_library(repository, *, library_id=None, operation_id=None, checked_at=
             if binding.track_id in prepared:
                 raise ValueError('Prepared facts cannot replace persistent ownership.')
             track = records[binding.track_id]
-            facts = binding_facts(binding, track, library_root, at=at, current=True)
-            from .created_output import is_producer, producer_check
-            if is_producer(binding):
-                facts = producer_check(binding, track, library_root, at=at,
-                    policy_revision=producer_policy, cancelled=is_cancelled)
-                from .legacy_adoption import _source_context
-                if binding.source_binding.get('source_context') != _source_context(track, snapshot.sources, snapshot.library_id):
-                    facts = replace(facts, desired=None, is_current=False,
-                                    last_confirmed_state=None, last_confirmed_at=None)
-                persistent[track.track_id] = facts
-                prepared[track.track_id] = facts
-                continue
-            proof = recheck_read_path(resolve_read_path(track, context, ReadPurpose.AUDIO_PROPERTIES), cancelled=is_cancelled)
-            if proof.is_verified:
-                managed = replace(facts.managed, reason='APPROVED_MANAGED_SHA_VERIFIED')
-            else:
-                managed = replace(facts.managed, availability=FileAvailability.UNKNOWN, reason=proof.reason_code)
-                if proof.reason_code in ('MANAGED_IDENTITY_CHANGED', 'MANAGED_OWNER_ALIAS_CONFLICT'):
-                    facts = replace(facts, conflict=ConflictReason.CONTRADICTORY_FACTS)
-            persistent[track.track_id] = replace(facts, managed=managed)
+            facts = _check_binding(binding, track, snapshot, library_root, at, producer_policy, is_cancelled, context)
+            persistent[track.track_id] = facts
             prepared[track.track_id] = facts
         if not managed_roots:
             from audio_library_organizer.domain.settings import LibraryPaths
@@ -678,4 +853,5 @@ def check_library(repository, *, library_id=None, operation_id=None, checked_at=
             reason_codes.add('CANCELLED')
     return ReconciliationResult(snapshot.library_id, operation_id, at, summary, sources, tuple(files), tuple(new_candidates),
                                 tuple(moves), tuple(orphan_candidates), tuple(conflicts), tuple(unresolved),
-                                tuple(sorted(reason_codes)), was_cancelled, completed, len(files) - completed, saved, adoption, pending)
+                                tuple(sorted(reason_codes)), was_cancelled, completed, len(files) - completed, saved, adoption, pending,
+                                snapshot=snapshot)

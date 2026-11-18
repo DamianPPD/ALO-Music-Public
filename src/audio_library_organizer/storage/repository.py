@@ -51,6 +51,7 @@ class FileCheckSnapshot:
     cached: tuple[tuple[str, CachedFileState], ...]
     cache_errors: tuple[tuple[str, str], ...]
     managed_bindings: tuple[ManagedBinding, ...] = ()
+    checked_track_id: str | None = None
 
     def read_context(self, library_root):
         """Build pure read inputs from one coherent SQLite snapshot."""
@@ -59,6 +60,8 @@ class FileCheckSnapshot:
         facts = {track_id: state.facts for track_id, state in self.cached}
         tracks = {track.track_id: track for track in self.tracks}
         for binding in self.managed_bindings:
+            if binding.track_id not in tracks:
+                continue
             history = binding_facts(binding, tracks[binding.track_id], library_root)
             if binding.evidence.get('producer') == 'alo-export/v1':
                 cached = facts.get(binding.track_id)
@@ -119,7 +122,7 @@ class LibraryRepository:
             require_current_schema(conn)
             return read_file_state(conn, track_id)
 
-    def file_check_snapshot(self, *, timeout=5.0) -> FileCheckSnapshot:
+    def file_check_snapshot(self, *, timeout=5.0, track_id=None) -> FileCheckSnapshot:
         """Pin registry/records/cache in one read transaction, without creating a DB.
 
         Records are fresh private copies, never objects borrowed from the GUI.
@@ -131,7 +134,8 @@ class LibraryRepository:
             conn.execute('BEGIN')
             require_current_schema(conn)
             library_id = conn.execute('SELECT library_id FROM library_metadata WHERE singleton=1').fetchone()[0]
-            rows = conn.execute('SELECT * FROM tracks ORDER BY track_id').fetchall()
+            rows = (conn.execute('SELECT * FROM tracks ORDER BY track_id').fetchall() if track_id is None
+                    else conn.execute('SELECT * FROM tracks WHERE track_id=?', (track_id,)).fetchall())
             cached, errors = [], []
             for row in rows:
                 try:
@@ -144,7 +148,7 @@ class LibraryRepository:
                                      tuple(self._row_to_track(row) for row in rows),
                                      tuple((row['track_id'], row['path_key']) for row in rows),
                                      tuple((row['track_id'], row['path']) for row in rows),
-                                     tuple(cached), tuple(errors), read_managed_bindings(conn))
+                                     tuple(cached), tuple(errors), read_managed_bindings(conn), track_id)
 
     def save_file_facts_batch(self, facts, *, snapshot: FileCheckSnapshot, cancelled=None):
         """All-or-nothing cache writes with pinned identity and existing watermarks.
@@ -162,8 +166,14 @@ class LibraryRepository:
                 raise ValueError('Library/source context changed during file check.')
             if read_managed_bindings(conn) != snapshot.managed_bindings:
                 raise ValueError('Managed binding changed during file check.')
+            if snapshot.checked_track_id is None:
+                rows = conn.execute('SELECT * FROM tracks ORDER BY track_id').fetchall()
+            else:
+                rows = conn.execute('SELECT * FROM tracks WHERE track_id=?', (snapshot.checked_track_id,)).fetchall()
+                if tuple(self._row_to_track(row) for row in rows) != snapshot.tracks:
+                    raise ValueError('Track metadata/binding changed during point check.')
             bindings = tuple((row['track_id'], row['path'], row['source_id'], row['size_bytes'], row['mtime_ns'], row['sha256'])
-                             for row in conn.execute('SELECT track_id,path,source_id,size_bytes,mtime_ns,sha256 FROM tracks ORDER BY track_id'))
+                             for row in rows)
             locators = dict(snapshot.locators)
             expected = tuple((t.track_id, locators[t.track_id], t.source_id, t.size_bytes, t.mtime_ns, t.sha256)
                              for t in snapshot.tracks)

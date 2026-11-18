@@ -354,18 +354,25 @@ def test_windows_scope_gate_is_explicitly_closed_without_native_change_token(tmp
 @pytest.mark.parametrize('when',['before-check','queued-delivery'])
 def test_symlinked_database_directory_cannot_supply_new_ui_confirmation(adopted_window,monkeypatch,when):
     from audio_library_organizer.ui.workers import FileReconciliationWorker
+    from filesystem_test_support import require_symlink, replace_directory_with_symlink
     window,lib,_=adopted_window;repo,root,track,_=lib
+    require_symlink(root, directory=True)
+    swap_errors=[]
     def swap():
         directory=root/'.alo';held=root/'.alo-held'
-        directory.rename(held);directory.symlink_to(held,target_is_directory=True)
+        replace_directory_with_symlink(directory,held)
     if when=='before-check':swap()
     else:
         original=FileReconciliationWorker.__init__
         def init(worker,*args,**kwargs):
             original(worker,*args,**kwargs)
-            worker.finished.connect(lambda result:swap(),Qt.ConnectionType.DirectConnection)
+            def queued_swap(result):
+                try:swap()
+                except Exception as error:swap_errors.append(error)
+            worker.finished.connect(queued_swap,Qt.ConnectionType.DirectConnection)
         monkeypatch.setattr(FileReconciliationWorker,'__init__',init)
     run_check(window)
+    assert not swap_errors, [str(error) for error in swap_errors]
     assert_no_output_confirmation(window,track)
     assert (root/'.alo-held/library.sqlite3').is_file()
 
@@ -464,7 +471,7 @@ def test_normal_check_reaches_all_rows_colors_filter_and_sort(scanned_integratio
         assert item.text().startswith(text),(track.path,item.text())
         assert item.foreground().color().name()==FILE_STATE_COLORS[state].accent
         assert item.background().color().name()==FILE_STATE_COLORS[state].background
-        assert not presentation(window,track).confirmed
+        assert presentation(window,track).confirmed
     for state,count in [(FileState.SOURCE_ONLY,9),(FileState.SOURCE_UNAVAILABLE,1)]:
         window.library.file_filter.setCurrentIndex(window.library.file_filter.findData(state.value))
         assert window.library.model.rowCount()==count
@@ -499,7 +506,12 @@ def test_created_outputs_survive_cancel_and_restart_with_real_owners(scanned_int
     monkeypatch.setattr(workers.ExportWorker,'__init__',init)
     window.export_library();pump(lambda:window._thread is None,seconds=45)
     result=window._export_result
-    assert result.cancelled and result.created==3 and result.remaining==7 and result.failed==0
+    assert result.cancelled and result.created==3 and result.remaining==7 and result.failed==0, json.dumps({
+        'cancelled':result.cancelled,'created':result.created,'remaining':result.remaining,'failed':result.failed,
+        'errors':result.errors,'verification_errors':result.verification_errors,'fatal_error':result.fatal_error,
+        'cleanup_warnings':result.cleanup_warnings,'stop_phase':result.stop_phase,
+        'outcomes':[{'source':str(o.source),'destination':str(o.destination),'status':o.status,'error':o.error}
+                    for o in result.outcomes]},ensure_ascii=False)
     outputs={str(p):hashlib.sha256(p.read_bytes()).hexdigest()for p in result.copied}
     assert all(o.status=='verified'and o.raw_verified and o.final_sha256==outputs[str(o.destination)]for o in result.outcomes)
     completed_source=result.outcomes[0].source
@@ -528,6 +540,9 @@ def test_created_outputs_survive_cancel_and_restart_with_real_owners(scanned_int
     alien.unlink()
     assert all(hashlib.sha256(Path(p).read_bytes()).hexdigest()==digest for p,digest in outputs.items())
     for p,digest in before.items():assert hashlib.sha256(held.get(p,Path(p)).read_bytes()).hexdigest()==digest
+    completed={t.track_id for t in window.repository.list_tracks()if t.path in {o.source for o in result.outcomes}}
+    assert all(presentation(window,t).confirmed == (t.track_id not in completed)
+               for t in window.repository.list_tracks())
     library_root=window.app_settings.library.root
     window.close();QApplication.processEvents()
     code=textwrap.dedent('''
@@ -544,6 +559,7 @@ def test_created_outputs_survive_cancel_and_restart_with_real_owners(scanned_int
         sys.excepthook=lambda kind,value,tb:errors.append(str(value))
         w=main_window.MainWindow(AppSettings((),LibraryPaths(Path(sys.argv[2]))),QSettings(sys.argv[3],QSettings.Format.IniFormat))
         w.show();app.processEvents()
+        historical_cells={w.library.model.item(i,0).data(256).track_id:w.library.model.item(i,10).text()for i in range(w.library.model.rowCount())}
         import time
         w._check_library_clicked();deadline=time.monotonic()+45
         while w._thread is not None and time.monotonic()<deadline:app.processEvents()
@@ -552,7 +568,7 @@ def test_created_outputs_survive_cancel_and_restart_with_real_owners(scanned_int
         bindings=[b.track_id for b in w.repository.list_managed_bindings()]
         w.close();app.processEvents();QThreadPool.globalInstance().waitForDone(5000)
         QCoreApplication.sendPostedEvents(None,QEvent.Type.DeferredDelete)
-        Path(sys.argv[4]).write_text(json.dumps({'cells':cells,'bindings':bindings,'callback_errors':errors}))
+        Path(sys.argv[4]).write_text(json.dumps({'cells':cells,'historical_cells':historical_cells,'bindings':bindings,'callback_errors':errors}))
     ''')
     output=tmp_path/'restarted-window.json'
     child=subprocess.run([sys.executable,'-I','-B','-c',code,str(Path(__file__).resolve().parents[1]/'src'),str(library_root),store.fileName(),str(output)],capture_output=True,text=True,timeout=45)
@@ -561,22 +577,25 @@ def test_created_outputs_survive_cancel_and_restart_with_real_owners(scanned_int
     restarted=json.loads(output.read_text());assert len(restarted['cells'])==10 and not restarted['callback_errors']
     evidence={'workflow':'scan/check/create/cancel/recheck/sort/close/new-process-reopen','created':3,'remaining':7,
         'output_hashes':outputs,'table_before_close':observed,'table_after_restart':restarted['cells'],
+        'table_after_restart_before_check':restarted['historical_cells'],
         'registered_owners':restarted['bindings'],'sources_unchanged':True,'outputs_not_overwritten':True,'restart_exit':child.returncode}
     target=Path(os.environ.get('ALO_62D_EVIDENCE',str(tmp_path)))
     (target/'integration-full-flow.json').write_text(json.dumps(evidence,indent=2)+'\n')
     print(json.dumps(evidence,indent=2))
     assert len(restarted['bindings'])==3,'3 verified new outputs have no persistent producer-owned binding after restart'
     from audio_library_organizer.ui.library_file_state import FILE_STATE_COLORS
-    completed={t.track_id for t in window.repository.list_tracks()if t.path in {o.source for o in result.outcomes}}
     assert set(restarted['bindings'])==completed
     for table in (observed,restarted['cells']):
         assert sum(text.startswith('W bibliotece')for text in table.values())==3
         assert sum(text.startswith('Tylko źródło')for text in table.values())==6
         assert sum(text.startswith('Źródło niedostępne')for text in table.values())==1
-        assert all('Niepotwierdzony'in text for text in table.values())
+    # The child captures history before starting another explicit full check.
+    # That fresh check confirms sources again; producer receipts remain H.
+    for table in (observed,restarted['cells']):
+        assert all(('Niepotwierdzony' in text) == (tid in completed) for tid,text in table.items())
+    assert all('Niepotwierdzony' in text for text in restarted['historical_cells'].values())
     for tid,item in _integration_cells(window).items():
         if tid in completed:
             assert item.foreground().color().name()==FILE_STATE_COLORS[FileState.IN_LIBRARY].accent
             assert item.background().color().name()==FILE_STATE_COLORS[FileState.IN_LIBRARY].background
-    assert all(not presentation(window,t).confirmed for t in window.repository.list_tracks())
     assert len(window.repository.list_tracks())==10

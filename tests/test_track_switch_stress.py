@@ -8,7 +8,8 @@ import sys
 
 def test_100_settled_and_100_rapid_track_changes_release_jobs_and_decoders(tmp_path):
     script = r'''
-import gc, json, shutil, subprocess, sys, weakref
+import gc, json, shutil, subprocess, sys, traceback, weakref
+from threading import get_native_id
 from pathlib import Path
 import numpy as np
 import soundfile as sf
@@ -26,7 +27,21 @@ root = Path(sys.argv[1])
 crash_debug.initialize()
 app = QApplication([])
 errors = []
-sys.excepthook = lambda *args: errors.append(args)
+def report_exception(kind, value, tb):
+    errors.append((kind, value, tb))
+    # Preserve the FIRST real exception; Qt callback exceptions otherwise vanish.
+    traceback.print_exception(kind, value, tb)
+    snapshot = {'exception':str(value),'exception_type':kind.__name__,
+        'iteration':globals().get('i'),'active_jobs':len(waveform._ACTIVE_JOBS),
+        'jobs_observed':len(globals().get('references',())),
+        'live_job_wrappers':sum(job() is not None for job, _ in globals().get('references',())),
+        'live_signal_wrappers':sum(signals() is not None for _, signals in globals().get('references',())),
+        'processes':[{'pid':p.pid,'returncode':p.poll()} for p in globals().get('processes',())],
+        'qt_messages':globals().get('qt_messages',[]),
+        'active_pool_threads':pool.activeThreadCount() if 'pool' in globals() else None}
+    with (root/'stress-exceptions.jsonl').open('a',encoding='utf-8') as output:
+        output.write(json.dumps(snapshot,ensure_ascii=False)+'\n')
+sys.excepthook = report_exception
 paths = []
 for name, frames, rate, channels in [
     ('short.wav', 8000, 8000, 1), ('short.flac', 16000, 8000, 2),
@@ -45,6 +60,8 @@ if ffmpeg:
     paths.append(m4a)
 
 processes, active_at_spawn, references = [], [], []
+gui_thread = get_native_id()
+signal_destructions = []
 original_popen = waveform.subprocess.Popen
 def observed_popen(*args, **kwargs):
     active_at_spawn.append(sum(process.poll() is None for process in processes))
@@ -55,6 +72,10 @@ waveform.subprocess.Popen = observed_popen
 original_init = waveform.WaveformJob.__init__
 def observed_init(self, *args, **kwargs):
     original_init(self, *args, **kwargs)
+    number = len(references)
+    # Store only integers in this callback; do not retain a QObject wrapper.
+    self.signals.destroyed.connect(lambda *args, number=number:
+        signal_destructions.append((number, get_native_id())), Qt.ConnectionType.DirectConnection)
     references.append((weakref.ref(self), weakref.ref(self.signals)))
 waveform.WaveformJob.__init__ = observed_init
 
@@ -109,6 +130,8 @@ for i in range(100):
     if i % 3 == 0:
         bar.player.stop(); app.processEvents()
     if i % 10 == 9:
+        # Queued ready payloads were consumed above, before deferred deletion.
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         gc.collect()
         assert all(job() is None and signals() is None for job, signals in references)
 assert len(processes) == 100
@@ -134,11 +157,14 @@ bar.load(paths[0], autoplay=True)
 cancel = bar._waveform_cancel
 host.deleteLater(); QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 assert cancel.is_set() and pool.waitForDone(10000)
-app.processEvents(); gc.collect()
+app.processEvents(); QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete); gc.collect()
 assert not errors and not waveform._ACTIVE_JOBS
 assert all(job() is None and signals() is None for job, signals in references)
 assert all(process.poll() is not None for process in processes)
-print(json.dumps({'selections': 100, 'settled': 100, 'rapid': 100, 'jobs': len(references),
+assert len(signal_destructions) == len(references)
+assert {number for number, tid in signal_destructions} == set(range(len(references)))
+assert all(tid == gui_thread for number, tid in signal_destructions)
+print(json.dumps({'signal_destructions': len(signal_destructions), 'signal_destructions_on_gui': True, 'selections': 100, 'settled': 100, 'rapid': 100, 'jobs': len(references),
                   'decoders': len(processes), 'formats': [path.suffix for path in paths],
                   'jobs_remaining': 0, 'decoders_remaining': 0}))
 '''
@@ -147,6 +173,8 @@ print(json.dumps({'selections': 100, 'settled': 100, 'rapid': 100, 'jobs': len(r
                PYTHONPATH=str(Path(__file__).resolve().parents[1] / 'src'))
     result = subprocess.run([sys.executable, '-c', script, str(tmp_path)], env=env,
                             capture_output=True, text=True, timeout=180)
+    (tmp_path/'stress.stdout.log').write_text(result.stdout,encoding='utf-8')
+    (tmp_path/'stress.stderr.log').write_text(result.stderr,encoding='utf-8')
     assert result.returncode == 0, result.stdout + result.stderr[-12000:]
     summary = json.loads(result.stdout.splitlines()[-1])
     assert summary['jobs'] == 201

@@ -1029,6 +1029,7 @@ class MainWindow(QMainWindow):
         self.library.approve_requested.connect(self._approve_track)
         self.library.review_requested.connect(lambda track: self._set_ready_from_editor(track, False))
         self.library.context_notice.connect(self._show_operation)
+        self.library.check_files_requested.connect(self._check_track_files)
         self.library.set_context_provider(
             _borrowed_context_callback(self._library_context_snapshot),
             worker_reader=_borrowed_context_callback(self._library_context_reader))
@@ -1576,7 +1577,12 @@ class MainWindow(QMainWindow):
             self._set_operation_state('review', 'WERYFIKACJA W BIBLIOTECE', 'Sprawdź utwory oznaczone jako DO SPRAWDZENIA.')
         self._navigate(1)
 
-    def _check_library_clicked(self):
+    @Slot(str)
+    def _check_track_files(self, track_id):
+        if any(t.track_id == track_id for t in self.library._tracks):
+            self._check_library_clicked(track_id=track_id)
+
+    def _check_library_clicked(self, *, track_id=None):
         """Only an explicit button click starts disk checks; review stays intact."""
         if isinstance(self._worker, FileReconciliationWorker):
             self._worker.cancel()
@@ -1584,7 +1590,7 @@ class MainWindow(QMainWindow):
         self._open_review()
         if self._thread is not None or self._file_check_closing:
             return
-        self._invalidate_output_states()
+        self._invalidate_output_states(track_id)
         library_id = self.library_registry.active.library_id
         operation_id = str(uuid4())
         self._file_check_generation += 1
@@ -1601,12 +1607,12 @@ class MainWindow(QMainWindow):
         selected = self.library._selected_tracks()
         self._output_operation = OutputCheckOperation(library_id, operation_id,
             self._file_check_generation, output_policy(ProviderSettings.from_store(self.qt_settings)),
-            selected[0].track_id if len(selected) == 1 else None)
+            track_id if track_id is not None else selected[0].track_id if len(selected) == 1 else None)
         thread = QThread(self)
         worker = FileReconciliationWorker(self.repository, library_id=library_id,
             operation_id=operation_id, managed_roots=(paths.ready, paths.review, paths.not_selected),
             library_root=paths.root, known_libraries=self._known_adoption_libraries(),
-            output_operation=self._output_operation)
+            output_operation=self._output_operation, track_id=track_id)
         worker.moveToThread(thread)
         self._thread, self._worker = thread, worker
         self._set_operation_state('review', 'WERYFIKACJA W BIBLIOTECE', 'Sprawdzanie plików…')
@@ -1673,7 +1679,42 @@ class MainWindow(QMainWindow):
         if not self._file_check_matches(result.library_id, result.operation_id):
             return
         self.last_reconciliation_result = result
+        if result.checked_track_id is not None:
+            target = result.checked_track_id
+            item = next((f for f in result.files if f.track_id == target), None)
+            known = (self.library._file_evaluations.get(target), self._output_baseline_evals.get(target))
+            if item is not None and any(e is not None and e.checked_at > item.evaluation.checked_at for e in known):
+                # Reject before output delivery can paint older H/session data
+                # and hide the newer watermark. The outer slot still releases
+                # any delivery lease in its finally block.
+                from audio_library_organizer.ui.library_file_state import track_check_notice
+                self._show_operation(track_check_notice(None, self.preferences.language))
+                return
         self._accept_output_delivery(result)
+        accepted = self.library.accept_file_check(result)
+        if result.checked_track_id is not None:
+            from dataclasses import replace
+            from audio_library_organizer.ui.library_file_state import track_check_notice
+            target = result.checked_track_id
+            item = next((f for f in result.files if f.track_id == target), None)
+            evaluation = None
+            if target in accepted and item is not None:
+                historical = replace(item.evaluation, is_confirmed=False, reason='CACHE_REQUIRES_REVALIDATION')
+                self._output_baseline_evals[target] = historical
+                self._merge_point_check_context(result)
+                evaluation = item.evaluation
+                delivery = self._output_session.get(target)
+                history = self._output_history.get(target)
+                if delivery is not None:
+                    evaluation = delivery.pending.evaluation
+                elif history is not None:
+                    evaluation = history.evaluation
+                shown = dict(self.library._file_evaluations)
+                shown[target] = evaluation if delivery is not None or history is not None else historical
+                self.library.set_file_state_evaluations(result.library_id, shown)
+                self.library.refresh(preserve_order=True)
+            self._show_operation(track_check_notice(evaluation, self.preferences.language))
+            return
         summary = result.summary
         if self.preferences.language == 'en':
             text = (f'{"Check cancelled" if result.cancelled else "Check complete"}: '
@@ -1690,6 +1731,31 @@ class MainWindow(QMainWindow):
         if inventory is not None and not result.cancelled and any(p.locator for p in inventory.proposals):
             self.adoption_btn.setText('Assign output…' if self.preferences.language == 'en' else 'Przypisz wynik…')
             self.adoption_btn.show()
+
+    def _merge_point_check_context(self, result):
+        """Merge worker-read history, without a GUI-side SQLite read or rescan.
+
+        Keep the read resolver conservative and the menu's coherent snapshot
+        guard usable immediately after checking one record. Other rows retain
+        their previous evidence. The player handles the ordinary same-library
+        context update without stopping the currently playing track.
+        """
+        snapshot = result.display_snapshot
+        if snapshot is None or self._read_context is None:
+            return
+        from dataclasses import replace
+        fresh = snapshot.read_context(self.app_settings.library.root)
+        facts = {f.track_id: f for f in self._read_context.facts}
+        facts.update({f.track_id: f for f in fresh.facts})
+        # Match FileCheckSnapshot.read_context's cache-first insertion order.
+        ordered = [tid for tid in sorted(self._output_baseline_evals) if tid in facts]
+        ordered.extend(f.track_id for f in self._read_context.facts if f.track_id not in self._output_baseline_evals)
+        materials = {m.track_id: m for m in self._read_context.source_materials}
+        materials.update({m.track_id: m for m in fresh.source_materials})
+        self._read_context = replace(self._read_context, facts=tuple(facts[tid] for tid in ordered),
+                                     source_materials=tuple(materials[tid] for tid in sorted(materials)))
+        self.player.set_read_context(self._read_context)
+        self.library.set_read_context(self._read_context)
 
     def _known_adoption_libraries(self):
         """Describe every configured profile without disk probes on the GUI thread."""
@@ -1824,7 +1890,10 @@ class MainWindow(QMainWindow):
                     self._refresh_output_display()
                 else:
                     self._output_session[request.track_id] = delivery
-                    self.refresh_data()
+                    if result.checked_track_id is None:
+                        self.refresh_data()
+                    else:
+                        self._refresh_output_display()
         except (sqlite3.Error, OSError, ValueError, RuntimeError):
             self._output_session.pop(request.track_id, None)
             self._output_history.pop(request.track_id,None)
@@ -2010,7 +2079,7 @@ class MainWindow(QMainWindow):
         if self._file_check_closing:
             self.close()
             return
-        if refresh_rows:
+        if refresh_rows and result.checked_track_id is None:
             self._refresh_file_check_rows()
         self._set_busy(False)
         self.adoption_btn.setEnabled(True)
@@ -2033,6 +2102,7 @@ class MainWindow(QMainWindow):
         self.player.set_read_context(self._read_context)
         self.library.set_read_context(self._read_context)
         self._output_baseline_evals = {tid: cached.evaluation for tid, cached in snapshot.cached}
+        self.library._file_confirmed_reasons = {tid: cached.last_confirmed_reason for tid, cached in snapshot.cached}
         self.library.set_file_state_evaluations(snapshot.library_id, self._output_evaluations(snapshot))
         self.library.set_tracks(list(snapshot.tracks))
 
@@ -2485,6 +2555,7 @@ class MainWindow(QMainWindow):
                     if fresh is not None:
                         self._copy_track_state(track, fresh)
         self._output_baseline_evals = {tid: cached.evaluation for tid, cached in snapshot.cached}
+        self.library._file_confirmed_reasons = {tid: cached.last_confirmed_reason for tid, cached in snapshot.cached}
         self.library.set_file_state_evaluations(snapshot.library_id, self._output_evaluations(snapshot))
         self.player.reconcile_tracks(tracks)
         summary = build_operation_summary(tracks)

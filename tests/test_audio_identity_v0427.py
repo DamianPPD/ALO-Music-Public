@@ -44,6 +44,7 @@ def test_windows_stderr_quota_refuses_large_real_producer(monkeypatch, windows_t
     print(json.dumps(evidence))
     folder = os.environ.get('ALO_62D_EVIDENCE')
     if folder:
+        Path(folder).mkdir(parents=True, exist_ok=True)
         (Path(folder)/'stderr-quota.json').write_text(json.dumps(evidence, indent=2))
     assert evidence['reaped'] and processes
     assert 'stderr exceeded 65536-byte transport limit' in str(error.value)

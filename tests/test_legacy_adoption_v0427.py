@@ -136,6 +136,8 @@ def test_first_inventory_with_offline_source_cannot_trust_csv_or_fingerprint(lib
 def test_alias_is_not_adoptable(library,kind):
     import os
     repo,root,track,output=library
+    from filesystem_test_support import require_symlink
+    if kind == 'symlink': require_symlink(root)
     extra=root/'GOTOWE'/'alias.mp3'
     if kind=='symlink': extra.symlink_to(output)
     else: os.link(output,extra)
@@ -212,6 +214,8 @@ def test_two_profiles_for_same_database_are_one_ownership_context(library):
 
 def test_symlink_output_alias_cannot_leave_original_as_adoptable(library):
     repo,root,_,output=library
+    from filesystem_test_support import require_symlink
+    require_symlink(root)
     (root/'GOTOWE'/'alias.mp3').symlink_to(output)
     result=inventory(library)
     assert not any(p.can_adopt for p in result.proposals), 'Alias ambiguity did not block primary candidate'

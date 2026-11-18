@@ -127,9 +127,9 @@ def test_menu_exposes_only_approved_actions_and_keeps_toolbar(tmp_path):
     page, tracks, _ = library_page(tmp_path)
     menu = menu_for(page, tracks[0])
     actions = menu_actions(menu)
-    assert set(actions) == {'edit', 'ready', 'review', 'reveal'}
+    assert set(actions) == {'edit', 'check_files', 'ready', 'review', 'reveal'}
     assert [a.text() for a in menu.actions()] == [
-        'Edytuj metadane', 'Zmień stan metadanych', '', 'Pokaż plik w Eksploratorze']
+        'Edytuj metadane', 'Sprawdź pliki utworu', 'Zmień stan metadanych', '', 'Pokaż plik w Eksploratorze']
     assert not actions['reveal'].isEnabled()
     assert actions['ready'].property('accent') == '#35d893'
     assert actions['review'].property('accent') == '#d8a23a'

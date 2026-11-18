@@ -48,6 +48,7 @@ from audio_library_organizer.ui.icons import alo_icon, library_icon
 from audio_library_organizer.ui.library_file_state import (
     FILE_STATE_COLORS, FILE_STATE_SORT_ORDER, FileStatePresentation, presentation_from_evaluation,
     index_file_state_presentations,
+    FileStateSession, file_state_context_key, file_state_owner_revision, file_state_tooltip,
 )
 
 
@@ -243,6 +244,7 @@ class _CoverCancellation:
 
 
 class LibraryPage(QWidget):
+    check_files_requested = Signal(str)
     play_requested = Signal(object)
     track_selected = Signal(object)
     manual_field_requested = Signal(object, str, object, bool)
@@ -301,6 +303,8 @@ class LibraryPage(QWidget):
         self._file_evaluations = {}
         self._file_evaluations_library = None
         self._file_context_presentations = {}
+        self._file_state_session = FileStateSession()
+        self._file_confirmed_reasons = {}
         QApplication.instance().aboutToQuit.connect(self._context_quit)
 
         root = QVBoxLayout(self)
@@ -909,8 +913,52 @@ class LibraryPage(QWidget):
         evaluation = (self._file_evaluations.get(track.track_id)
                       if context and context.library_id == self._file_evaluations_library else None)
         if evaluation is not None:
+            evaluation = self._file_state_session.evaluation(track, context, evaluation)
+            if evaluation.reason == 'CACHE_REQUIRES_REVALIDATION':
+                evaluation = replace(evaluation, reason=self._file_confirmed_reasons.get(track.track_id) or evaluation.reason)
             return presentation_from_evaluation(evaluation)
         return self._file_context_presentations.get(track.track_id, FileStatePresentation())
+
+    def accept_file_check(self, result):
+        """Accept only saved, context-matching observations, never a scan-wide flag."""
+        if (result.cache_saved == 0 or result.snapshot is None
+                or {'CACHE_WRITE_REJECTED', 'CHECK_CONTEXT_CHANGED'} & set(result.reason_codes) or self._read_context is None
+                or result.library_id != self._read_context.library_id):
+            return ()
+        snapshot = result.snapshot
+        before_context = snapshot.read_context(self._read_context.library_root)
+        before = {t.track_id: t for t in snapshot.tracks}
+        current = {t.track_id: t for t in self._tracks}
+        damaged = dict(snapshot.cache_errors)
+        owners_before = file_state_owner_revision(before_context)
+        owners_current = file_state_owner_revision(self._read_context)
+        owned_before = {b.track_id for b in before_context.managed_bindings}
+        owned_current = {b.track_id for b in self._read_context.managed_bindings}
+        accepted = []
+        for item in result.files:
+            track = current.get(item.track_id)
+            original = before.get(item.track_id)
+            displayed = self._file_evaluations.get(item.track_id)
+            if (track is None or original is None or item.track_id in damaged
+                    or (displayed is not None and displayed.checked_at > item.evaluation.checked_at)
+                    or file_state_context_key(track, self._read_context,
+                        owners_revision=owners_current if track.track_id in owned_current else '') !=
+                    file_state_context_key(original, before_context,
+                        owners_revision=owners_before if original.track_id in owned_before else '')):
+                continue
+            evaluation = item.evaluation
+            if result.cancelled:
+                if set(item.reason_codes) <= {'SOURCE_PRESENT', 'SOURCE_CONTENT_UNCHANGED', 'SOURCE_MISSING'}:
+                    self._file_state_session.retain_after_cancel(track, self._read_context, evaluation)
+                continue
+            if (not evaluation.is_confirmed and evaluation.state == FileState.MANAGED_FILE_MISSING
+                    and item.facts.managed is not None and item.facts.managed.availability.value == 'PRESENT'):
+                # Presence disproves today's missing label, but cannot establish
+                # a complete OutputSpec or promote existing partial P/H/U proof.
+                evaluation = replace(evaluation, state=None, reason='MANAGED_PRESENT_UNCONFIRMED')
+            if self._file_state_session.remember(track, self._read_context, evaluation):
+                accepted.append(item.track_id)
+        return tuple(accepted)
 
     def closeEvent(self, event):
         self.cancel_context_actions(closing=True)
@@ -1148,11 +1196,7 @@ class LibraryPage(QWidget):
                 item.setData(item.background(), STATUS_BACKGROUND_ROLE)
             items[0].setCheckable(True)
             items[0].setCheckState(Qt.CheckState.Checked if key in checked else Qt.CheckState.Unchecked)
-            file_note = ui_text(self, file_presentation.label)
-            if file_presentation.confirmed:
-                file_note += '\n' + ui_text(self, 'Stan z ostatniej kontroli; odczyt wymaga ponownej weryfikacji.')
-            elif file_presentation.state is not None:
-                file_note += '\n' + ui_text(self, 'Ostatni potwierdzony stan; wymaga ponownej kontroli.')
+            file_note = file_state_tooltip(file_presentation, language_for(self))
             items[10].setToolTip(file_note)
             items[10].setData(file_text, Qt.ItemDataRole.AccessibleTextRole)
             if file_presentation.accent is not None:
@@ -1635,6 +1679,7 @@ class LibraryPage(QWidget):
             probes.append((key, tuple(self._context_plan(t, context, key, 0) for t in targets)))
 
         add(menu, 'edit', 'Edytuj metadane')
+        add(menu, 'check_files', 'Sprawdź pliki utworu')
         if len(tracks) == 1:
             decisions = AccentMenu(ui_text(self, 'Zmień stan metadanych'), menu)
             menu.addMenu(decisions)
@@ -1713,6 +1758,10 @@ class LibraryPage(QWidget):
             self.context_notice.emit(ui_text(self, 'Dane utworu zmieniły się. Otwórz menu ponownie.'))
             return
         context, tracks, track = current
+        if action == 'check_files':
+            state['dispatched'] = True
+            self.check_files_requested.emit(track.track_id)
+            return
         try:
             state['dispatched'] = True
             reader = self._context_worker_reader() if self._context_worker_reader else None

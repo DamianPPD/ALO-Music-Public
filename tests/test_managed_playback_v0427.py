@@ -306,6 +306,8 @@ def test_replaced_managed_same_path_and_same_stat_is_not_accepted(tmp_path):
 
 
 def test_managed_symlink_escape_is_rejected(tmp_path):
+    from filesystem_test_support import require_symlink
+    require_symlink(tmp_path)
     repo, track, managed, root = library(tmp_path); m = api()
     ctx = context(repo, track, managed, root)
     outside = tmp_path / 'outside.flac'; outside.write_bytes(managed.read_bytes())
@@ -568,6 +570,8 @@ def test_main_window_defers_close_until_identification_worker_stops(tmp_path, ap
 @pytest.mark.parametrize('alias_kind', ['symlink', 'hardlink'])
 def test_managed_alias_cannot_hide_a_different_explicit_owner(tmp_path, alias_kind):
     import os
+    from filesystem_test_support import require_symlink
+    if alias_kind == 'symlink': require_symlink(tmp_path)
     repo, track, managed, root = library(tmp_path); m = api()
     ctx = context(repo, track, managed, root)
     alias = managed.with_name('alias.flac')

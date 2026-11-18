@@ -370,6 +370,8 @@ def test_overlapping_roots_deduplicate_and_keep_deepest_source_id(tmp_path):
 
 @pytest.mark.parametrize('kind', ['directory', 'file', 'loop'])
 def test_aliases_are_not_followed_outside_scope(tmp_path, kind):
+    from filesystem_test_support import require_symlink
+    require_symlink(tmp_path, directory=kind == 'directory')
     repo, root = library(tmp_path)
     foreign = tmp_path / 'foreign'; foreign.mkdir()
     (foreign / 'private.mp3').write_bytes(b'outside source')
@@ -726,6 +728,8 @@ def test_newer_observation_of_last_track_rolls_back_prior_cache_writes(tmp_path)
 
 @pytest.mark.parametrize('change', ['retarget', 'disconnect'])
 def test_raw_locator_alias_does_not_probe_historical_canonical_target(tmp_path, change):
+    from filesystem_test_support import require_symlink
+    require_symlink(tmp_path, directory=True)
     repo, root = library(tmp_path)
     track = record(repo, root / 'known.mp3')
     alias = tmp_path / 'legacy-alias'; alias.symlink_to(root, target_is_directory=True)

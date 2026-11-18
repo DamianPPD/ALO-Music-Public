@@ -321,6 +321,7 @@ def test_legacy_file_health_availability_is_not_confirmed_evidence(available, mo
 
 def frozen_v2_database(path, *, wal=False):
     """Frozen v2 SQL/identities; independent of the new migrator/cache schema."""
+    from audio_library_organizer.storage.source_registry import canonical_locator
     conn = legacy_database(path, wal=wal)
     columns = dict(LEGACY_COLUMNS)
     columns['path'] = 'TEXT NOT NULL UNIQUE'
@@ -335,8 +336,8 @@ def frozen_v2_database(path, *, wal=False):
         library_id TEXT NOT NULL REFERENCES library_metadata(library_id),
         root_path TEXT NOT NULL, canonical_root_key TEXT NOT NULL,
         active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)), UNIQUE(library_id,canonical_root_key))''')
-    source = str(path.parent / 'synthetic-source')
-    conn.execute('INSERT INTO sources VALUES (?,?,?,?,0)', (SOURCE_ID, LIBRARY_ID, source, 'posix:' + source))
+    source, source_key = canonical_locator(path.parent / 'synthetic-source')
+    conn.execute('INSERT INTO sources VALUES (?,?,?,?,0)', (SOURCE_ID, LIBRARY_ID, source, source_key))
     conn.execute('CREATE TABLE tracks (track_id TEXT NOT NULL PRIMARY KEY,' +
                  ','.join(f'"{key}" {value}' for key, value in columns.items()) + ''',
                  source_id TEXT REFERENCES sources(source_id),
@@ -346,10 +347,11 @@ def frozen_v2_database(path, *, wal=False):
     names = ','.join(f'"{key}"' for key in columns)
     for i, row in enumerate(conn.execute(f'SELECT {names} FROM old_tracks ORDER BY path').fetchall(), 1):
         row = list(row)
-        row[list(columns).index('path')] = f'{source}/song-{i}.mp3'
+        locator, path_key = canonical_locator(Path(source) / f'song-{i}.mp3')
+        row[list(columns).index('path')] = locator
         conn.execute(f'INSERT INTO tracks (track_id,{names},source_id,source_relative_path,path_key) VALUES (' +
                      ','.join('?' for _ in range(len(columns) + 4)) + ')',
-                     (str(UUID(int=i)), *row, SOURCE_ID, f'song-{i}.mp3', 'posix:' + row[0]))
+                     (str(UUID(int=i)), *row, SOURCE_ID, f'song-{i}.mp3', path_key))
     conn.execute('DROP TABLE old_tracks')
     conn.execute('CREATE INDEX idx_tracks_path_key ON tracks(path_key)')
     conn.execute('CREATE INDEX idx_tracks_source_id ON tracks(source_id)')

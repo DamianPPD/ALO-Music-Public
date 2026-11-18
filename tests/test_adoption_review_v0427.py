@@ -73,6 +73,8 @@ def another_library(tmp_path, sample):
 
 
 def test_current_foreign_owner_alias_blocks_adoption(library,tmp_path,mp3_samples):
+    from filesystem_test_support import require_symlink
+    require_symlink(tmp_path)
     repo,root,_,output=library; api=adoption_api()
     foreign,foreign_root,owned=another_library(tmp_path,mp3_samples['original'])
     owned.unlink(); owned.symlink_to(output)
@@ -146,6 +148,8 @@ def test_partial_tag_snapshot_cannot_confirm_clean_output_policy(library):
 
 
 def test_known_binding_cannot_be_reinterpreted_under_a_different_profile_root(library,tmp_path,mp3_samples):
+    from filesystem_test_support import require_symlink
+    require_symlink(tmp_path)
     repo,root,_,output=library; api=adoption_api()
     foreign,foreign_root,owned=another_library(tmp_path,mp3_samples['original'])
     owned.unlink(); owned.symlink_to(output)
